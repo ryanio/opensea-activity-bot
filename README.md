@@ -78,6 +78,6 @@ A `Procfile` is included for easy use on platforms like Heroku.
 
 Clone this repo, push it to heroku, set up the environment variables above, and spin up a worker with `heroku ps:scale web=0 worker=1`
 
-Then watch the logs with `heroku logs --follow`
+Then watch the logs with `heroku logs --tail`
 
-If your discord bot is not able to post messages ensure it is added to the channels you've specified and it has the permissions to Send Messages and Embed Links.
+If your discord bot is not able to post messages ensure it is added to the channels you've specified and it has the permissions to `Send Messages` and `Embed Links`.

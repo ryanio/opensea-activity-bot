@@ -62,7 +62,7 @@ const enabledEventTypes = () => {
 export const fetchEvents = async (): Promise<any> => {
   const since = unixTimestamp(new Date()) - OPENSEA_BOT_INTERVAL
   console.log(
-    `OpenSea - Fetching events from ${format(new Date(since * 1000))}...`
+    `OpenSea - Fetching events from ${format(new Date(since * 1000))}`
   )
 
   const eventTypes = enabledEventTypes()

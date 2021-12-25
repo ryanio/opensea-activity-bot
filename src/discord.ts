@@ -152,15 +152,14 @@ const embed = async (event: any) => {
   } else if (event_type === EventType.successful) {
     const { symbol, decimals, usd_price } = payment_token
     title += 'Purchased:'
-    const amount =
-      ethers.utils.formatUnits(total_price, decimals) + ' ' + symbol
-    const amountUSD = ethers.FixedNumber.from(amount.split(' ')[0])
+    const price = ethers.utils.formatUnits(total_price, decimals) + ' ' + symbol
+    const priceUSD = ethers.FixedNumber.from(price.split(' ')[0])
       .mulUnsafe(ethers.FixedNumber.from(usd_price))
       .toUnsafeFloat()
       .toFixed(2)
     fields.push({
-      name: 'Amount',
-      value: `${amount} ($${amountUSD} USD)`,
+      name: 'Price',
+      value: `${price} ($${priceUSD} USD)`,
     })
     fields.push({
       name: 'By',
@@ -220,8 +219,7 @@ const embed = async (event: any) => {
   } else if (event_type === EventType.bid_withdrawn) {
     const { symbol, decimals, usd_price } = payment_token
     title += 'Bid withdrawn: '
-    const amount =
-      ethers.utils.formatUnits(starting_price, decimals) + ' ' + symbol
+    const amount = ethers.utils.formatUnits(bid_amount, decimals) + ' ' + symbol
     const amountUSD = ethers.FixedNumber.from(amount.split(' ')[0])
       .mulUnsafe(ethers.FixedNumber.from(usd_price))
       .toUnsafeFloat()
@@ -283,7 +281,7 @@ const messagesForEvents = async (events: any[]) => {
   return messages
 }
 
-const login = async (client: Client): Promise<any> => {
+const login = async (client: Client): Promise<void> => {
   return new Promise<void>((resolve) => {
     client.on('ready', async () => {
       console.log(`Discord - Logged in as: ${client?.user?.tag}`)
@@ -298,13 +296,14 @@ const getChannels = async (
   channelEvents: ChannelEvents
 ): Promise<any> => {
   const channels = {}
+  console.log('Discord - Selected channels:')
   for (const [channelId, events] of channelEvents) {
     const channel = await client.channels.fetch(channelId)
     channels[channelId] = channel
     console.log(
-      `Discord - #${
+      `Discord - * #${
         (channel as any).name ?? (channel as any).channelId
-      }: [${events}]`
+      }: ${events.join(', ')}`
     )
   }
   return channels

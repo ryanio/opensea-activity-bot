@@ -1,6 +1,7 @@
 import { ethers } from 'ethers'
-import { File } from 'file-api'
+import { File, FileReader } from 'file-api'
 import { format } from 'timeago.js'
+import fetch from 'node-fetch'
 import Twitter from 'twitter-lite'
 import { opensea, EventType } from './opensea'
 import { username, timeout } from './util'
@@ -58,10 +59,10 @@ const textForTweet = async (event: any) => {
         .mulUnsafe(ethers.FixedNumber.from(usd_price))
         .toUnsafeFloat()
         .toFixed(2)
-      const endDate = format(
+      const inTime = format(
         new Date(new Date(created_date).getTime() + Number(duration))
       )
-      text += `English auction started for ${price} ($${priceUSD} USD), ends ${endDate}, by ${name}`
+      text += `English auction started for ${price} ($${priceUSD} USD), ends ${inTime}, by ${name}`
       // Opening Price, Ends in
     } else if (auction_type === 'dutch') {
       const price =
@@ -151,7 +152,7 @@ const textForTweet = async (event: any) => {
   }
 
   if (asset_bundle) {
-    text += ` (bundle of ${asset_bundle.assets.length} items)`
+    text += ` (${asset_bundle.assets.length} items)`
     text += ` ${opensea.bundlePermalink(asset_bundle.slug)}`
   } else {
     text += ` ${permalink}`
@@ -178,7 +179,7 @@ export const base64Image = async (imageURL, tokenId) => {
       new File({
         name: `${tokenId}.png`,
         type: 'image/png',
-        buffer: Buffer.from(await blob.arrayBuffer()),
+        buffer: Buffer.from(await (blob as any).arrayBuffer()),
       })
     )
   })
@@ -203,6 +204,7 @@ const tweetEvent = async (client: any, uploadClient: any, event: any) => {
     })
     console.log(`Twitter - Tweeted (event id: ${event.id}): ${status}`)
   } catch (error) {
+    console.error(`Twitter - Error:`)
     console.error(error)
   }
 }
@@ -229,7 +231,7 @@ export const tweetEvents = async (events: any[]) => {
     await tweetEvent(client, uploadClient, event)
     // Wait 5s between tweets
     if (filteredEvents[index + 1]) {
-      await timeout(5000)
+      await timeout(3000)
     }
   }
 }

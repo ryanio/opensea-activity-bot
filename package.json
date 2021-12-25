@@ -7,8 +7,7 @@
     "node": "16.x"
   },
   "scripts": {
-    "postinstall": "yarn",
-    "start": "npx ts-node src/index.ts"
+    "start": "yarn && npx ts-node src/index.ts"
   },
   "dependencies": {
     "discord.js": "^13.3.1",

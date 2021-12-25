@@ -14,7 +14,7 @@ async function main() {
     }
 
     if (DEBUG) {
-      console.log('DEBUG enabled. Events:')
+      console.log('DEBUG - Events:')
       console.log(JSON.stringify(events))
     }
 
