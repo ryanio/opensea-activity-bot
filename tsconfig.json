@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "target": "es2019",
+    "esModuleInterop": true,
+    "resolveJsonModule": true
+  },
+  "files": ["index.ts"]
+}

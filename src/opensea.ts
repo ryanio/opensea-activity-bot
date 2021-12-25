@@ -1,0 +1,136 @@
+import { URLSearchParams } from 'url'
+import fetch from 'node-fetch'
+import { format } from 'timeago.js'
+import { channelsWithEvents } from './discord'
+import { unixTimestamp, assetUSDValue } from './util'
+
+const { OPENSEA_API_TOKEN, TOKEN_ADDRESS, TWITTER_EVENTS } = process.env
+
+const OPENSEA_BOT_INTERVAL = Number(process.env.OPENSEA_BOT_INTERVAL ?? 60)
+
+export const opensea = {
+  events: 'https://api.opensea.io/api/v1/events',
+  bundlePermalink: (slug) => `https://opensea.io/bundles/${slug}`,
+  GET_OPTS: {
+    method: 'GET',
+    headers: { Accept: 'application/json', 'X-API-KEY': OPENSEA_API_TOKEN },
+  } as any,
+  /**
+   * Limit of fetched results per query
+   */
+  GET_LIMIT: 45,
+  /**
+   * Max pages to gather when fetching events.
+   * Warning, adding to this number may drastically increase
+   * the number of OpenSea queries from your API key depending
+   * on the popularity of the collection.
+   */
+  MAX_PAGES: 3,
+}
+
+export enum EventType {
+  created = 'created',
+  successful = 'successful',
+  cancelled = 'cancelled',
+  offer_entered = 'offer_entered',
+  bid_entered = 'bid_entered',
+  bid_withdrawn = 'bid_withdrawn',
+  transfer = 'transfer',
+}
+
+const enabledEventTypes = () => {
+  const eventTypes = new Set()
+  for (const [_channelId, discordEventTypes] of channelsWithEvents()) {
+    for (const eventType of discordEventTypes) {
+      eventTypes.add(eventType)
+    }
+  }
+  const twitterEventTypes = TWITTER_EVENTS?.split(',')
+  if (twitterEventTypes?.length > 0) {
+    for (const eventType of twitterEventTypes) {
+      eventTypes.add(eventType)
+    }
+  }
+  if (eventTypes.size === 0) {
+    throw new Error(
+      'No events enabled. Please specify DISCORD_EVENTS or TWITTER_EVENTS'
+    )
+  }
+  return [...eventTypes]
+}
+
+export const fetchEvents = async (): Promise<any> => {
+  const since = unixTimestamp(new Date()) - OPENSEA_BOT_INTERVAL
+  console.log(
+    `OpenSea - Fetching events from ${format(new Date(since * 1000))}...`
+  )
+
+  const eventTypes = enabledEventTypes()
+  const params: any = {
+    asset_contract_address: TOKEN_ADDRESS,
+    occurred_after: since,
+    limit: opensea.GET_LIMIT,
+  }
+
+  // OpenSea only allows filtering for one event at a time so
+  // we'll only filter by an event if there's only one type specified
+  if (eventTypes.length === 1) {
+    params.event_type = eventTypes[0]
+  }
+
+  const url = `${opensea.events}?${new URLSearchParams(params)}`
+  const response = await fetch(url, opensea.GET_OPTS)
+  const result = await response.json()
+
+  let { asset_events: events } = result
+
+  if (!events) {
+    console.error(`OpenSea - Error: ${JSON.stringify(result)}`)
+    return
+  }
+
+  if (events.length === opensea.GET_LIMIT) {
+    // Add paginated results
+    let moreEvents = events
+    while (
+      moreEvents &&
+      moreEvents.length > 0 &&
+      moreEvents.length === opensea.GET_LIMIT &&
+      events.length / opensea.GET_LIMIT < opensea.MAX_PAGES
+    ) {
+      const response = await fetch(
+        `${url}&offset=${events.length}`,
+        opensea.GET_OPTS
+      )
+      const result = await response.json()
+      moreEvents = result.asset_events
+      if (moreEvents?.length > 0) {
+        events = events.concat(moreEvents)
+      }
+    }
+  }
+
+  const eventsPreFilter = events?.length ?? 0
+  console.log(`OpenSea - Fetched events: ${eventsPreFilter}`)
+
+  // Filter out low value offers (under $100 USD)
+  events = events.filter((event) =>
+    [
+      EventType.offer_entered,
+      EventType.bid_entered,
+      EventType.bid_withdrawn,
+    ].includes(event.event_type)
+      ? Number(assetUSDValue(event)) > 100
+      : true
+  )
+
+  const eventsPostFilter = events?.length ?? 0
+  const eventsFiltered = eventsPreFilter - eventsPostFilter
+  if (eventsFiltered > 0) {
+    console.log(
+      `Opensea - Offers under $100 USD filtered out: ${eventsFiltered}`
+    )
+  }
+
+  return events.reverse()
+}

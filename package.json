@@ -1,0 +1,26 @@
+{
+  "name": "opensea-activity-bot",
+  "description": "A bot that shares new OpenSea events for a collection to Discord and Twitter.",
+  "author": "Ryan Ghods <ryan@ryanio.com>",
+  "license": "CC0-1.0",
+  "engines": {
+    "node": "16.x"
+  },
+  "scripts": {
+    "postinstall": "yarn",
+    "start": "npx ts-node src/index.ts"
+  },
+  "dependencies": {
+    "discord.js": "^13.3.1",
+    "ethers": "^5.5.2",
+    "file-api": "^0.10.4",
+    "node-fetch": "^2.6.6",
+    "timeago.js": "^4.0.2",
+    "twitter-lite": "^1.1.0"
+  },
+  "devDependencies": {
+    "prettier": "^2.5.1",
+    "ts-node": "^10.4.0",
+    "typescript": "^4.5.4"
+  }
+}
