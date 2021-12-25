@@ -89,8 +89,8 @@ const embed = async (event: any) => {
         .mulUnsafe(ethers.FixedNumber.from(usd_price))
         .toUnsafeFloat()
         .toFixed(2)
-      const endDate = format(
-        new Date(new Date(created_date).getTime() + Number(duration))
+      const inTime = format(
+        new Date(new Date(created_date).getTime() + Number(duration) * 1000)
       )
       fields.push({
         name: 'Starting Price',
@@ -98,7 +98,7 @@ const embed = async (event: any) => {
       })
       fields.push({
         name: 'Ends',
-        value: endDate,
+        value: inTime,
       })
     } else if (auction_type === 'dutch' && starting_price !== ending_price) {
       title += 'Reverse Dutch auction:'
@@ -133,17 +133,19 @@ const embed = async (event: any) => {
         .mulUnsafe(ethers.FixedNumber.from(usd_price))
         .toUnsafeFloat()
         .toFixed(2)
-      const inTime = format(
-        new Date(new Date(created_date).getTime() + Number(duration) * 1000)
-      )
       fields.push({
         name: 'Price',
         value: `${price} ($${priceUSD} USD)`,
       })
-      fields.push({
-        name: 'Ends',
-        value: inTime,
-      })
+      if (duration) {
+        const inTime = format(
+          new Date(new Date(created_date).getTime() + Number(duration) * 1000)
+        )
+        fields.push({
+          name: 'Expires',
+          value: inTime,
+        })
+      }
     }
     fields.push({
       name: 'By',
