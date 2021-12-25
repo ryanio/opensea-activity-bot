@@ -110,6 +110,13 @@ export const fetchEvents = async (): Promise<any> => {
     }
   }
 
+  // Filter out private listings
+  events = events.filter(
+    (event) =>
+      event.event_type !== EventType.created ||
+      (event.event_type === EventType.created && !event.is_private)
+  )
+
   const eventsPreFilter = events?.length ?? 0
   console.log(`OpenSea - Fetched events: ${eventsPreFilter}`)
 
