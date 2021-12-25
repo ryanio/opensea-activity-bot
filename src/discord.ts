@@ -255,7 +255,14 @@ const embed = async (event: any) => {
     title += ` ${asset_bundle.name}`
     url = opensea.bundlePermalink(asset_bundle.slug)
   } else {
-    title += ` ${asset.name}`
+    let assetName = asset.name
+    if (!assetName) {
+      if (asset.asset_contract.name) {
+        assetName = `${asset.asset_contract.name} `
+      }
+      assetName += `#${asset.token_id}`
+    }
+    title += ` ${assetName}`
   }
 
   return new MessageEmbed()

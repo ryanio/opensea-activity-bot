@@ -22,7 +22,6 @@ const secrets = {
 }
 
 const textForTweet = async (event: any) => {
-  const owner = event.asset.owner.username
   const permalink = event.asset.permalink
 
   const {
@@ -43,7 +42,7 @@ const textForTweet = async (event: any) => {
     asset_bundle,
   } = event
 
-  let text = `#${event.asset.token_id} `
+  let text = `#${asset.token_id} `
 
   if (asset_bundle) {
     text = `${asset_bundle.name} `
