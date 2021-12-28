@@ -1,12 +1,12 @@
 # opensea-activity-bot
 
-![Example Discord messages](./example.png)
+![Example Discord messages](./example-discord.png)
 
 A bot that shares new OpenSea events for a collection to Discord and Twitter.
 
 Designed to handle multiple output configurations, like a Discord activity feed and a Twitter sales feed.
 
-Originally developed for [@dutchtide](https://twitter.com/dutchtide)'s [𝕄𝕚𝕕𝕟𝕚𝕘𝕙𝕥 夏季 𝔹𝕣𝕖𝕖𝕫𝕖](https://opensea.io/collection/midnightbreeze) collection.
+Originally developed for [@dutchtide](https://twitter.com/dutchtide)'s [𝕄𝕚𝕕𝕟𝕚𝕘𝕙𝕥 夏季 𝔹𝕣𝕖𝕖𝕫𝕖](https://opensea.io/collection/midnightbreeze) collection, on Twitter at [@mbsalesbot](https://twitter.com/mbsalesbot).
 
 An OpenSea API key is needed - [request one here](https://docs.opensea.io/reference/request-an-api-key).
 
