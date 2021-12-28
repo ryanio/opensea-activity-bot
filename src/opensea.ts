@@ -79,13 +79,22 @@ export const fetchEvents = async (): Promise<any> => {
   }
 
   const url = `${opensea.events}?${new URLSearchParams(params)}`
-  const response = await fetch(url, opensea.GET_OPTS)
-  const result = await response.json()
+  let events: any[]
 
-  let { asset_events: events } = result
-
-  if (!events) {
-    console.error(`OpenSea - Error: ${JSON.stringify(result)}`)
+  try {
+    const response = await fetch(url, opensea.GET_OPTS)
+    const result = await response.json()
+    if (!result || !result.asset_events) {
+      console.error(
+        `OpenSea - Fetch Error (missing asset_events): ${JSON.stringify(
+          result
+        )}`
+      )
+      return
+    }
+    events = result.asset_events
+  } catch (error) {
+    console.error(`OpenSea - Fetch Error: ${JSON.stringify(error)}`)
     return
   }
 
