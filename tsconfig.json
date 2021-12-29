@@ -4,5 +4,6 @@
     "module": "commonjs",
     "target": "es2020",
     "outDir": "dist",
+    "skipLibCheck": true,
   }
 }
