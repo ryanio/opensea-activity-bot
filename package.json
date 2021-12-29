@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "A bot that shares new OpenSea events for a collection to Discord and Twitter.",
   "author": "Ryan Ghods <ryan@ryanio.com>",
-  "license": "CC0-1.0",
+  "license": "CC-BY-NC-2.0",
   "engines": {
     "node": "16.x"
   },
