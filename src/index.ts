@@ -1,9 +1,13 @@
 import { fetchEvents } from './opensea'
 import { messageEvents } from './discord'
 import { tweetEvents } from './twitter'
+import { shortAddr } from './util'
 
-const { DEBUG } = process.env
+const { DEBUG, TOKEN_ADDRESS } = process.env
+
 const OPENSEA_BOT_INTERVAL = Number(process.env.OPENSEA_BOT_INTERVAL ?? 60)
+
+const shortTokenAddr = shortAddr(TOKEN_ADDRESS)
 
 async function main() {
   const run = async () => {
@@ -14,7 +18,7 @@ async function main() {
     }
 
     if (DEBUG) {
-      console.log('DEBUG - Events:')
+      console.log(`DEBUG - ${shortTokenAddr} - Events:`)
       console.log(JSON.stringify(events))
     }
 

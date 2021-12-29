@@ -2,9 +2,11 @@ import { Client, MessageEmbed } from 'discord.js'
 import { ethers } from 'ethers'
 import { format } from 'timeago.js'
 import { opensea, EventType } from './opensea'
-import { username, timeout } from './util'
+import { shortAddr, timeout, username } from './util'
 
-const { DISCORD_EVENTS, DISCORD_TOKEN } = process.env
+const { TOKEN_ADDRESS, DISCORD_EVENTS, DISCORD_TOKEN } = process.env
+
+const shortTokenAddr = shortAddr(TOKEN_ADDRESS)
 
 type ChannelEvents = Array<[channelId: string, eventTypes: EventType[]]>
 export const channelsWithEvents = (): ChannelEvents => {
@@ -293,7 +295,9 @@ const messagesForEvents = async (events: any[]) => {
 const login = async (client: Client): Promise<void> => {
   return new Promise<void>((resolve) => {
     client.on('ready', async () => {
-      console.log(`Discord - Logged in as: ${client?.user?.tag}`)
+      console.log(
+        `Discord - ${shortTokenAddr} - Logged in as: ${client?.user?.tag}`
+      )
       resolve()
     })
     client.login(DISCORD_TOKEN)
@@ -305,12 +309,12 @@ const getChannels = async (
   channelEvents: ChannelEvents
 ): Promise<any> => {
   const channels = {}
-  console.log('Discord - Selected channels:')
+  console.log(`Discord - ${shortTokenAddr} - Selected channels:`)
   for (const [channelId, events] of channelEvents) {
     const channel = await client.channels.fetch(channelId)
     channels[channelId] = channel
     console.log(
-      `Discord - * #${
+      `Discord - ${shortTokenAddr} - * #${
         (channel as any).name ?? (channel as any).channelId
       }: ${events.join(', ')}`
     )
@@ -329,7 +333,9 @@ export async function messageEvents(events: any[]) {
     [...channelEvents.map((c) => c[1])].flat().includes(event.event_type)
   )
 
-  console.log(`Discord - Relevant events: ${filteredEvents.length}`)
+  console.log(
+    `Discord - ${shortTokenAddr} - Relevant events: ${filteredEvents.length}`
+  )
 
   if (filteredEvents.length === 0) return
 
@@ -346,7 +352,7 @@ export async function messageEvents(events: any[]) {
         discordChannels
       )
       console.log(
-        `Discord - Sending message (event id: ${id}) in ${channels
+        `Discord - ${shortTokenAddr} - Sending message (event id: ${id}) in ${channels
           .map((c) => '#' + c.name ?? c.channelId)
           .join(', ')}: ${message.embeds[0].title} `
       )

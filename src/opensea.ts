@@ -2,11 +2,13 @@ import { URLSearchParams } from 'url'
 import fetch from 'node-fetch'
 import { format } from 'timeago.js'
 import { channelsWithEvents } from './discord'
-import { unixTimestamp, assetUSDValue } from './util'
+import { assetUSDValue, shortAddr, unixTimestamp } from './util'
 
 const { OPENSEA_API_TOKEN, TOKEN_ADDRESS, TWITTER_EVENTS } = process.env
 
 const OPENSEA_BOT_INTERVAL = Number(process.env.OPENSEA_BOT_INTERVAL ?? 60)
+
+const shortTokenAddr = shortAddr(TOKEN_ADDRESS)
 
 export const opensea = {
   events: 'https://api.opensea.io/api/v1/events',
@@ -61,9 +63,8 @@ const enabledEventTypes = () => {
 
 export const fetchEvents = async (): Promise<any> => {
   const since = unixTimestamp(new Date()) - OPENSEA_BOT_INTERVAL
-  console.log(
-    `OpenSea - Fetching events from ${format(new Date(since * 1000))}`
-  )
+  const ago = format(new Date(since * 1000))
+  console.log(`OpenSea - ${shortTokenAddr} - Fetching events from ${ago}`)
 
   const eventTypes = enabledEventTypes()
   const params: any = {
@@ -86,7 +87,7 @@ export const fetchEvents = async (): Promise<any> => {
     const result = await response.json()
     if (!result || !result.asset_events) {
       console.error(
-        `OpenSea - Fetch Error (missing asset_events): ${JSON.stringify(
+        `OpenSea - ${shortTokenAddr} - Fetch Error (missing asset_events): ${JSON.stringify(
           result
         )}`
       )
@@ -94,7 +95,9 @@ export const fetchEvents = async (): Promise<any> => {
     }
     events = result.asset_events
   } catch (error) {
-    console.error(`OpenSea - Fetch Error: ${JSON.stringify(error)}`)
+    console.error(
+      `OpenSea - ${TOKEN_ADDRESS} - Fetch Error: ${JSON.stringify(error)}`
+    )
     return
   }
 
@@ -127,7 +130,9 @@ export const fetchEvents = async (): Promise<any> => {
   )
 
   const eventsPreFilter = events?.length ?? 0
-  console.log(`OpenSea - Fetched events: ${eventsPreFilter}`)
+  console.log(
+    `OpenSea - ${shortTokenAddr} - Fetched events: ${eventsPreFilter}`
+  )
 
   // Filter out low value offers (under $100 USD)
   events = events.filter((event) =>
@@ -144,7 +149,7 @@ export const fetchEvents = async (): Promise<any> => {
   const eventsFiltered = eventsPreFilter - eventsPostFilter
   if (eventsFiltered > 0) {
     console.log(
-      `Opensea - Offers under $100 USD filtered out: ${eventsFiltered}`
+      `Opensea - ${shortTokenAddr} - Offers under $100 USD filtered out: ${eventsFiltered}`
     )
   }
 
