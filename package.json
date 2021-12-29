@@ -8,8 +8,8 @@
     "node": "16.x"
   },
   "scripts": {
-    "postinstall": "yarn build",
-    "build": "tsc",
+    "postinstall": "yarn run build",
+    "build": "npx tsc",
     "start": "node dist/index.js"
   },
   "dependencies": {
