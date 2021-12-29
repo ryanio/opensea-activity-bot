@@ -1,7 +1,8 @@
 {
+  "include": ["src/*.ts"],
   "compilerOptions": {
-    "target": "es2019",
-    "esModuleInterop": true,
-  },
-  "files": ["src/*.ts"]
+    "module": "commonjs",
+    "target": "es2020",
+    "outDir": "dist",
+  }
 }
