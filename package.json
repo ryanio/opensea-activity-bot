@@ -5,7 +5,7 @@
   "author": "Ryan Ghods <ryan@ryanio.com>",
   "license": "MIT",
   "engines": {
-    "node": "16.x"
+    "node": "^16.13.1"
   },
   "scripts": {
     "postinstall": "yarn run build",
@@ -21,7 +21,7 @@
     "twitter-lite": "^1.1.0"
   },
   "devDependencies": {
-    "@types/node": "^16.0.0",
+    "@types/node": "^16.13.1",
     "prettier": "^2.5.1",
     "ts-node": "^10.4.0",
     "typescript": "^4.5.4"
