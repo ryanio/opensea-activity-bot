@@ -272,7 +272,7 @@ const embed = async (event: any) => {
   return new MessageEmbed()
     .setColor(colorFor(event_type))
     .setTitle(title)
-    .setURL(asset.permalink)
+    .setURL(url)
     .setFields(
       fields.map((f) => {
         f.inline = true
