@@ -5,7 +5,7 @@ import { shortAddr } from './util'
 
 const { DEBUG, TOKEN_ADDRESS } = process.env
 
-const OPENSEA_BOT_INTERVAL = Number(process.env.OPENSEA_BOT_INTERVAL ?? 60)
+const OPENSEA_BOT_INTERVAL = Number(process.env.OPENSEA_BOT_INTERVAL ?? 180)
 
 const shortTokenAddr = shortAddr(TOKEN_ADDRESS)
 
