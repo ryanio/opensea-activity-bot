@@ -5,7 +5,7 @@ import { shortAddr } from './util'
 
 const { DEBUG, TOKEN_ADDRESS } = process.env
 
-const OPENSEA_BOT_INTERVAL = Number(process.env.OPENSEA_BOT_INTERVAL ?? 180)
+export const botInterval = Number(process.env.OPENSEA_BOT_INTERVAL ?? 180)
 
 const shortTokenAddr = shortAddr(TOKEN_ADDRESS)
 
@@ -28,7 +28,7 @@ async function main() {
 
   run()
 
-  const interval = setInterval(run.bind(this), OPENSEA_BOT_INTERVAL * 1000)
+  const interval = setInterval(run.bind(this), botInterval * 1000)
 
   process.on('SIGINT', () => {
     console.log('Caught interrupt signal. Stopping...')

@@ -1,12 +1,11 @@
 import { URLSearchParams } from 'url'
 import fetch from 'node-fetch'
 import { format } from 'timeago.js'
+import { botInterval } from './index'
 import { channelsWithEvents } from './discord'
 import { assetUSDValue, shortAddr, unixTimestamp } from './util'
 
 const { OPENSEA_API_TOKEN, TOKEN_ADDRESS, TWITTER_EVENTS } = process.env
-
-const OPENSEA_BOT_INTERVAL = Number(process.env.OPENSEA_BOT_INTERVAL ?? 60)
 
 const shortTokenAddr = shortAddr(TOKEN_ADDRESS)
 
@@ -62,7 +61,7 @@ const enabledEventTypes = () => {
 }
 
 export const fetchEvents = async (): Promise<any> => {
-  const since = unixTimestamp(new Date()) - OPENSEA_BOT_INTERVAL
+  const since = unixTimestamp(new Date()) - botInterval
   const ago = format(new Date(since * 1000))
   console.log(`OpenSea - ${shortTokenAddr} - Fetching events from ${ago}`)
 
