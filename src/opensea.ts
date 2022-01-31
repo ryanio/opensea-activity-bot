@@ -5,7 +5,7 @@ import { botInterval } from './index'
 import { channelsWithEvents } from './discord'
 import { assetUSDValue, shortAddr, unixTimestamp } from './util'
 
-const { OPENSEA_API_TOKEN, TOKEN_ADDRESS, TWITTER_EVENTS } = process.env
+const { OPENSEA_API_TOKEN, TOKEN_ADDRESS, TWITTER_EVENTS, DEBUG } = process.env
 
 const shortTokenAddr = shortAddr(TOKEN_ADDRESS)
 
@@ -83,10 +83,23 @@ export const fetchEvents = async (): Promise<any> => {
 
   try {
     const response = await fetch(url, opensea.GET_OPTS)
+    if (!response.ok) {
+      console.error(
+        `OpenSea - ${shortTokenAddr} - Fetch Error - ${response.status}: ${response.statusText}`
+      )
+      if (DEBUG) {
+        console.error(
+          `OpenSea - ${shortTokenAddr} - Fetch Error - DEBUG: ${JSON.stringify(
+            await response.text()
+          )}`
+        )
+      }
+      return
+    }
     const result = await response.json()
     if (!result || !result.asset_events) {
       console.error(
-        `OpenSea - ${shortTokenAddr} - Fetch Error (missing asset_events): ${JSON.stringify(
+        `OpenSea - ${shortTokenAddr} - Fetch Error (missing asset_events) - Result: ${JSON.stringify(
           result
         )}`
       )
@@ -95,7 +108,7 @@ export const fetchEvents = async (): Promise<any> => {
     events = result.asset_events
   } catch (error) {
     console.error(
-      `OpenSea - ${TOKEN_ADDRESS} - Fetch Error: ${JSON.stringify(error)}`
+      `OpenSea - ${shortTokenAddr} - Fetch Error: ${error?.message ?? error}`
     )
     return
   }

@@ -28,7 +28,7 @@ export const ensName = async (addr: string): Promise<string | undefined> => {
  * (e.g. 0x38a16...c7eb3)
  */
 export const shortAddr = (addr: string) =>
-  addr.slice(0, 7) + '...' + addr.slice(15, 20)
+  addr.slice(0, 7) + '...' + addr.slice(37, 42)
 
 /**
  * OpenSea utils and helpers
