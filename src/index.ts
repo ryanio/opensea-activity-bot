@@ -18,7 +18,7 @@ async function main() {
     }
 
     if (DEBUG) {
-      console.log(`DEBUG - ${shortTokenAddr} - Events:`)
+      console.log(`Opensea - ${shortTokenAddr} - DEBUG - Events:`)
       console.log(JSON.stringify(events))
     }
 
