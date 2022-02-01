@@ -85,15 +85,9 @@ export const fetchEvents = async (): Promise<any> => {
     const response = await fetch(url, opensea.GET_OPTS)
     if (!response.ok) {
       console.error(
-        `OpenSea - ${shortTokenAddr} - Fetch Error - ${response.status}: ${response.statusText}`
+        `OpenSea - ${shortTokenAddr} - Fetch Error - ${response.status}: ${response.statusText}`,
+        DEBUG ? `DEBUG: ${JSON.stringify(await response.text())}` : ''
       )
-      if (DEBUG) {
-        console.error(
-          `OpenSea - ${shortTokenAddr} - Fetch Error - DEBUG: ${JSON.stringify(
-            await response.text()
-          )}`
-        )
-      }
       return
     }
     const result = await response.json()
