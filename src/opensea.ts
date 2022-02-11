@@ -131,7 +131,9 @@ export const fetchEvents = async (): Promise<any> => {
 
   // Filter since lastEventId
   events = events.filter((event) => event.id > meta.lastEventId)
-  if (events.length > 0) updateMeta(events[0].id)
+  if (events.length > 0) {
+    updateMeta(Math.max(...events.map((event) => event.id)))
+  }
 
   // Filter out private listings
   events = events.filter(
