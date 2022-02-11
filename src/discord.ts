@@ -2,11 +2,9 @@ import { Client, MessageEmbed } from 'discord.js'
 import { ethers } from 'ethers'
 import { format } from 'timeago.js'
 import { opensea, EventType } from './opensea'
-import { shortAddr, timeout, username } from './util'
+import { shortTokenAddr, timeout, username } from './util'
 
-const { TOKEN_ADDRESS, DISCORD_EVENTS, DISCORD_TOKEN } = process.env
-
-const shortTokenAddr = shortAddr(TOKEN_ADDRESS)
+const { DISCORD_EVENTS, DISCORD_TOKEN } = process.env
 
 type ChannelEvents = Array<[channelId: string, eventTypes: EventType[]]>
 export const channelsWithEvents = (): ChannelEvents => {

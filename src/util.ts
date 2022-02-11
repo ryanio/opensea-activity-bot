@@ -58,3 +58,9 @@ export const assetUSDValue = (event: any) => {
     .toUnsafeFloat()
     .toFixed(2)
 }
+
+/**
+ * Env helpers
+ */
+export const botInterval = Number(process.env.OPENSEA_BOT_INTERVAL ?? 60)
+export const shortTokenAddr = shortAddr(process.env.TOKEN_ADDRESS)

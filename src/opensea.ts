@@ -1,13 +1,17 @@
+import { writeFileSync } from 'fs'
+import { resolve } from 'path'
 import { URLSearchParams } from 'url'
 import fetch from 'node-fetch'
-import { format } from 'timeago.js'
-import { botInterval } from './index'
 import { channelsWithEvents } from './discord'
-import { assetUSDValue, shortAddr, unixTimestamp } from './util'
+import { assetUSDValue, unixTimestamp, shortTokenAddr } from './util'
+import meta from './meta.json'
 
 const { OPENSEA_API_TOKEN, TOKEN_ADDRESS, TWITTER_EVENTS, DEBUG } = process.env
 
-const shortTokenAddr = shortAddr(TOKEN_ADDRESS)
+const updateMeta = (lastEventId: number) => {
+  meta.lastEventId = lastEventId
+  writeFileSync(resolve(__dirname, './meta.json'), JSON.stringify(meta))
+}
 
 export const opensea = {
   events: 'https://api.opensea.io/api/v1/events',
@@ -61,14 +65,11 @@ const enabledEventTypes = () => {
 }
 
 export const fetchEvents = async (): Promise<any> => {
-  const since = unixTimestamp(new Date()) - botInterval
-  const ago = format(new Date(since * 1000))
-  console.log(`OpenSea - ${shortTokenAddr} - Fetching events from ${ago}`)
-
+  console.log(`OpenSea - ${shortTokenAddr} - Fetching events`)
   const eventTypes = enabledEventTypes()
   const params: any = {
     asset_contract_address: TOKEN_ADDRESS,
-    occurred_after: since,
+    occurred_after: unixTimestamp(new Date()) - 420, // check 7 mins back
     limit: opensea.GET_LIMIT,
   }
 
@@ -127,6 +128,10 @@ export const fetchEvents = async (): Promise<any> => {
       }
     }
   }
+
+  // Filter since lastEventId
+  events = events.filter((event) => event.id > meta.lastEventId)
+  if (events.length > 0) updateMeta(events[0].id)
 
   // Filter out private listings
   events = events.filter(

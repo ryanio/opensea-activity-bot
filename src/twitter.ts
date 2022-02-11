@@ -4,18 +4,15 @@ import { format } from 'timeago.js'
 import fetch from 'node-fetch'
 import Twitter from 'twitter-lite'
 import { opensea, EventType } from './opensea'
-import { shortAddr, timeout, username } from './util'
+import { shortTokenAddr, timeout, username } from './util'
 
 const {
-  TOKEN_ADDRESS,
   TWITTER_EVENTS,
   TWITTER_CONSUMER_KEY,
   TWITTER_CONSUMER_SECRET,
   TWITTER_ACCESS_TOKEN,
   TWITTER_ACCESS_TOKEN_SECRET,
 } = process.env
-
-const shortTokenAddr = shortAddr(TOKEN_ADDRESS)
 
 const secrets = {
   consumer_key: TWITTER_CONSUMER_KEY,
