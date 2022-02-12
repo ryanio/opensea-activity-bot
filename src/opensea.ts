@@ -125,14 +125,28 @@ export const fetchEvents = async (): Promise<any> => {
       moreEvents.length === opensea.GET_LIMIT &&
       events.length / opensea.GET_LIMIT < opensea.MAX_PAGES
     ) {
-      const response = await fetch(
-        `${url}&offset=${events.length}`,
-        opensea.GET_OPTS
-      )
-      const result = await response.json()
-      moreEvents = result.asset_events
-      if (moreEvents?.length > 0) {
-        events = events.concat(moreEvents)
+      try {
+        const response = await fetch(
+          `${url}&offset=${events.length}`,
+          opensea.GET_OPTS
+        )
+        if (!response.ok) {
+          console.error(
+            `OpenSea - ${shortTokenAddr} - Fetch Error (Pagination) - ${response.status}: ${response.statusText}`,
+            DEBUG ? `DEBUG: ${JSON.stringify(await response.text())}` : ''
+          )
+        }
+        const result = await response.json()
+        moreEvents = result.asset_events
+        if (moreEvents?.length > 0) {
+          events = events.concat(moreEvents)
+        }
+      } catch (error) {
+        console.error(
+          `OpenSea - ${shortTokenAddr} - Fetch Error: ${
+            error?.message ?? error
+          }`
+        )
       }
     }
   }
