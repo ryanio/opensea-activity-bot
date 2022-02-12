@@ -6,7 +6,15 @@ import { channelsWithEvents } from './discord'
 import { assetUSDValue, unixTimestamp, shortTokenAddr } from './util'
 import meta from './meta.json'
 
-const { OPENSEA_API_TOKEN, TOKEN_ADDRESS, TWITTER_EVENTS, DEBUG } = process.env
+const {
+  OPENSEA_API_TOKEN,
+  TOKEN_ADDRESS,
+  TWITTER_EVENTS,
+  MIN_OFFER_USD,
+  DEBUG,
+} = process.env
+
+const minOfferUSD = Number(MIN_OFFER_USD ?? 100)
 
 const updateMeta = (lastEventId: number) => {
   meta.lastEventId = lastEventId
@@ -129,6 +137,8 @@ export const fetchEvents = async (): Promise<any> => {
     }
   }
 
+  if (!events || events.length === 0) return []
+
   // Filter since lastEventId
   events = events.filter((event) => event.id > meta.lastEventId)
   if (events.length > 0) {
@@ -142,27 +152,27 @@ export const fetchEvents = async (): Promise<any> => {
       (event.event_type === EventType.created && !event.is_private)
   )
 
-  const eventsPreFilter = events?.length ?? 0
+  const eventsPreFilter = events.length
   console.log(
     `OpenSea - ${shortTokenAddr} - Fetched events: ${eventsPreFilter}`
   )
 
-  // Filter out low value offers (under $100 USD)
+  // Filter out low value bids or offers
   events = events.filter((event) =>
     [
       EventType.offer_entered,
       EventType.bid_entered,
       EventType.bid_withdrawn,
     ].includes(event.event_type)
-      ? Number(assetUSDValue(event)) > 100
+      ? assetUSDValue(event) >= minOfferUSD
       : true
   )
 
-  const eventsPostFilter = events?.length ?? 0
+  const eventsPostFilter = events.length
   const eventsFiltered = eventsPreFilter - eventsPostFilter
   if (eventsFiltered > 0) {
     console.log(
-      `Opensea - ${shortTokenAddr} - Offers under $100 USD filtered out: ${eventsFiltered}`
+      `Opensea - ${shortTokenAddr} - Offers under $${minOfferUSD} USD filtered out: ${eventsFiltered}`
     )
   }
 

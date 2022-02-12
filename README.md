@@ -67,6 +67,8 @@ Create an application in the [Twitter Developer Platform](https://developer.twit
 
 - `OPENSEA_BOT_INTERVAL`
   - Number of seconds interval for the bot to run (default: 60)
+- `MIN_OFFER_USD`
+  - Offers or bids less than this amount will be ignored (default: 100)
 
 ### Run
 
