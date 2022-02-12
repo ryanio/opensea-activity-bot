@@ -3,18 +3,10 @@ import { resolve } from 'path'
 import { URLSearchParams } from 'url'
 import fetch from 'node-fetch'
 import { channelsWithEvents } from './discord'
-import { assetUSDValue, unixTimestamp, shortTokenAddr } from './util'
+import { assetUSDValue, unixTimestamp, logStart, minOfferUSD } from './util'
 import meta from './meta.json'
 
-const {
-  OPENSEA_API_TOKEN,
-  TOKEN_ADDRESS,
-  TWITTER_EVENTS,
-  MIN_OFFER_USD,
-  DEBUG,
-} = process.env
-
-const minOfferUSD = Number(MIN_OFFER_USD ?? 100)
+const { OPENSEA_API_TOKEN, TOKEN_ADDRESS, TWITTER_EVENTS, DEBUG } = process.env
 
 const updateMeta = (lastEventId: number) => {
   meta.lastEventId = lastEventId
@@ -73,7 +65,7 @@ const enabledEventTypes = () => {
 }
 
 export const fetchEvents = async (): Promise<any> => {
-  console.log(`OpenSea - ${shortTokenAddr} - Fetching events`)
+  console.log(`${logStart}OpenSea - Fetching events`)
   const eventTypes = enabledEventTypes()
   const params: any = {
     asset_contract_address: TOKEN_ADDRESS,
@@ -94,7 +86,7 @@ export const fetchEvents = async (): Promise<any> => {
     const response = await fetch(url, opensea.GET_OPTS)
     if (!response.ok) {
       console.error(
-        `OpenSea - ${shortTokenAddr} - Fetch Error - ${response.status}: ${response.statusText}`,
+        `${logStart}OpenSea - Fetch Error - ${response.status}: ${response.statusText}`,
         DEBUG ? `DEBUG: ${JSON.stringify(await response.text())}` : ''
       )
       return
@@ -102,7 +94,7 @@ export const fetchEvents = async (): Promise<any> => {
     const result = await response.json()
     if (!result || !result.asset_events) {
       console.error(
-        `OpenSea - ${shortTokenAddr} - Fetch Error (missing asset_events) - Result: ${JSON.stringify(
+        `${logStart}OpenSea - Fetch Error (missing asset_events) - Result: ${JSON.stringify(
           result
         )}`
       )
@@ -111,7 +103,7 @@ export const fetchEvents = async (): Promise<any> => {
     events = result.asset_events
   } catch (error) {
     console.error(
-      `OpenSea - ${shortTokenAddr} - Fetch Error: ${error?.message ?? error}`
+      `${logStart}OpenSea - Fetch Error: ${error?.message ?? error}`
     )
     return
   }
@@ -132,7 +124,7 @@ export const fetchEvents = async (): Promise<any> => {
         )
         if (!response.ok) {
           console.error(
-            `OpenSea - ${shortTokenAddr} - Fetch Error (Pagination) - ${response.status}: ${response.statusText}`,
+            `${logStart}OpenSea - Fetch Error (Pagination) - ${response.status}: ${response.statusText}`,
             DEBUG ? `DEBUG: ${JSON.stringify(await response.text())}` : ''
           )
         }
@@ -143,9 +135,7 @@ export const fetchEvents = async (): Promise<any> => {
         }
       } catch (error) {
         console.error(
-          `OpenSea - ${shortTokenAddr} - Fetch Error: ${
-            error?.message ?? error
-          }`
+          `${logStart}OpenSea - Fetch Error: ${error?.message ?? error}`
         )
       }
     }
@@ -165,9 +155,7 @@ export const fetchEvents = async (): Promise<any> => {
   )
 
   const eventsPreFilter = events.length
-  console.log(
-    `OpenSea - ${shortTokenAddr} - Fetched events: ${eventsPreFilter}`
-  )
+  console.log(`${logStart}OpenSea - Fetched events: ${eventsPreFilter}`)
 
   // Filter out low value bids or offers
   events = events.filter((event) =>
@@ -184,7 +172,7 @@ export const fetchEvents = async (): Promise<any> => {
   const eventsFiltered = eventsPreFilter - eventsPostFilter
   if (eventsFiltered > 0) {
     console.log(
-      `Opensea - ${shortTokenAddr} - Offers under $${minOfferUSD} USD filtered out: ${eventsFiltered}`
+      `${logStart}Opensea - Offers under $${minOfferUSD} USD filtered out: ${eventsFiltered}`
     )
   }
 

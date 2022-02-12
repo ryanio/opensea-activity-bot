@@ -44,7 +44,7 @@ Valid string values for event types to react on are:
 - `DISCORD_EVENTS`
   - The Discord channel ID with a comma separated list of event types for the bot to send through discord
     - e.g. `662377002338091020=successful`
-  - For multiple channels separate with an amperstand (&)
+  - For multiple channels separate with an ampersand (&)
     - e.g. `662377002338091020=successful,created,cancelled&924064011820077076=bid_entered,bid_withdrawn`
 - `DISCORD_TOKEN`
   - To get your `DISCORD_TOKEN`, [create a Discord app](https://discord.com/developers/applications). Create a bot with the permissions: `Send Messages` and `Embed Links`. Then [add your bot to your server](https://discordjs.guide/preparations/adding-your-bot-to-servers.html#bot-invite-links).

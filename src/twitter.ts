@@ -4,7 +4,7 @@ import { format } from 'timeago.js'
 import fetch from 'node-fetch'
 import Twitter from 'twitter-lite'
 import { opensea, EventType } from './opensea'
-import { shortTokenAddr, timeout, username } from './util'
+import { logStart, timeout, username } from './util'
 
 const {
   TWITTER_EVENTS,
@@ -202,10 +202,10 @@ const tweetEvent = async (client: any, uploadClient: any, event: any) => {
       media_ids: mediaUploadResponse.media_id_string,
     })
     console.log(
-      `Twitter - ${shortTokenAddr} - Tweeted (event id: ${event.id}): ${status}`
+      `${logStart}Twitter - Tweeted (event id: ${event.id}): ${status}`
     )
   } catch (error) {
-    console.error(`Twitter - ${shortTokenAddr} - Error:`)
+    console.error(`${logStart}Twitter - Error:`)
     console.error(error)
   }
 }
@@ -224,9 +224,7 @@ export const tweetEvents = async (events: any[]) => {
     TWITTER_EVENTS.split(',').includes(event.event_type)
   )
 
-  console.log(
-    `Twitter - ${shortTokenAddr} - Relevant events: ${filteredEvents.length}`
-  )
+  console.log(`${logStart}Twitter - Relevant events: ${filteredEvents.length}`)
 
   if (filteredEvents.length === 0) return
 

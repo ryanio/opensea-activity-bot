@@ -65,4 +65,6 @@ export const assetUSDValue = (event: any) => {
  * Env helpers
  */
 export const botInterval = Number(process.env.OPENSEA_BOT_INTERVAL ?? 60)
+export const minOfferUSD = Number(process.env.MIN_OFFER_USD ?? 100)
 export const shortTokenAddr = shortAddr(process.env.TOKEN_ADDRESS)
+export const logStart = `${shortTokenAddr} - `
