@@ -137,8 +137,6 @@ export const fetchEvents = async (): Promise<any> => {
     }
   }
 
-  if (!events || events.length === 0) return []
-
   // Filter since lastEventId
   events = events.filter((event) => event.id > meta.lastEventId)
   if (events.length > 0) {
