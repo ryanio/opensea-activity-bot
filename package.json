@@ -8,8 +8,9 @@
     "node": "^16.13.1"
   },
   "scripts": {
-    "postinstall": "yarn run build",
-    "build": "npx tsc && echo '{\"lastEventId\":0}' > dist/meta.json",
+    "postinstall": "yarn build && yarn createMetaJsonFile",
+    "build": "npx tsc",
+    "createMetaJsonFile": "[ -f dist/meta.json ] || echo '{\"lastEventId\":0}' > dist/meta.json",
     "start": "node dist/index.js"
   },
   "dependencies": {
