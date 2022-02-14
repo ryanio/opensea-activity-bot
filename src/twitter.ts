@@ -106,10 +106,7 @@ const textForTweet = async (event: any) => {
     text += `purchased for ${amount} ($${amountUSD} USD) by ${name}`
   } else if (event_type === EventType.cancelled) {
     const { symbol, decimals, usd_price } = payment_token
-    const price =
-      ethers.utils.formatUnits(ending_price || starting_price, decimals) +
-      ' ' +
-      symbol
+    const price = ethers.utils.formatUnits(total_price, decimals) + ' ' + symbol
     const priceUSD = ethers.FixedNumber.from(price.split(' ')[0])
       .mulUnsafe(ethers.FixedNumber.from(usd_price))
       .toUnsafeFloat()
@@ -137,7 +134,7 @@ const textForTweet = async (event: any) => {
   } else if (event_type === EventType.bid_withdrawn) {
     const { symbol, decimals, usd_price } = payment_token
     const amount =
-      ethers.utils.formatUnits(starting_price, decimals) + ' ' + symbol
+      ethers.utils.formatUnits(total_price, decimals) + ' ' + symbol
     const amountUSD = ethers.FixedNumber.from(amount.split(' ')[0])
       .mulUnsafe(ethers.FixedNumber.from(usd_price))
       .toUnsafeFloat()

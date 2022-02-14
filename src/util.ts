@@ -50,9 +50,9 @@ export const username = async (user) => {
 }
 
 export const assetUSDValue = (event: any) => {
-  const { bid_amount, payment_token } = event
+  const { bid_amount, total_price, payment_token } = event
   const { decimals, usd_price } = payment_token
-  const price = ethers.utils.formatUnits(bid_amount, decimals)
+  const price = ethers.utils.formatUnits(bid_amount ?? total_price, decimals)
   return Number(
     ethers.FixedNumber.from(price)
       .mulUnsafe(ethers.FixedNumber.from(usd_price))

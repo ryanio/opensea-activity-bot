@@ -218,7 +218,8 @@ const embed = async (event: any) => {
   } else if (event_type === EventType.bid_withdrawn) {
     const { symbol, decimals, usd_price } = payment_token
     title += 'Bid withdrawn: '
-    const amount = ethers.utils.formatUnits(bid_amount, decimals) + ' ' + symbol
+    const amount =
+      ethers.utils.formatUnits(total_price, decimals) + ' ' + symbol
     const amountUSD = ethers.FixedNumber.from(amount.split(' ')[0])
       .mulUnsafe(ethers.FixedNumber.from(usd_price))
       .toUnsafeFloat()
