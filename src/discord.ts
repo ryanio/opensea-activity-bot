@@ -170,10 +170,7 @@ const embed = async (event: any) => {
   } else if (event_type === EventType.cancelled) {
     const { symbol, decimals, usd_price } = payment_token
     title += 'Listing cancelled:'
-    const price =
-      ethers.utils.formatUnits(ending_price || starting_price, decimals) +
-      ' ' +
-      symbol
+    const price = ethers.utils.formatUnits(total_price, decimals) + ' ' + symbol
     const priceUSD = ethers.FixedNumber.from(price.split(' ')[0])
       .mulUnsafe(ethers.FixedNumber.from(usd_price))
       .toUnsafeFloat()
