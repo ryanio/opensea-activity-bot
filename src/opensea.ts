@@ -6,7 +6,17 @@ import { channelsWithEvents } from './discord'
 import { assetUSDValue, unixTimestamp, logStart, minOfferUSD } from './util'
 import meta from './meta.json'
 
-const { OPENSEA_API_TOKEN, TOKEN_ADDRESS, TWITTER_EVENTS, DEBUG } = process.env
+const {
+  OPENSEA_API_TOKEN,
+  LAST_EVENT_ID,
+  TOKEN_ADDRESS,
+  TWITTER_EVENTS,
+  DEBUG,
+} = process.env
+
+if (LAST_EVENT_ID && Number(LAST_EVENT_ID) > meta.lastEventId) {
+  meta.lastEventId = Number(LAST_EVENT_ID)
+}
 
 const updateMeta = (lastEventId: number) => {
   meta.lastEventId = lastEventId
