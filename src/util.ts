@@ -1,4 +1,6 @@
-import { ethers } from 'ethers'
+import { FixedNumber, providers, utils } from 'ethers'
+
+const { formatUnits } = utils
 
 export function timeout(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -9,7 +11,7 @@ export const unixTimestamp = (date: Date) => Math.floor(date.getTime() / 1000)
 /**
  * ENS
  */
-const infuraProvider = new ethers.providers.InfuraProvider(
+const infuraProvider = new providers.InfuraProvider(
   'mainnet',
   process.env.INFURA_PROJECT_ID ? process.env.INFURA_PROJECT_ID : undefined
 )
@@ -52,10 +54,10 @@ export const username = async (user) => {
 export const assetUSDValue = (event: any) => {
   const { bid_amount, total_price, payment_token } = event
   const { decimals, usd_price } = payment_token
-  const price = ethers.utils.formatUnits(bid_amount ?? total_price, decimals)
+  const price = formatUnits(bid_amount ?? total_price, decimals)
   return Number(
-    ethers.FixedNumber.from(price)
-      .mulUnsafe(ethers.FixedNumber.from(usd_price))
+    FixedNumber.from(price)
+      .mulUnsafe(FixedNumber.from(usd_price))
       .toUnsafeFloat()
       .toFixed(2)
   )

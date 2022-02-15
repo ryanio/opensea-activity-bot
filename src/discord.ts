@@ -1,8 +1,10 @@
 import { Client, MessageEmbed } from 'discord.js'
-import { ethers } from 'ethers'
+import { FixedNumber, utils } from 'ethers'
 import { format } from 'timeago.js'
 import { opensea, EventType } from './opensea'
 import { logStart, timeout, username } from './util'
+
+const { commify, formatUnits } = utils
 
 const { DISCORD_EVENTS, DISCORD_TOKEN } = process.env
 
@@ -83,12 +85,13 @@ const embed = async (event: any) => {
     const { symbol, decimals, usd_price } = payment_token
     if (auction_type === 'english') {
       title += 'English auction:'
-      const price =
-        ethers.utils.formatUnits(starting_price, decimals) + ' ' + symbol
-      const priceUSD = ethers.FixedNumber.from(price.split(' ')[0])
-        .mulUnsafe(ethers.FixedNumber.from(usd_price))
-        .toUnsafeFloat()
-        .toFixed(2)
+      const price = formatUnits(starting_price, decimals) + ' ' + symbol
+      const priceUSD = commify(
+        FixedNumber.from(price.split(' ')[0])
+          .mulUnsafe(FixedNumber.from(usd_price))
+          .toUnsafeFloat()
+          .toFixed(2)
+      )
       const inTime = format(
         new Date(new Date(created_date).getTime() + Number(duration) * 1000)
       )
@@ -102,18 +105,20 @@ const embed = async (event: any) => {
       })
     } else if (auction_type === 'dutch' && starting_price !== ending_price) {
       title += 'Reverse Dutch auction:'
-      const price =
-        ethers.utils.formatUnits(starting_price, decimals) + ' ' + symbol
-      const priceUSD = ethers.FixedNumber.from(price.split(' ')[0])
-        .mulUnsafe(ethers.FixedNumber.from(usd_price))
-        .toUnsafeFloat()
-        .toFixed(2)
-      const endPrice =
-        ethers.utils.formatUnits(ending_price, decimals) + ' ' + symbol
-      const endPriceUSD = ethers.FixedNumber.from(endPrice.split(' ')[0])
-        .mulUnsafe(ethers.FixedNumber.from(usd_price))
-        .toUnsafeFloat()
-        .toFixed(2)
+      const price = formatUnits(starting_price, decimals) + ' ' + symbol
+      const priceUSD = commify(
+        FixedNumber.from(price.split(' ')[0])
+          .mulUnsafe(FixedNumber.from(usd_price))
+          .toUnsafeFloat()
+          .toFixed(2)
+      )
+      const endPrice = formatUnits(ending_price, decimals) + ' ' + symbol
+      const endPriceUSD = commify(
+        FixedNumber.from(endPrice.split(' ')[0])
+          .mulUnsafe(FixedNumber.from(usd_price))
+          .toUnsafeFloat()
+          .toFixed(2)
+      )
       const inTime = format(
         new Date(new Date(created_date).getTime() + Number(duration) * 1000)
       )
@@ -127,12 +132,13 @@ const embed = async (event: any) => {
       })
     } else {
       title += 'Listed for sale:'
-      const price =
-        ethers.utils.formatUnits(starting_price, decimals) + ' ' + symbol
-      const priceUSD = ethers.FixedNumber.from(price.split(' ')[0])
-        .mulUnsafe(ethers.FixedNumber.from(usd_price))
-        .toUnsafeFloat()
-        .toFixed(2)
+      const price = formatUnits(starting_price, decimals) + ' ' + symbol
+      const priceUSD = commify(
+        FixedNumber.from(price.split(' ')[0])
+          .mulUnsafe(FixedNumber.from(usd_price))
+          .toUnsafeFloat()
+          .toFixed(2)
+      )
       fields.push({
         name: 'Price',
         value: `${price} ($${priceUSD} USD)`,
@@ -154,11 +160,13 @@ const embed = async (event: any) => {
   } else if (event_type === EventType.successful) {
     const { symbol, decimals, usd_price } = payment_token
     title += 'Purchased:'
-    const price = ethers.utils.formatUnits(total_price, decimals) + ' ' + symbol
-    const priceUSD = ethers.FixedNumber.from(price.split(' ')[0])
-      .mulUnsafe(ethers.FixedNumber.from(usd_price))
-      .toUnsafeFloat()
-      .toFixed(2)
+    const price = formatUnits(total_price, decimals) + ' ' + symbol
+    const priceUSD = commify(
+      FixedNumber.from(price.split(' ')[0])
+        .mulUnsafe(FixedNumber.from(usd_price))
+        .toUnsafeFloat()
+        .toFixed(2)
+    )
     fields.push({
       name: 'Price',
       value: `${price} ($${priceUSD} USD)`,
@@ -170,11 +178,13 @@ const embed = async (event: any) => {
   } else if (event_type === EventType.cancelled) {
     const { symbol, decimals, usd_price } = payment_token
     title += 'Listing cancelled:'
-    const price = ethers.utils.formatUnits(total_price, decimals) + ' ' + symbol
-    const priceUSD = ethers.FixedNumber.from(price.split(' ')[0])
-      .mulUnsafe(ethers.FixedNumber.from(usd_price))
-      .toUnsafeFloat()
-      .toFixed(2)
+    const price = formatUnits(total_price, decimals) + ' ' + symbol
+    const priceUSD = commify(
+      FixedNumber.from(price.split(' ')[0])
+        .mulUnsafe(FixedNumber.from(usd_price))
+        .toUnsafeFloat()
+        .toFixed(2)
+    )
     fields.push({
       name: 'Price',
       value: `${price} ($${priceUSD} USD)`,
@@ -186,11 +196,13 @@ const embed = async (event: any) => {
   } else if (event_type === EventType.offer_entered) {
     const { symbol, decimals, usd_price } = payment_token
     title += 'Offer entered: '
-    const amount = ethers.utils.formatUnits(bid_amount, decimals) + ' ' + symbol
-    const amountUSD = ethers.FixedNumber.from(amount.split(' ')[0])
-      .mulUnsafe(ethers.FixedNumber.from(usd_price))
-      .toUnsafeFloat()
-      .toFixed(2)
+    const amount = formatUnits(bid_amount, decimals) + ' ' + symbol
+    const amountUSD = commify(
+      FixedNumber.from(amount.split(' ')[0])
+        .mulUnsafe(FixedNumber.from(usd_price))
+        .toUnsafeFloat()
+        .toFixed(2)
+    )
     fields.push({
       name: 'Amount',
       value: `${amount} ($${amountUSD} USD)`,
@@ -202,11 +214,13 @@ const embed = async (event: any) => {
   } else if (event_type === EventType.bid_entered) {
     const { symbol, decimals, usd_price } = payment_token
     title += 'Bid entered: '
-    const amount = ethers.utils.formatUnits(bid_amount, decimals) + ' ' + symbol
-    const amountUSD = ethers.FixedNumber.from(amount.split(' ')[0])
-      .mulUnsafe(ethers.FixedNumber.from(usd_price))
-      .toUnsafeFloat()
-      .toFixed(2)
+    const amount = formatUnits(bid_amount, decimals) + ' ' + symbol
+    const amountUSD = commify(
+      FixedNumber.from(amount.split(' ')[0])
+        .mulUnsafe(FixedNumber.from(usd_price))
+        .toUnsafeFloat()
+        .toFixed(2)
+    )
     fields.push({
       name: 'Amount',
       value: `${amount} ($${amountUSD} USD)`,
@@ -218,12 +232,13 @@ const embed = async (event: any) => {
   } else if (event_type === EventType.bid_withdrawn) {
     const { symbol, decimals, usd_price } = payment_token
     title += 'Bid withdrawn: '
-    const amount =
-      ethers.utils.formatUnits(total_price, decimals) + ' ' + symbol
-    const amountUSD = ethers.FixedNumber.from(amount.split(' ')[0])
-      .mulUnsafe(ethers.FixedNumber.from(usd_price))
-      .toUnsafeFloat()
-      .toFixed(2)
+    const amount = formatUnits(total_price, decimals) + ' ' + symbol
+    const amountUSD = commify(
+      FixedNumber.from(amount.split(' ')[0])
+        .mulUnsafe(FixedNumber.from(usd_price))
+        .toUnsafeFloat()
+        .toFixed(2)
+    )
     fields.push({
       name: 'Amount',
       value: `${amount} ($${amountUSD} USD)`,
