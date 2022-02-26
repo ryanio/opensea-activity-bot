@@ -15,6 +15,7 @@ const {
 } = process.env
 
 if (LAST_EVENT_ID && Number(LAST_EVENT_ID) > meta.lastEventId) {
+  console.log(`${logStart}Using LAST_EVENT_ID: ${LAST_EVENT_ID}`)
   meta.lastEventId = Number(LAST_EVENT_ID)
 }
 
