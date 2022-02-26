@@ -1,12 +1,9 @@
-import { FixedNumber, utils } from 'ethers'
 import { File, FileReader } from 'file-api'
 import { format } from 'timeago.js'
 import fetch from 'node-fetch'
 import Twitter from 'twitter-lite'
 import { opensea, EventType } from './opensea'
-import { logStart, timeout, username } from './util'
-
-const { commify, formatUnits } = utils
+import { logStart, timeout, username, formatAmount, formatUSD } from './util'
 
 const {
   TWITTER_EVENTS,
@@ -54,46 +51,26 @@ const textForTweet = async (event: any) => {
     const { symbol, decimals, usd_price } = payment_token
     const name = await username(from_account ?? seller)
     if (auction_type === 'english') {
-      const price = formatUnits(starting_price, decimals) + ' ' + symbol
-      const priceUSD = commify(
-        FixedNumber.from(price.split(' ')[0])
-          .mulUnsafe(FixedNumber.from(usd_price))
-          .toUnsafeFloat()
-          .toFixed(2)
-      )
+      const price = formatAmount(starting_price, decimals, symbol)
+      const priceUSD = formatUSD(price, usd_price)
       const inTime = format(
         new Date(new Date(created_date).getTime() + Number(duration))
       )
       text += `English auction started for ${price} ($${priceUSD} USD), ends ${inTime}, by ${name}`
       // Opening Price, Ends in
     } else if (auction_type === 'dutch') {
-      const price = formatUnits(starting_price, decimals) + ' ' + symbol
-      const priceUSD = commify(
-        FixedNumber.from(price.split(' ')[0])
-          .mulUnsafe(FixedNumber.from(usd_price))
-          .toUnsafeFloat()
-          .toFixed(2)
-      )
-      const endPrice = formatUnits(ending_price, decimals) + ' ' + symbol
-      const endPriceUSD = commify(
-        FixedNumber.from(endPrice.split(' ')[0])
-          .mulUnsafe(FixedNumber.from(usd_price))
-          .toUnsafeFloat()
-          .toFixed(2)
-      )
+      const price = formatAmount(starting_price, decimals, symbol)
+      const priceUSD = formatUSD(price, usd_price)
+      const endPrice = formatAmount(ending_price, decimals, symbol)
+      const endPriceUSD = formatUSD(endPrice, usd_price)
       const inTime = format(
         new Date(new Date(created_date).getTime() + Number(duration) * 1000)
       )
       text += `Reverse Dutch auction started for ${price} ($${priceUSD} USD), ends ${inTime} at ${endPrice} ($${endPriceUSD} USD), by ${name}`
       // Start Price, End Price (in x time)
     } else if (auction_type === null) {
-      const price = formatUnits(starting_price, decimals) + ' ' + symbol
-      const priceUSD = commify(
-        FixedNumber.from(price.split(' ')[0])
-          .mulUnsafe(FixedNumber.from(usd_price))
-          .toUnsafeFloat()
-          .toFixed(2)
-      )
+      const price = formatAmount(starting_price, decimals, symbol)
+      const priceUSD = formatUSD(price, usd_price)
       const inTime = format(
         new Date(new Date(created_date).getTime() + Number(duration) * 1000)
       )
@@ -102,57 +79,32 @@ const textForTweet = async (event: any) => {
     }
   } else if (event_type === EventType.successful) {
     const { symbol, decimals, usd_price } = payment_token
-    const amount = formatUnits(total_price, decimals) + ' ' + symbol
-    const amountUSD = commify(
-      FixedNumber.from(amount.split(' ')[0])
-        .mulUnsafe(FixedNumber.from(usd_price))
-        .toUnsafeFloat()
-        .toFixed(2)
-    )
+    const amount = formatAmount(total_price, decimals, symbol)
+    const amountUSD = formatUSD(amount, usd_price)
     const name = await username(winner_account)
     text += `purchased for ${amount} ($${amountUSD} USD) by ${name}`
   } else if (event_type === EventType.cancelled) {
     const { symbol, decimals, usd_price } = payment_token
-    const price = formatUnits(total_price, decimals) + ' ' + symbol
-    const priceUSD = commify(
-      FixedNumber.from(price.split(' ')[0])
-        .mulUnsafe(FixedNumber.from(usd_price))
-        .toUnsafeFloat()
-        .toFixed(2)
-    )
+    const price = formatAmount(total_price, decimals, symbol)
+    const priceUSD = formatUSD(price, usd_price)
     const name = await username(seller)
     text += `listing cancelled for ${price} ($${priceUSD} USD) by ${name}`
   } else if (event_type === EventType.offer_entered) {
     const { symbol, decimals, usd_price } = payment_token
-    const amount = formatUnits(bid_amount, decimals) + ' ' + symbol
-    const amountUSD = commify(
-      FixedNumber.from(amount.split(' ')[0])
-        .mulUnsafe(FixedNumber.from(usd_price))
-        .toUnsafeFloat()
-        .toFixed(2)
-    )
+    const amount = formatAmount(bid_amount, decimals, symbol)
+    const amountUSD = formatUSD(amount, usd_price)
     const name = await username(from_account)
     text += `offer entered for ${amount} ($${amountUSD} USD) by ${name}`
   } else if (event_type === EventType.bid_entered) {
     const { symbol, decimals, usd_price } = payment_token
-    const amount = formatUnits(bid_amount, decimals) + ' ' + symbol
-    const amountUSD = commify(
-      FixedNumber.from(amount.split(' ')[0])
-        .mulUnsafe(FixedNumber.from(usd_price))
-        .toUnsafeFloat()
-        .toFixed(2)
-    )
+    const amount = formatAmount(bid_amount, decimals, symbol)
+    const amountUSD = formatUSD(amount, usd_price)
     const name = await username(from_account)
     text += `bid entered for ${amount} ($${amountUSD} USD) by ${name}`
   } else if (event_type === EventType.bid_withdrawn) {
     const { symbol, decimals, usd_price } = payment_token
-    const amount = formatUnits(total_price, decimals) + ' ' + symbol
-    const amountUSD = commify(
-      FixedNumber.from(amount.split(' ')[0])
-        .mulUnsafe(FixedNumber.from(usd_price))
-        .toUnsafeFloat()
-        .toFixed(2)
-    )
+    const amount = formatAmount(total_price, decimals, symbol)
+    const amountUSD = formatUSD(amount, usd_price)
     const name = await username(from_account)
     text += `bid withdrawn for ${amount} ($${amountUSD} USD) by ${name}`
   } else if (event_type === EventType.transfer) {

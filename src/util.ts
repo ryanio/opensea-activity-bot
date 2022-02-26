@@ -1,6 +1,6 @@
 import { FixedNumber, providers, utils } from 'ethers'
 
-const { formatUnits } = utils
+const { commify, formatUnits } = utils
 
 export function timeout(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -49,6 +49,43 @@ export const username = async (user) => {
   if (ens) return ens
   if (user.address) return shortAddr(user.address)
   return 'Unknown'
+}
+
+/**
+ * Formats amount, decimals, and symbols to final string output.
+ */
+export const formatAmount = (
+  amount: number,
+  decimals: number,
+  symbol: string
+) => {
+  let value = formatUnits(amount, decimals)
+  const split = value.split('.')
+  if (split[1].length > 4) {
+    // Trim to 4 decimals max
+    value = `${split[0]}.${split[1].slice(0, 5)}`
+  } else if (split[1] === '0') {
+    // If whole number remove '.0'
+    value = split[0]
+  }
+  return `${value} ${symbol}`
+}
+
+/**
+ * Formats price and usdPrice to final string output.
+ */
+export const formatUSD = (price: string, usdPrice: string) => {
+  let value = commify(
+    FixedNumber.from(price.split(' ')[0])
+      .mulUnsafe(FixedNumber.from(usdPrice))
+      .toUnsafeFloat()
+      .toFixed(2)
+  )
+  // Format to 2 decimal places e.g. $1.3 -> $1.30
+  if (value.split('.')[1].length === 1) {
+    value = `${value}0`
+  }
+  return value
 }
 
 export const assetUSDValue = (event: any) => {
