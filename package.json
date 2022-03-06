@@ -10,7 +10,7 @@
   "scripts": {
     "postinstall": "yarn build && yarn createMetaJsonFile",
     "build": "npx tsc",
-    "createMetaJsonFile": "[ -f dist/meta.json ] || echo '{\"lastEventId\":0}' > dist/meta.json",
+    "createMetaJsonFile": "[ -f dist/meta.json ] || echo '{\"nextCursor\":null}' > dist/meta.json",
     "start": "node dist/index.js"
   },
   "dependencies": {

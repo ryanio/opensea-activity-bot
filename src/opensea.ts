@@ -3,24 +3,14 @@ import { resolve } from 'path'
 import { URLSearchParams } from 'url'
 import fetch from 'node-fetch'
 import { channelsWithEvents } from './discord'
-import { assetUSDValue, unixTimestamp, logStart, minOfferUSD } from './util'
+import { assetUSDValue, logStart, minOfferUSD } from './util'
 import meta from './meta.json'
 
-const {
-  OPENSEA_API_TOKEN,
-  LAST_EVENT_ID,
-  TOKEN_ADDRESS,
-  TWITTER_EVENTS,
-  DEBUG,
-} = process.env
+const { OPENSEA_API_TOKEN, TOKEN_ADDRESS, TWITTER_EVENTS, DEBUG } = process.env
 
-if (LAST_EVENT_ID && Number(LAST_EVENT_ID) > meta.lastEventId) {
-  console.log(`${logStart}Using LAST_EVENT_ID: ${LAST_EVENT_ID}`)
-  meta.lastEventId = Number(LAST_EVENT_ID)
-}
-
-const updateMeta = (lastEventId: number) => {
-  meta.lastEventId = lastEventId
+const updateMeta = (nextCursor: string) => {
+  console.log(`${logStart}Opensea - Next cursor: ${nextCursor}`)
+  meta.nextCursor = nextCursor
   writeFileSync(resolve(__dirname, './meta.json'), JSON.stringify(meta))
 }
 
@@ -31,17 +21,6 @@ export const opensea = {
     method: 'GET',
     headers: { Accept: 'application/json', 'X-API-KEY': OPENSEA_API_TOKEN },
   } as any,
-  /**
-   * Limit of fetched results per query
-   */
-  GET_LIMIT: 45,
-  /**
-   * Max pages to gather when fetching events.
-   * Warning, adding to this number may drastically increase
-   * the number of OpenSea queries from your API key depending
-   * on the popularity of the collection.
-   */
-  MAX_PAGES: 3,
 }
 
 export enum EventType {
@@ -80,10 +59,10 @@ export const fetchEvents = async (): Promise<any> => {
   const eventTypes = enabledEventTypes()
   const params: any = {
     asset_contract_address: TOKEN_ADDRESS,
-    occurred_after: unixTimestamp(new Date()) - 420, // check 7 mins back
-    limit: opensea.GET_LIMIT,
   }
-
+  if (meta.nextCursor) {
+    params.cursor = meta.nextCursor
+  }
   // OpenSea only allows filtering for one event at a time so
   // we'll only filter by an event if there's only one type specified
   if (eventTypes.length === 1) {
@@ -112,50 +91,12 @@ export const fetchEvents = async (): Promise<any> => {
       return
     }
     events = result.asset_events
+    updateMeta(result.next)
   } catch (error) {
     console.error(
       `${logStart}OpenSea - Fetch Error: ${error?.message ?? error}`
     )
     return
-  }
-
-  if (events.length === opensea.GET_LIMIT) {
-    // Add paginated results
-    let moreEvents = events
-    while (
-      moreEvents &&
-      moreEvents.length > 0 &&
-      moreEvents.length === opensea.GET_LIMIT &&
-      events.length / opensea.GET_LIMIT < opensea.MAX_PAGES
-    ) {
-      try {
-        const response = await fetch(
-          `${url}&offset=${events.length}`,
-          opensea.GET_OPTS
-        )
-        if (!response.ok) {
-          console.error(
-            `${logStart}OpenSea - Fetch Error (Pagination) - ${response.status}: ${response.statusText}`,
-            DEBUG ? `DEBUG: ${JSON.stringify(await response.text())}` : ''
-          )
-        }
-        const result = await response.json()
-        moreEvents = result.asset_events
-        if (moreEvents?.length > 0) {
-          events = events.concat(moreEvents)
-        }
-      } catch (error) {
-        console.error(
-          `${logStart}OpenSea - Fetch Error: ${error?.message ?? error}`
-        )
-      }
-    }
-  }
-
-  // Filter since lastEventId
-  events = events.filter((event) => event.id > meta.lastEventId)
-  if (events.length > 0) {
-    updateMeta(Math.max(...events.map((event) => event.id)))
   }
 
   // Filter out private listings
