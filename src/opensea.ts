@@ -59,6 +59,7 @@ export const fetchEvents = async (): Promise<any> => {
   const eventTypes = enabledEventTypes()
   const params: any = {
     asset_contract_address: TOKEN_ADDRESS,
+    limit: 50,
   }
   if (meta.nextCursor) {
     params.cursor = meta.nextCursor
