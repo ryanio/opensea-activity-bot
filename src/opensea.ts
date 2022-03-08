@@ -6,11 +6,21 @@ import { channelsWithEvents } from './discord'
 import { assetUSDValue, logStart, minOfferUSD } from './util'
 import meta from './meta.json'
 
-const { OPENSEA_API_TOKEN, TOKEN_ADDRESS, TWITTER_EVENTS, DEBUG } = process.env
+const {
+  OPENSEA_API_TOKEN,
+  TOKEN_ADDRESS,
+  TWITTER_EVENTS,
+  DEBUG,
+  LAST_EVENT_ID,
+} = process.env
 
-const updateMeta = (nextCursor: string) => {
-  console.log(`${logStart}Opensea - Next cursor: ${nextCursor}`)
-  meta.nextCursor = nextCursor
+if (LAST_EVENT_ID && Number(LAST_EVENT_ID) > meta.lastEventId) {
+  console.log(`${logStart}Using LAST_EVENT_ID: ${LAST_EVENT_ID}`)
+  meta.lastEventId = Number(LAST_EVENT_ID)
+}
+
+const updateMeta = (lastEventId: number) => {
+  meta.lastEventId = lastEventId
   writeFileSync(resolve(__dirname, './meta.json'), JSON.stringify(meta))
 }
 
@@ -59,10 +69,7 @@ export const fetchEvents = async (): Promise<any> => {
   const eventTypes = enabledEventTypes()
   const params: any = {
     asset_contract_address: TOKEN_ADDRESS,
-    limit: 75,
-  }
-  if (meta.nextCursor) {
-    params.cursor = meta.nextCursor
+    limit: 100,
   }
   // OpenSea only allows filtering for one event at a time so
   // we'll only filter by an event if there's only one type specified
@@ -92,12 +99,17 @@ export const fetchEvents = async (): Promise<any> => {
       return
     }
     events = result.asset_events
-    updateMeta(result.next)
   } catch (error) {
     console.error(
       `${logStart}OpenSea - Fetch Error: ${error?.message ?? error}`
     )
     return
+  }
+
+  // Filter since lastEventId
+  events = events.filter((event) => event.id > meta.lastEventId)
+  if (events.length > 0) {
+    updateMeta(Math.max(...events.map((event) => event.id)))
   }
 
   // Filter out private listings
