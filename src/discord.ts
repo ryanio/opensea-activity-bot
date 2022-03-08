@@ -1,7 +1,14 @@
 import { Client, MessageEmbed } from 'discord.js'
 import { format } from 'timeago.js'
 import { opensea, EventType } from './opensea'
-import { logStart, timeout, username, formatAmount, formatUSD } from './util'
+import {
+  formatAmount,
+  formatUSD,
+  imageForAsset,
+  logStart,
+  timeout,
+  username,
+} from './util'
 
 const { DISCORD_EVENTS, DISCORD_TOKEN } = process.env
 
@@ -242,7 +249,7 @@ const embed = async (event: any) => {
         return f
       })
     )
-    .setImage(asset.image_original_url)
+    .setImage(imageForAsset(asset))
 }
 
 const messagesForEvents = async (events: any[]) => {

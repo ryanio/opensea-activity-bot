@@ -3,7 +3,14 @@ import { format } from 'timeago.js'
 import fetch from 'node-fetch'
 import Twitter from 'twitter-lite'
 import { opensea, EventType } from './opensea'
-import { logStart, timeout, username, formatAmount, formatUSD } from './util'
+import {
+  formatAmount,
+  formatUSD,
+  imageForAsset,
+  logStart,
+  timeout,
+  username,
+} from './util'
 
 const {
   TWITTER_EVENTS,
@@ -151,7 +158,7 @@ const tweetEvent = async (client: any, uploadClient: any, event: any) => {
   try {
     // Fetch and upload image
     const media_data = await base64Image(
-      event.asset.image_original_url,
+      imageForAsset(event.asset),
       event.asset.token_id
     )
     const mediaUploadResponse = await uploadClient.post('media/upload', {
