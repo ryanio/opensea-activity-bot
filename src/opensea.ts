@@ -106,10 +106,13 @@ export const fetchEvents = async (): Promise<any> => {
     return
   }
 
+  // Sort by event id
+  events = events.sort((ev1, ev2) => ev1.id - ev2.id)
+
   // Filter since lastEventId
   events = events.filter((event) => event.id > meta.lastEventId)
   if (events.length > 0) {
-    updateMeta(Math.max(...events.map((event) => event.id)))
+    updateMeta(events[events.length - 1].id)
   }
 
   // Filter out private listings
@@ -141,5 +144,5 @@ export const fetchEvents = async (): Promise<any> => {
     )
   }
 
-  return events.reverse()
+  return events
 }
