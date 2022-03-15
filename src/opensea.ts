@@ -106,7 +106,7 @@ export const fetchEvents = async (): Promise<any> => {
     return
   }
 
-  // Sort by event id
+  // Sort by event id ASC
   events = events.sort((ev1, ev2) => ev1.id - ev2.id)
 
   // Filter since lastEventId
