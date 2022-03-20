@@ -80,8 +80,20 @@ Ensure your key is created with "write" permissions, the default key may be "rea
 
 #### Running on a server
 
-It is recommended to use a DigitalOcean Droplet over Heroku for improved stability. Heroku servers restart frequently which can lead to duplicate posts.
+I recommend to use DigitalOcean over Heroku for improved stability. Heroku servers can restart (cycle) which can lead to duplicate posts since the ephemeral disk is lost.
 
-Support this repository by using the referral badge below:
+My preferred setup is a $5/month Basic Droplet with Ubuntu. Install Node v16, yarn, clone this repo, set env vars, and run using [`pm2`](https://pm2.keymetrics.io/). To respawn after reboot, set your env vars in `/etc/profile`, then run `pm2 startup`, and `pm2 save`.
 
-[![DigitalOcean Referral Badge](https://web-platforms.sfo2.cdn.digitaloceanspaces.com/WWW/Badge%201.svg)](https://www.digitalocean.com/?refcode=3f8c76216510&utm_campaign=Referral_Invite&utm_medium=Referral_Program&utm_source=badge)
+Support this project by using the referral badge below:
+
+[![DigitalOcean Referral Badge](https://web-platforms.sfo2.digitaloceanspaces.com/WWW/Badge%203.svg)](https://www.digitalocean.com/?refcode=3f8c76216510&utm_campaign=Referral_Invite&utm_medium=Referral_Program&utm_source=badge)
+
+## Collections using this bot
+
+Please open a Pull Request to add your bot below! ❤️
+
+<!-- prettier-ignore -->
+|Collection|Twitter|Discord|
+|----------|-------|-------|
+|Midnight Breeze|[@mbsalesbot](https://twitter.com/mbsalesbot)|✅ activity channel|
+|Heroes of Evermore|[@herosalesbot](https://twitter.com/herosalesbot)||
