@@ -71,6 +71,8 @@ Ensure your key is created with "write" permissions, the default key may be "rea
 
 - `OPENSEA_BOT_INTERVAL`
   - Number of seconds interval for the bot to run (default: 60)
+- `QUERY_LIMIT`
+  - Limit for the OpenSea Events query (default: 100)
 - `MIN_OFFER_USD`
   - Offers or bids less than this amount will be ignored (default: 100)
 

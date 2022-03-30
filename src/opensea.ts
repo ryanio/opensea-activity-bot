@@ -12,6 +12,7 @@ const {
   TWITTER_EVENTS,
   DEBUG,
   LAST_EVENT_ID,
+  QUERY_LIMIT,
 } = process.env
 
 if (LAST_EVENT_ID && Number(LAST_EVENT_ID) > meta.lastEventId) {
@@ -69,7 +70,7 @@ export const fetchEvents = async (): Promise<any> => {
   const eventTypes = enabledEventTypes()
   const params: any = {
     asset_contract_address: TOKEN_ADDRESS,
-    limit: 100,
+    limit: QUERY_LIMIT ?? 100,
   }
   // OpenSea only allows filtering for one event at a time so
   // we'll only filter by an event if there's only one type specified
