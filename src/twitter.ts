@@ -18,6 +18,8 @@ const {
   TWITTER_CONSUMER_SECRET,
   TWITTER_ACCESS_TOKEN,
   TWITTER_ACCESS_TOKEN_SECRET,
+  TWITTER_PREPEND_TWEET,
+  TWITTER_APPEND_TWEET,
 } = process.env
 
 const secrets = {
@@ -48,10 +50,16 @@ const textForTweet = async (event: any) => {
     asset_bundle,
   } = event
 
-  let text = `#${asset.token_id} `
+  let text = ''
+
+  if (TWITTER_PREPEND_TWEET) {
+    text += `${TWITTER_PREPEND_TWEET} `
+  }
 
   if (asset_bundle) {
-    text = `${asset_bundle.name} `
+    text += `${asset_bundle.name} `
+  } else {
+    text += `#${asset.token_id} `
   }
 
   if (event_type === EventType.created) {
@@ -125,6 +133,10 @@ const textForTweet = async (event: any) => {
     text += ` ${opensea.bundlePermalink(asset_bundle.slug)}`
   } else {
     text += ` ${permalink}`
+  }
+
+  if (TWITTER_APPEND_TWEET) {
+    text += ` ${TWITTER_APPEND_TWEET}`
   }
 
   return text
