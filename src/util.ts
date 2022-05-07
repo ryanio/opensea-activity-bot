@@ -1,4 +1,7 @@
+import { BaseStreamMessage, Payload } from '@opensea/stream-js'
 import { FixedNumber, providers, utils } from 'ethers'
+
+export interface Event extends BaseStreamMessage<Payload> {}
 
 const { commify, formatUnits } = utils
 
@@ -27,10 +30,10 @@ export const ensName = async (addr: string): Promise<string | undefined> => {
 
 /**
  * Returns a shortened version of a full ethereum address
- * (e.g. 0x38a16...c7eb3)
+ * (e.g. 0x38a16…c7eb3)
  */
 export const shortAddr = (addr: string) =>
-  addr.slice(0, 7) + '...' + addr.slice(37, 42)
+  addr.slice(0, 7) + '…' + addr.slice(37, 42)
 
 /**
  * OpenSea utils and helpers
@@ -55,7 +58,7 @@ export const username = async (user) => {
  * Formats amount, decimals, and symbols to final string output.
  */
 export const formatAmount = (
-  amount: number,
+  amount: string,
   decimals: number,
   symbol: string
 ) => {
@@ -88,10 +91,13 @@ export const formatUSD = (price: string, usdPrice: string) => {
   return value
 }
 
-export const assetUSDValue = (event: any) => {
-  const { bid_amount, total_price, payment_token } = event
+/**
+ * Returns item's price in USD
+ */
+export const itemUSD = (event: Event) => {
+  const { base_price, payment_token } = event.payload as any
   const { decimals, usd_price } = payment_token
-  const price = formatUnits(bid_amount ?? total_price, decimals)
+  const price = formatUnits(base_price, decimals)
   return Number(
     FixedNumber.from(price)
       .mulUnsafe(FixedNumber.from(usd_price))
@@ -100,19 +106,24 @@ export const assetUSDValue = (event: any) => {
   )
 }
 
-export const imageForAsset = (asset: any) => {
+export const imageForEvent = (event: Event) => {
+  const { image_url } = event.payload.item.metadata
+  if (!image_url) return ''
   // Format ipfs:// urls to https://ipfs.io/ipfs/
-  if (asset.image_original_url.slice(0, 7) === 'ipfs://') {
-    const hash = asset.image_original_url.slice(7)
+  if (image_url.slice(0, 7) === 'ipfs://') {
+    const hash = image_url.slice(7)
     return `https://ipfs.io/ipfs/${hash}`
   }
-  return asset.image_original_url
+  return image_url
 }
 
 /**
- * Env helpers
+ * Helpers
  */
-export const botInterval = Number(process.env.OPENSEA_BOT_INTERVAL ?? 60)
 export const minOfferUSD = Number(process.env.MIN_OFFER_USD ?? 100)
-export const shortTokenAddr = shortAddr(process.env.TOKEN_ADDRESS)
-export const logStart = `${shortTokenAddr} - `
+export const shortTokenAddrs = process.env.COLLECTIONS.split(',').map((c) =>
+  c.slice(2) === '0x' ? shortAddr(process.env.TOKEN_ADDRESS) : c.slice(0, 13)
+)
+export const logStart = shortTokenAddrs.map((a) => `${a} - `)
+export const uppercase = (s: string) =>
+  s ? s[0].toUpperCase() + s.slice(1) : ''

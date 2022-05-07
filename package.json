@@ -1,6 +1,6 @@
 {
   "name": "opensea-activity-bot",
-  "version": "1.0.12",
+  "version": "2.0.0",
   "description": "A bot that shares new OpenSea events for a collection to Discord and Twitter.",
   "author": "Ryan Ghods <ryan@ryanio.com>",
   "license": "MIT",
@@ -8,23 +8,24 @@
     "node": "^16.13.1"
   },
   "scripts": {
-    "postinstall": "yarn build && yarn createMetaJsonFile",
+    "postinstall": "yarn build",
     "build": "npx tsc",
-    "createMetaJsonFile": "[ -f dist/meta.json ] || echo '{\"lastEventId\":0}' > dist/meta.json",
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "discord.js": "^13.3.1",
-    "ethers": "^5.5.2",
+    "@opensea/stream-js": "^0.0.20",
+    "discord.js": "^13.7.0",
+    "ethers": "^5.6.8",
     "file-api": "^0.10.4",
     "node-fetch": "^2.6.6",
     "timeago.js": "^4.0.2",
-    "twitter-lite": "^1.1.0"
+    "twitter-lite": "^1.1.0",
+    "ws": "^8.7.0"
   },
   "devDependencies": {
     "@types/node": "^16.11.19",
-    "prettier": "^2.5.1",
-    "ts-node": "^10.4.0",
-    "typescript": "^4.5.4"
+    "prettier": "^2.6.2",
+    "ts-node": "^10.8.0",
+    "typescript": "^4.7.2"
   }
 }

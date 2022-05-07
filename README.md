@@ -18,31 +18,33 @@ To run multiple instances of this bot at once check out [bot-runner](https://git
 
 Please define the env variables outlined in this section for the repository to work as intended.
 
+- `COLLECTIONS`
+  - Comma-separated list of collection token addresses or slugs
+  - Collections will react on all specified event types. To customize events for each collection, run multiple copies of this bot with [bot-runner](https://github.com/ryanio/bot-runner)
+
 **Valid event types**
 
 Valid string values for event types to react on are:
 
-- `created` for new listings and auctions
-- `successful` for sales
-- `cancelled`
-- `offer_entered`
-- `bid_entered`
-- `bid_withdrawn`
-- `transfer`
+- `item_listed`
+- `item_sold`
+- `item_received_offer`
+- `item_received_bid`
+- `item_cancelled`
+- `item_transferred`
+- `item_metadata_updated`
 
 #### Project-specific
-
-- `TOKEN_ADDRESS`
 
 #### APIs
 
 - `OPENSEA_API_TOKEN`
-- `INFURA_PROJECT_ID` (for ENS support)
+- `INFURA_PROJECT_ID` (for ENS lookup when no username is available)
 
 #### To share on Discord
 
 - `DISCORD_EVENTS`
-  - The Discord channel ID with a comma separated list of event types for the bot to send through discord
+  - The Discord channel ID with a comma-separated list of event types for the bot to send through discord
     - e.g. `662377002338091020=successful`
   - For multiple channels separate with an ampersand (&)
     - e.g. `662377002338091020=successful,created,cancelled&924064011820077076=bid_entered,bid_withdrawn`
@@ -56,7 +58,7 @@ If your discord bot is not able to post messages ensure it is added to the chann
 
 - `TWITTER_EVENTS`
   - Comma separated list of event types for the bot to tweet
-  - e.g. `successful,bid_entered`
+  - e.g. `item_sold,item_received_offer`
 
 Create an application in the [Twitter Developer Platform](https://developer.twitter.com/) and provide:
 
@@ -69,10 +71,6 @@ Ensure your key is created with "write" permissions, the default key may be "rea
 
 #### Optional
 
-- `OPENSEA_BOT_INTERVAL`
-  - Number of seconds interval for the bot to run (default: 60)
-- `QUERY_LIMIT`
-  - Limit for the OpenSea Events query (default: 100)
 - `MIN_OFFER_USD`
   - Offers or bids less than this amount will be ignored (default: 100)
 - `TWEET_PREPEND_TWEET`
@@ -86,13 +84,19 @@ Ensure your key is created with "write" permissions, the default key may be "rea
 
 #### Running on a server
 
-I recommend to use DigitalOcean over Heroku for improved stability. Heroku servers can restart (cycle) which can lead to duplicate posts since the ephemeral disk is lost.
-
 My preferred setup is a $5/month Basic Droplet with Ubuntu. Install Node v16 and yarn, clone this repo, cd into it, run `yarn`, install [pm2](https://pm2.keymetrics.io/) with `yarn global add pm2`, set env vars, run `pm2 start yarn -- start`. Monitor with `pm2 list` and `pm2 logs`. Add log rotation module to keep default max 10mb of logs with `pm2 install pm2-logrotate`. To respawn after reboot, set your env vars in `/etc/profile`, then run `pm2 startup` and `pm2 save`.
 
-Support this project by using the referral badge below:
+You can support this repository (and get your first two months free) with the referral badge below:
 
 [![DigitalOcean Referral Badge](https://web-platforms.sfo2.digitaloceanspaces.com/WWW/Badge%203.svg)](https://www.digitalocean.com/?refcode=3f8c76216510&utm_campaign=Referral_Invite&utm_medium=Referral_Program&utm_source=badge)
+
+##### Heroku
+
+A `Procfile` is included for easy use.
+
+Clone this repo, push it to heroku, set up the environment variables above, and spin up a worker with `heroku ps:scale web=0 worker=1`
+
+Then watch the logs with `heroku logs --tail`
 
 ## Collections using this bot
 
