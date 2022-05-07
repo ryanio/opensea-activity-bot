@@ -10,7 +10,7 @@ Originally developed for [@dutchtide](https://twitter.com/dutchtide)'s [𝕄𝕚
 
 An OpenSea API key is needed - [request one here](https://docs.opensea.io/reference/request-an-api-key).
 
-To run multiple instances of this bot at once check out [bot-runner](https://github.com/ryanio/bot-runner). Also check out [discord-nft-bot](https://github.com/ryanio/discord-nft-bot).
+To run multiple instances of this bot at once check out [bot-runner](https://github.com/ryanio/bot-runner). Also check out [discord-nft-embed-bot](https://github.com/ryanio/discord-nft-embed-bot).
 
 ## Setup
 
