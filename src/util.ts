@@ -101,12 +101,7 @@ export const assetUSDValue = (event: any) => {
 }
 
 export const imageForAsset = (asset: any) => {
-  // Format ipfs:// urls to https://ipfs.io/ipfs/
-  if (asset.image_original_url.slice(0, 7) === 'ipfs://') {
-    const hash = asset.image_original_url.slice(7)
-    return `https://ipfs.io/ipfs/${hash}`
-  }
-  return asset.image_original_url
+  return asset.image_url.replace('w=500', 'w=3000')
 }
 
 /**
