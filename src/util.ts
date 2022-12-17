@@ -101,7 +101,7 @@ export const assetUSDValue = (event: any) => {
 }
 
 export const imageForAsset = (asset: any) => {
-  return asset.image_url.replace('w=500', 'w=3000')
+  return asset.image_url
 }
 
 /**
