@@ -75,9 +75,9 @@ Ensure your key is created with "write" permissions, the default key may be "rea
   - Limit for the OpenSea Events query (default: 100)
 - `MIN_OFFER_USD`
   - Offers or bids less than this amount will be ignored (default: 100)
-- `TWEET_PREPEND_TWEET`
+- `TWITTER_PREPEND_TWEET`
   - Message to add to start of tweet, such as a hashtag
-- `TWEET_APPEND_TWEET`
+- `TWITTER_APPEND_TWEET`
   - Message to add to end of tweet, such as a hashtag
 
 ### Run
