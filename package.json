@@ -5,7 +5,7 @@
   "author": "Ryan Ghods <ryan@ryanio.com>",
   "license": "MIT",
   "engines": {
-    "node": "^16.13.1"
+    "node": ">=16.13.1"
   },
   "scripts": {
     "postinstall": "yarn build && yarn createMetaJsonFile",
