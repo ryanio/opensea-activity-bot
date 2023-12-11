@@ -1,11 +1,11 @@
-import { Client, MessageEmbed } from 'discord.js'
+import { Client, EmbedBuilder } from 'discord.js'
 import { format } from 'timeago.js'
-import { opensea, EventType } from './opensea'
+import { EventType, opensea } from './opensea'
 import {
   formatAmount,
-  formatUSD,
-  imageForAsset,
+  imageForNFT,
   logStart,
+  permalink,
   timeout,
   username,
 } from './util'
@@ -30,7 +30,7 @@ export const channelsWithEvents = (): ChannelEvents => {
 const channelsForEventType = (
   eventType: EventType,
   channelEvents: ChannelEvents,
-  discordChannels: any[]
+  discordChannels: any[],
 ) => {
   const channels = []
   for (const [channelId, eventTypes] of channelEvents) {
@@ -44,212 +44,149 @@ const channelsForEventType = (
 
 const colorFor = (eventType: EventType) => {
   switch (eventType) {
-    case EventType.created:
+    case EventType.listing:
       return '#66dcf0'
-    case EventType.successful:
+    case EventType.offer:
+      return '#d63864'
+    case EventType.sale:
       return '#62b778'
-    case EventType.cancelled:
-      return '#9537b0'
-    case EventType.offer_entered:
-      return '#d63864'
-    case EventType.bid_entered:
-      return '#d63864'
-    case EventType.bid_withdrawn:
+    case EventType.cancel:
       return '#9537b0'
     case EventType.transfer:
       return '#5296d5'
     default:
-      return '#5296d5'
+      return '#9537b0'
   }
 }
 
 const embed = async (event: any) => {
   const {
-    asset,
     event_type,
-    payment_token,
-    auction_type,
-    starting_price,
-    ending_price,
-    total_price,
-    bid_amount,
-    created_date,
-    duration,
-    from_account,
-    to_account,
-    winner_account,
-    seller,
-    asset_bundle,
+    payment,
+    from_address,
+    to_address,
+    asset,
+    order_type,
+    expiration_date,
+    maker,
+    taker,
+    criteria,
   } = event
   const fields: any[] = []
 
   let title = ''
 
-  if (event_type === EventType.created) {
-    const { symbol, decimals, usd_price } = payment_token
-    if (auction_type === 'english') {
-      title += 'English auction:'
-      const price = formatAmount(starting_price, decimals, symbol)
-      const priceUSD = formatUSD(price, usd_price)
-      const inTime = format(
-        new Date(new Date(created_date).getTime() + Number(duration) * 1000)
-      )
+  if (event_type === EventType.order) {
+    const { quantity, decimals, symbol } = payment
+    const inTime = format(new Date(expiration_date * 1000))
+    if (order_type === 'auction') {
+      title += 'Auction:'
+      const price = formatAmount(quantity.toString(), decimals, symbol)
       fields.push({
         name: 'Starting Price',
-        value: `${price} ($${priceUSD} USD)`,
+        value: price,
       })
       fields.push({
         name: 'Ends',
         value: inTime,
       })
-    } else if (auction_type === 'dutch' && starting_price !== ending_price) {
-      title += 'Reverse Dutch auction:'
-      const price = formatAmount(starting_price, decimals, symbol)
-      const priceUSD = formatUSD(price, usd_price)
-      const endPrice = formatAmount(ending_price, decimals, symbol)
-      const endPriceUSD = formatUSD(endPrice, usd_price)
-      const inTime = format(
-        new Date(new Date(created_date).getTime() + Number(duration) * 1000)
-      )
+    } else if (order_type === 'trait_offer') {
+      const traitType = criteria.trait.type
+      const traitValue = criteria.trait.value
+      title += `Trait offer: ${traitType} -> ${traitValue}`
+      const price = formatAmount(quantity, decimals, symbol)
       fields.push({
-        name: 'Start Price',
-        value: `${price} ($${priceUSD} USD)`,
+        name: 'Price',
+        value: price,
       })
       fields.push({
-        name: 'End Price',
-        value: `${endPrice} ($${endPriceUSD} USD) ${inTime}`,
+        name: 'Expires',
+        value: inTime,
+      })
+    } else if (order_type === 'item_offer') {
+      title += 'Item offer:'
+      const price = formatAmount(quantity, decimals, symbol)
+      fields.push({
+        name: 'Price',
+        value: price,
+      })
+      fields.push({
+        name: 'Expires',
+        value: inTime,
+      })
+    } else if (order_type === 'collection_offer') {
+      title += 'Collection offer'
+      const price = formatAmount(quantity, decimals, symbol)
+      fields.push({
+        name: 'Price',
+        value: price,
+      })
+      fields.push({
+        name: 'Expires',
+        value: inTime,
       })
     } else {
       title += 'Listed for sale:'
-      const price = formatAmount(starting_price, decimals, symbol)
-      const priceUSD = formatUSD(price, usd_price)
+      const price = formatAmount(quantity, decimals, symbol)
       fields.push({
         name: 'Price',
-        value: `${price} ($${priceUSD} USD)`,
+        value: price,
       })
-      if (duration) {
-        const inTime = format(
-          new Date(new Date(created_date).getTime() + Number(duration) * 1000)
-        )
-        fields.push({
-          name: 'Expires',
-          value: inTime,
-        })
-      }
+      fields.push({
+        name: 'Expires',
+        value: inTime,
+      })
     }
     fields.push({
       name: 'By',
-      value: await username(from_account ?? seller),
+      value: await username(maker),
     })
-  } else if (event_type === EventType.successful) {
-    const { symbol, decimals, usd_price } = payment_token
+  } else if (event_type === EventType.sale) {
+    const { quantity, decimals, symbol } = payment
     title += 'Purchased:'
-    const price = formatAmount(total_price, decimals, symbol)
-    const priceUSD = formatUSD(price, usd_price)
+    const price = formatAmount(quantity, decimals, symbol)
     fields.push({
       name: 'Price',
-      value: `${price} ($${priceUSD} USD)`,
+      value: price,
     })
     fields.push({
       name: 'By',
-      value: await username(winner_account),
-    })
-  } else if (event_type === EventType.cancelled) {
-    const { symbol, decimals, usd_price } = payment_token
-    title += 'Listing cancelled:'
-    const price = formatAmount(total_price, decimals, symbol)
-    const priceUSD = formatUSD(price, usd_price)
-    fields.push({
-      name: 'Price',
-      value: `${price} ($${priceUSD} USD)`,
-    })
-    fields.push({
-      name: 'By',
-      value: await username(seller),
-    })
-  } else if (event_type === EventType.offer_entered) {
-    const { symbol, decimals, usd_price } = payment_token
-    title += 'Offer entered: '
-    const amount = formatAmount(bid_amount, decimals, symbol)
-    const amountUSD = formatUSD(amount, usd_price)
-    fields.push({
-      name: 'Amount',
-      value: `${amount} ($${amountUSD} USD)`,
-    })
-    fields.push({
-      name: 'By',
-      value: await username(from_account),
-    })
-  } else if (event_type === EventType.bid_entered) {
-    const { symbol, decimals, usd_price } = payment_token
-    title += 'Bid entered: '
-    const amount = formatAmount(bid_amount, decimals, symbol)
-    const amountUSD = formatUSD(amount, usd_price)
-    fields.push({
-      name: 'Amount',
-      value: `${amount} ($${amountUSD} USD)`,
-    })
-    fields.push({
-      name: 'By',
-      value: await username(from_account),
-    })
-  } else if (event_type === EventType.bid_withdrawn) {
-    const { symbol, decimals, usd_price } = payment_token
-    title += 'Bid withdrawn: '
-    const amount = formatAmount(total_price, decimals, symbol)
-    const amountUSD = formatUSD(amount, usd_price)
-    fields.push({
-      name: 'Amount',
-      value: `${amount} ($${amountUSD} USD)`,
-    })
-    fields.push({
-      name: 'By',
-      value: await username(from_account),
+      value: await username(taker),
     })
   } else if (event_type === EventType.transfer) {
     title += 'Transferred:'
     fields.push({
       name: 'From',
-      value: await username(from_account),
+      value: await username(from_address),
     })
     fields.push({
       name: 'To',
-      value: await username(to_account),
+      value: await username(to_address),
     })
   }
 
-  let url = asset.permalink
-
-  if (asset_bundle) {
-    title += ` (bundle)`
-    fields.push({
-      name: 'Number of items',
-      value: asset_bundle.assets.length,
-    })
-    title += ` ${asset_bundle.name}`
-    url = opensea.bundlePermalink(asset_bundle.slug)
-  } else {
-    let assetName = asset.name
-    if (!assetName) {
-      if (asset.asset_contract.name) {
-        assetName = `${asset.asset_contract.name} `
-      }
-      assetName += `#${asset.token_id}`
-    }
-    title += ` ${assetName}`
+  if (asset?.name) {
+    title += ` ${asset.name}`
   }
 
-  return new MessageEmbed()
+  const embed = new EmbedBuilder()
     .setColor(colorFor(event_type))
     .setTitle(title)
-    .setURL(url)
     .setFields(
       fields.map((f) => {
         f.inline = true
         return f
-      })
+      }),
     )
-    .setImage(imageForAsset(asset))
+
+  if (Object.keys(asset).length > 0) {
+    embed.setURL(permalink(asset.identifier))
+    embed.setImage(imageForNFT(asset))
+  } else {
+    embed.setURL(opensea.collectionPermalink())
+  }
+
+  return embed
 }
 
 const messagesForEvents = async (events: any[]) => {
@@ -274,7 +211,7 @@ const login = async (client: Client): Promise<void> => {
 
 const getChannels = async (
   client: Client,
-  channelEvents: ChannelEvents
+  channelEvents: ChannelEvents,
 ): Promise<any> => {
   const channels = {}
   console.log(`${logStart}Discord - Selected channels:`)
@@ -284,7 +221,7 @@ const getChannels = async (
     console.log(
       `${logStart}Discord - * #${
         (channel as any).name ?? (channel as any).channelId
-      }: ${events.join(', ')}`
+      }: ${events.join(', ')}`,
     )
   }
   return channels
@@ -298,7 +235,7 @@ export async function messageEvents(events: any[]) {
 
   // only handle event types specified by DISCORD_EVENTS
   const filteredEvents = events.filter((event) =>
-    [...channelEvents.map((c) => c[1])].flat().includes(event.event_type)
+    [...channelEvents.map((c) => c[1])].flat().includes(event.event_type),
   )
 
   console.log(`${logStart}Discord - Relevant events: ${filteredEvents.length}`)
@@ -311,16 +248,16 @@ export async function messageEvents(events: any[]) {
     const messages = await messagesForEvents(filteredEvents)
 
     for (const [index, message] of messages.entries()) {
-      const { event_type, id } = filteredEvents[index]
+      const { event_type } = filteredEvents[index]
       const channels = channelsForEventType(
         event_type,
         channelEvents,
-        discordChannels
+        discordChannels,
       )
       console.log(
-        `${logStart}Discord - Sending message (event id: ${id}) in ${channels
+        `${logStart}Discord - Sending message in ${channels
           .map((c) => '#' + c.name ?? c.channelId)
-          .join(', ')}: ${message.embeds[0].title} `
+          .join(', ')}: ${message.embeds[0].data.title} `,
       )
       for (const channel of channels) {
         await channel.send(message)

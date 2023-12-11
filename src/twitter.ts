@@ -1,13 +1,11 @@
-import { File, FileReader } from 'file-api'
 import { format } from 'timeago.js'
-import fetch from 'node-fetch'
 import Twitter from 'twitter-lite'
-import { opensea, EventType } from './opensea'
+import { EventType } from './opensea'
 import {
   formatAmount,
-  formatUSD,
-  imageForAsset,
+  imageForNFT,
   logStart,
+  permalink,
   timeout,
   username,
 } from './util'
@@ -30,24 +28,14 @@ const secrets = {
 }
 
 const textForTweet = async (event: any) => {
-  const permalink = event.asset.permalink
-
   const {
     asset,
-    payment_token,
     event_type,
-    auction_type,
-    starting_price,
-    ending_price,
-    total_price,
-    bid_amount,
-    created_date,
-    duration,
-    from_account,
-    to_account,
-    winner_account,
-    seller,
-    asset_bundle,
+    payment,
+    from_address,
+    to_address,
+    order_type,
+    expiration_date,
   } = event
 
   let text = ''
@@ -56,83 +44,40 @@ const textForTweet = async (event: any) => {
     text += `${TWITTER_PREPEND_TWEET} `
   }
 
-  if (asset_bundle) {
-    text += `${asset_bundle.name} `
-  } else {
-    text += `#${asset.token_id} `
-  }
-
-  if (event_type === EventType.created) {
-    const { symbol, decimals, usd_price } = payment_token
-    const name = await username(from_account ?? seller)
-    if (auction_type === 'english') {
-      const price = formatAmount(starting_price, decimals, symbol)
-      const priceUSD = formatUSD(price, usd_price)
-      const inTime = format(
-        new Date(new Date(created_date).getTime() + Number(duration))
-      )
-      text += `English auction started for ${price} ($${priceUSD} USD), ends ${inTime}, by ${name}`
-      // Opening Price, Ends in
-    } else if (auction_type === 'dutch') {
-      const price = formatAmount(starting_price, decimals, symbol)
-      const priceUSD = formatUSD(price, usd_price)
-      const endPrice = formatAmount(ending_price, decimals, symbol)
-      const endPriceUSD = formatUSD(endPrice, usd_price)
-      const inTime = format(
-        new Date(new Date(created_date).getTime() + Number(duration) * 1000)
-      )
-      text += `Reverse Dutch auction started for ${price} ($${priceUSD} USD), ends ${inTime} at ${endPrice} ($${endPriceUSD} USD), by ${name}`
-      // Start Price, End Price (in x time)
-    } else if (auction_type === null) {
-      const price = formatAmount(starting_price, decimals, symbol)
-      const priceUSD = formatUSD(price, usd_price)
-      const inTime = format(
-        new Date(new Date(created_date).getTime() + Number(duration) * 1000)
-      )
-      text += `listed on sale for ${price} ($${priceUSD} USD) for ${inTime} by ${name}`
-      // Price
+  if (event_type === 'order') {
+    const { quantity, decimals, symbol } = payment
+    const name = await username(from_address)
+    const price = formatAmount(quantity, decimals, symbol)
+    if (order_type === 'auction') {
+      const inTime = format(new Date(expiration_date * 1000))
+      text += `#${asset.identifier} `
+      text += `auction started for ${price}, ends ${inTime}, by ${name}`
+    } else if (order_type === 'listing') {
+      text += `#${asset.identifier} `
+      text += `listed on sale for ${price} by ${name}`
+    } else if (order_type === 'item_offer') {
+      text += `#${asset.identifier} `
+      text += `has a new offer for ${price} by ${name}`
+    } else if (order_type === 'collection_offer') {
+      text += `has a new collection offer for ${price} by ${name}`
+    } else if (order_type === 'trait_offer') {
+      text += `has a new trait offer for ${price} by ${name}`
     }
-  } else if (event_type === EventType.successful) {
-    const { symbol, decimals, usd_price } = payment_token
-    const amount = formatAmount(total_price, decimals, symbol)
-    const amountUSD = formatUSD(amount, usd_price)
-    const name = await username(winner_account)
-    text += `purchased for ${amount} ($${amountUSD} USD) by ${name}`
-  } else if (event_type === EventType.cancelled) {
-    const { symbol, decimals, usd_price } = payment_token
-    const price = formatAmount(total_price, decimals, symbol)
-    const priceUSD = formatUSD(price, usd_price)
-    const name = await username(seller)
-    text += `listing cancelled for ${price} ($${priceUSD} USD) by ${name}`
-  } else if (event_type === EventType.offer_entered) {
-    const { symbol, decimals, usd_price } = payment_token
-    const amount = formatAmount(bid_amount, decimals, symbol)
-    const amountUSD = formatUSD(amount, usd_price)
-    const name = await username(from_account)
-    text += `offer entered for ${amount} ($${amountUSD} USD) by ${name}`
-  } else if (event_type === EventType.bid_entered) {
-    const { symbol, decimals, usd_price } = payment_token
-    const amount = formatAmount(bid_amount, decimals, symbol)
-    const amountUSD = formatUSD(amount, usd_price)
-    const name = await username(from_account)
-    text += `bid entered for ${amount} ($${amountUSD} USD) by ${name}`
-  } else if (event_type === EventType.bid_withdrawn) {
-    const { symbol, decimals, usd_price } = payment_token
-    const amount = formatAmount(total_price, decimals, symbol)
-    const amountUSD = formatUSD(amount, usd_price)
-    const name = await username(from_account)
-    text += `bid withdrawn for ${amount} ($${amountUSD} USD) by ${name}`
+  } else if (event_type === EventType.sale) {
+    const { quantity, decimals, symbol } = payment
+    const amount = formatAmount(quantity, decimals, symbol)
+    const name = await username(to_address)
+    text += `#${asset.identifier} `
+    text += `purchased for ${amount} by ${name}`
   } else if (event_type === EventType.transfer) {
-    const fromName = await username(from_account)
-    const toName = await username(to_account)
+    const fromName = await username(from_address)
+    const toName = await username(to_address)
+    text += `#${asset.identifier} `
     text += `transferred from ${fromName} to ${toName}`
   }
 
-  if (asset_bundle) {
-    text += ` (${asset_bundle.assets.length} items)`
-    text += ` ${opensea.bundlePermalink(asset_bundle.slug)}`
-  } else {
-    text += ` ${permalink}`
+  if (asset.identifier) {
+    text += ` ${permalink(asset.identifier)}`
   }
 
   if (TWITTER_APPEND_TWEET) {
@@ -142,7 +87,7 @@ const textForTweet = async (event: any) => {
   return text
 }
 
-export const base64Image = async (imageURL, tokenId) => {
+export const base64Image = async (imageURL) => {
   return await new Promise(async (resolve) => {
     const response = await fetch(imageURL)
     const blob = await response.blob()
@@ -152,27 +97,18 @@ export const base64Image = async (imageURL, tokenId) => {
       // Format to satisfy Twitter API
       const formattedBase64Image = base64Image.replace(
         /^data:image\/png;base64,/,
-        ''
+        '',
       )
       resolve(formattedBase64Image)
     }
-    reader.readAsDataURL(
-      new File({
-        name: `${tokenId}.png`,
-        type: 'image/png',
-        buffer: Buffer.from(await (blob as any).arrayBuffer()),
-      })
-    )
+    reader.readAsDataURL(blob)
   })
 }
 
 const tweetEvent = async (client: any, uploadClient: any, event: any) => {
   try {
     // Fetch and upload image
-    const media_data = await base64Image(
-      imageForAsset(event.asset),
-      event.asset.token_id
-    )
+    const media_data = await base64Image(imageForNFT(event.asset))
     const mediaUploadResponse = await uploadClient.post('media/upload', {
       media_data,
     })
@@ -184,7 +120,7 @@ const tweetEvent = async (client: any, uploadClient: any, event: any) => {
       media_ids: mediaUploadResponse.media_id_string,
     })
     console.log(
-      `${logStart}Twitter - Tweeted (event id: ${event.id}): ${status}`
+      `${logStart}Twitter - Tweeted (event id: ${event.id}): ${status}`,
     )
   } catch (error) {
     console.error(`${logStart}Twitter - Error:`)
@@ -203,7 +139,7 @@ export const tweetEvents = async (events: any[]) => {
 
   // only handle event types specified by TWITTER_EVENTS
   const filteredEvents = events.filter((event) =>
-    TWITTER_EVENTS.split(',').includes(event.event_type)
+    TWITTER_EVENTS.split(',').includes(event.event_type),
   )
 
   console.log(`${logStart}Twitter - Relevant events: ${filteredEvents.length}`)
