@@ -70,9 +70,9 @@ Ensure your key is created with "write" permissions, the default key may be "rea
 - `OPENSEA_BOT_INTERVAL`
   - Number of seconds interval for the bot to run (default: 60)
 - `QUERY_LIMIT`
-  - Limit for the OpenSea Events query (default: 100)
-- `MIN_OFFER_USD`
-  - Offers or bids less than this amount will be ignored (default: 100)
+  - Limit for the OpenSea Events query (default: 50)
+- `MIN_OFFER_ETH`
+  - Offers or bids less than this amount will be ignored (default: 0)
 - `TWITTER_PREPEND_TWEET`
   - Message to add to start of tweet, such as a hashtag
 - `TWITTER_APPEND_TWEET`

@@ -69,9 +69,14 @@ const embed = async (event: any) => {
     order_type,
     expiration_date,
     maker,
-    taker,
+    buyer,
     criteria,
   } = event
+
+  let { nft } = event
+  if (!nft && asset) {
+    nft = asset
+  }
   const fields: any[] = []
 
   let title = ''
@@ -151,7 +156,7 @@ const embed = async (event: any) => {
     })
     fields.push({
       name: 'By',
-      value: await username(taker),
+      value: await username(buyer),
     })
   } else if (event_type === EventType.transfer) {
     title += 'Transferred:'
@@ -165,8 +170,8 @@ const embed = async (event: any) => {
     })
   }
 
-  if (asset?.name) {
-    title += ` ${asset.name}`
+  if (nft?.name) {
+    title += ` ${nft.name}`
   }
 
   const embed = new EmbedBuilder()
@@ -179,9 +184,9 @@ const embed = async (event: any) => {
       }),
     )
 
-  if (Object.keys(asset).length > 0) {
-    embed.setURL(permalink(asset.identifier))
-    embed.setImage(imageForNFT(asset))
+  if (Object.keys(nft).length > 0) {
+    embed.setURL(permalink(nft.identifier))
+    embed.setImage(imageForNFT(nft))
   } else {
     embed.setURL(opensea.collectionPermalink())
   }

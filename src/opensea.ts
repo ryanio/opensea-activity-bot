@@ -1,8 +1,7 @@
-import { writeFileSync } from 'fs'
-import { resolve } from 'path'
 import { URLSearchParams } from 'url'
 import { channelsWithEvents } from './discord'
-import { assetUSDValue, chain, logStart, minOfferUSD } from './util'
+import { chain, logStart, minOfferETH } from './util'
+import { FixedNumber } from 'ethers'
 
 const {
   OPENSEA_API_TOKEN,
@@ -13,8 +12,10 @@ const {
   QUERY_LIMIT,
 } = process.env
 
+let lastEventTimestamp = Math.floor(Date.now() / 1000)
 if (LAST_EVENT_TIMESTAMP) {
   console.log(`${logStart}Using LAST_EVENT_TIMESTAMP: ${LAST_EVENT_TIMESTAMP}`)
+  lastEventTimestamp = parseInt(LAST_EVENT_TIMESTAMP)
 }
 
 export const opensea = {
@@ -33,7 +34,7 @@ export const opensea = {
 }
 
 export enum EventType {
-  order = 'order', // this is deprecated?
+  order = 'order', // this should be deprecated
   listing = 'listing',
   offer = 'offer',
   sale = 'sale',
@@ -98,9 +99,7 @@ export const fetchEvents = async (): Promise<any> => {
   const eventTypes = enabledEventTypes()
   const params: any = {
     limit: QUERY_LIMIT ?? 50,
-  }
-  if (LAST_EVENT_TIMESTAMP) {
-    params.after = LAST_EVENT_TIMESTAMP
+    after: lastEventTimestamp,
   }
   const urlParams = new URLSearchParams(params)
   for (const eventType of eventTypes) {
@@ -117,7 +116,6 @@ export const fetchEvents = async (): Promise<any> => {
         `${logStart}OpenSea - Fetch Error - ${response.status}: ${response.statusText}`,
         DEBUG ? `DEBUG: ${JSON.stringify(await response.text())}` : '',
       )
-      console.log(JSON.stringify(await response.text()))
       return
     }
     const result = await response.json()
@@ -137,28 +135,44 @@ export const fetchEvents = async (): Promise<any> => {
     return
   }
 
+  // Update lastEventTimestamp
+  // if (events.length > 0) {
+  //   lastEventTimestamp = events[events.length - 1].event_timestamp
+  // } else {
+  lastEventTimestamp = Math.floor(Date.now() / 1000)
+  // }
+
   // Filter out private listings
-  events = events.filter(
-    (event) =>
-      event.event_type !== EventType.listing ||
-      (event.event_type === EventType.listing && !event.is_private),
-  )
+  events = events.filter((event) => {
+    if (event.order_type === EventType.listing && event.is_private) {
+      return false
+    }
+    return true
+  })
 
   const eventsPreFilter = events.length
   console.log(`${logStart}OpenSea - Fetched events: ${eventsPreFilter}`)
 
   // Filter out low value offers
-  events = events.filter((event) =>
-    event.event_type == EventType.offer
-      ? assetUSDValue(event) >= minOfferUSD
-      : true,
-  )
+  events = events.filter((event) => {
+    if (
+      event.order_type?.includes('offer') &&
+      event.payment.symbol === 'WETH'
+    ) {
+      const offerValue = FixedNumber.fromValue(
+        event.payment.quantity.toString(),
+        event.payment.decimals,
+      )
+      return offerValue.gte(minOfferETH)
+    }
+    return true
+  })
 
   const eventsPostFilter = events.length
   const eventsFiltered = eventsPreFilter - eventsPostFilter
   if (eventsFiltered > 0) {
     console.log(
-      `${logStart}Opensea - Offers under $${minOfferUSD} USD filtered out: ${eventsFiltered}`,
+      `${logStart}Opensea - Offers under ${minOfferETH} ETH filtered out: ${eventsFiltered}`,
     )
   }
 

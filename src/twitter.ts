@@ -35,8 +35,14 @@ const textForTweet = async (event: any) => {
     from_address,
     to_address,
     order_type,
+    buyer,
     expiration_date,
   } = event
+
+  let { nft } = event
+  if (!nft && asset) {
+    nft = asset
+  }
 
   let text = ''
 
@@ -50,13 +56,13 @@ const textForTweet = async (event: any) => {
     const price = formatAmount(quantity, decimals, symbol)
     if (order_type === 'auction') {
       const inTime = format(new Date(expiration_date * 1000))
-      text += `#${asset.identifier} `
+      text += `#${nft.identifier} `
       text += `auction started for ${price}, ends ${inTime}, by ${name}`
     } else if (order_type === 'listing') {
-      text += `#${asset.identifier} `
+      text += `#${nft.identifier} `
       text += `listed on sale for ${price} by ${name}`
     } else if (order_type === 'item_offer') {
-      text += `#${asset.identifier} `
+      text += `#${nft.identifier} `
       text += `has a new offer for ${price} by ${name}`
     } else if (order_type === 'collection_offer') {
       text += `has a new collection offer for ${price} by ${name}`
@@ -66,18 +72,18 @@ const textForTweet = async (event: any) => {
   } else if (event_type === EventType.sale) {
     const { quantity, decimals, symbol } = payment
     const amount = formatAmount(quantity, decimals, symbol)
-    const name = await username(to_address)
-    text += `#${asset.identifier} `
+    const name = await username(buyer)
+    text += `#${nft.identifier} `
     text += `purchased for ${amount} by ${name}`
   } else if (event_type === EventType.transfer) {
     const fromName = await username(from_address)
     const toName = await username(to_address)
-    text += `#${asset.identifier} `
+    text += `#${nft.identifier} `
     text += `transferred from ${fromName} to ${toName}`
   }
 
-  if (asset.identifier) {
-    text += ` ${permalink(asset.identifier)}`
+  if (nft.identifier) {
+    text += ` ${permalink(nft.identifier)}`
   }
 
   if (TWITTER_APPEND_TWEET) {
@@ -108,7 +114,7 @@ export const base64Image = async (imageURL) => {
 const tweetEvent = async (client: any, uploadClient: any, event: any) => {
   try {
     // Fetch and upload image
-    const media_data = await base64Image(imageForNFT(event.asset))
+    const media_data = await base64Image(imageForNFT(event.nft))
     const mediaUploadResponse = await uploadClient.post('media/upload', {
       media_data,
     })

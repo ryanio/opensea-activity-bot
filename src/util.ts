@@ -100,35 +100,6 @@ export const formatAmount = (
   return `${value} ${symbol}`
 }
 
-/**
- * Formats price and usdPrice to final string output.
- */
-export const formatUSD = (price: string, usdPrice: string) => {
-  let value = commify(
-    FixedNumber.fromString(price.split(' ')[0])
-      .mulUnsafe(FixedNumber.fromString(usdPrice))
-      .toUnsafeFloat()
-      .toFixed(2),
-  )
-  // Format to 2 decimal places e.g. $1.3 -> $1.30
-  if (value.split('.')[1].length === 1) {
-    value = `${value}0`
-  }
-  return value
-}
-
-export const assetUSDValue = (event: any) => {
-  const { bid_amount, total_price, payment_token } = event
-  const { decimals, usd_price } = payment_token
-  const price = formatUnits(bid_amount ?? total_price, decimals)
-  return Number(
-    FixedNumber.fromString(price)
-      .mulUnsafe(FixedNumber.fromString(usd_price))
-      .toUnsafeFloat()
-      .toFixed(2),
-  )
-}
-
 export const imageForNFT = (nft: any) => {
   return nft.image_url.replace(/w=(\d)*/, 'w=1000')
 }
@@ -137,7 +108,9 @@ export const imageForNFT = (nft: any) => {
  * Env helpers
  */
 export const botInterval = Number(process.env.OPENSEA_BOT_INTERVAL ?? 60)
-export const minOfferUSD = Number(process.env.MIN_OFFER_USD ?? 100)
+export const minOfferETH = FixedNumber.fromString(
+  process.env.MIN_OFFER_ETH ?? '0',
+)
 export const shortTokenAddr = shortAddr(process.env.TOKEN_ADDRESS)
 export const logStart = `${shortTokenAddr} - `
 export const chain = process.env.CHAIN ?? 'ethereum'
