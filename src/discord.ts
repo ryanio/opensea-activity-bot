@@ -21,6 +21,13 @@ export const channelsWithEvents = (): ChannelEvents => {
     const channelWithEvents = channel.split('=')
     const channelId = channelWithEvents[0]
     const eventTypes = channelWithEvents[1].split(',')
+    if (
+      eventTypes.includes(EventType.listing) ||
+      eventTypes.includes(EventType.offer)
+    ) {
+      // Workaround
+      eventTypes.push(EventType.order)
+    }
     list.push([channelId, eventTypes])
   }
 
@@ -29,9 +36,17 @@ export const channelsWithEvents = (): ChannelEvents => {
 
 const channelsForEventType = (
   eventType: EventType,
+  orderType: string,
   channelEvents: ChannelEvents,
   discordChannels: any[],
 ) => {
+  if (eventType === EventType.order) {
+    if (orderType.includes('offer')) {
+      eventType = EventType.offer
+    } else {
+      eventType = EventType.listing
+    }
+  }
   const channels = []
   for (const [channelId, eventTypes] of channelEvents) {
     if (eventTypes.includes(eventType)) {
@@ -253,9 +268,10 @@ export async function messageEvents(events: any[]) {
     const messages = await messagesForEvents(filteredEvents)
 
     for (const [index, message] of messages.entries()) {
-      const { event_type } = filteredEvents[index]
+      const { event_type, order_type } = filteredEvents[index]
       const channels = channelsForEventType(
         event_type,
+        order_type,
         channelEvents,
         discordChannels,
       )
