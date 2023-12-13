@@ -1,6 +1,6 @@
 {
   "name": "opensea-activity-bot",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "A bot that shares new OpenSea events for a collection to Discord and Twitter.",
   "author": "Ryan Ghods <ryan@ryanio.com>",
   "license": "MIT",
@@ -10,7 +10,8 @@
   "scripts": {
     "postinstall": "yarn build",
     "build": "npx tsc",
-    "start": "yarn build && node dist/index.js"
+    "start": "node dist/index.js",
+    "start:dev": "ts-node src/index.ts"
   },
   "dependencies": {
     "discord.js": "^14.14.1",

@@ -1,6 +1,6 @@
 import { URLSearchParams } from 'url'
 import { channelsWithEvents } from './discord'
-import { chain, logStart, minOfferETH } from './util'
+import { chain, logStart, minOfferETH, openseaGet, unixTimestamp } from './util'
 import { FixedNumber } from 'ethers'
 
 const {
@@ -12,7 +12,7 @@ const {
   QUERY_LIMIT,
 } = process.env
 
-let lastEventTimestamp = Math.floor(Date.now() / 1000)
+let lastEventTimestamp = unixTimestamp(new Date())
 if (LAST_EVENT_TIMESTAMP) {
   console.log(`${logStart}Using LAST_EVENT_TIMESTAMP: ${LAST_EVENT_TIMESTAMP}`)
   lastEventTimestamp = parseInt(LAST_EVENT_TIMESTAMP)
@@ -20,9 +20,8 @@ if (LAST_EVENT_TIMESTAMP) {
 
 export const opensea = {
   api: 'https://api.opensea.io/api/v2/',
-  collectionPermalink: () =>
-    `https://opensea.io/collection/${cachedCollectionSlug}`,
-  getEvents: () => `${opensea.api}events/collection/${cachedCollectionSlug}`,
+  collectionPermalink: () => `https://opensea.io/collection/${collectionSlug}`,
+  getEvents: () => `${opensea.api}events/collection/${collectionSlug}`,
   getContract: () => `${opensea.api}chain/${chain}/contract/${TOKEN_ADDRESS}`,
   getAccount: (address: string) => `${opensea.api}accounts/${address}`,
   getNFT: (tokenId: number) =>
@@ -34,7 +33,7 @@ export const opensea = {
 }
 
 export enum EventType {
-  order = 'order', // this should be deprecated
+  order = 'order',
   listing = 'listing',
   offer = 'offer',
   sale = 'sale',
@@ -63,39 +62,26 @@ const enabledEventTypes = (): string[] => {
   return [...eventTypes]
 }
 
-let cachedCollectionSlug
+let collectionSlug
 const fetchCollectionSlug = async (address: string) => {
-  if (cachedCollectionSlug) {
-    return cachedCollectionSlug
+  if (collectionSlug) {
+    return collectionSlug
   }
   console.log(`Getting collection slug for ${address} on chain ${chain}…`)
-  try {
-    const response = await fetch(opensea.getContract(), opensea.GET_OPTS)
-    if (!response.ok) {
-      console.error(
-        `Fetch Error - ${response.status}: ${response.statusText}`,
-        DEBUG === 'true'
-          ? `DEBUG: ${JSON.stringify(await response.text())}`
-          : '',
-      )
-      return
-    }
-    const result = await response.json()
-    console.log(`Got collection slug: ${result.collection}`)
-    cachedCollectionSlug = result.collection
-    return cachedCollectionSlug
-  } catch (error) {
-    console.error(`Fetch Error: ${error?.message ?? error}`)
+  const url = opensea.getContract()
+  const result = await openseaGet(url)
+  if (!result.collection) {
+    throw new Error(`No collection found for ${address} on chain ${chain}`)
   }
+  console.log(`Got collection slug: ${result.collection}`)
+  collectionSlug = result.collection
+  return result.collection
 }
 
 export const fetchEvents = async (): Promise<any> => {
   console.log(`${logStart}OpenSea - Fetching events`)
   const slug = await fetchCollectionSlug(TOKEN_ADDRESS)
-  if (!slug) {
-    console.error(`${logStart}OpenSea - No collection slug`)
-    return
-  }
+
   const eventTypes = enabledEventTypes()
   const params: any = {
     limit: QUERY_LIMIT ?? 50,
@@ -105,46 +91,19 @@ export const fetchEvents = async (): Promise<any> => {
   for (const eventType of eventTypes) {
     urlParams.append('event_type', eventType)
   }
+
   const url = `${opensea.getEvents()}?${urlParams}`
-
-  let events: any[]
-
-  try {
-    const response = await fetch(url, opensea.GET_OPTS)
-    if (!response.ok) {
-      console.error(
-        `${logStart}OpenSea - Fetch Error - ${response.status}: ${response.statusText}`,
-        DEBUG ? `DEBUG: ${JSON.stringify(await response.text())}` : '',
-      )
-      return
-    }
-    const result = await response.json()
-    if (!result || !result.asset_events) {
-      console.error(
-        `${logStart}OpenSea - Fetch Error (missing asset_events) - Result: ${JSON.stringify(
-          result,
-        )}`,
-      )
-      return
-    }
-    events = result.asset_events
-  } catch (error) {
-    console.error(
-      `${logStart}OpenSea - Fetch Error: ${error?.message ?? error}`,
-    )
-    return
-  }
+  const result = await openseaGet(url)
+  let events = result.asset_events
 
   // Update lastEventTimestamp
-  // if (events.length > 0) {
-  //   lastEventTimestamp = events[events.length - 1].event_timestamp
-  // } else {
-  lastEventTimestamp = Math.floor(Date.now() / 1000)
-  // }
+  if (events.length > 0) {
+    lastEventTimestamp = events[events.length - 1].event_timestamp
+  }
 
   // Filter out private listings
   events = events.filter((event) => {
-    if (event.order_type === EventType.listing && event.is_private) {
+    if (event.order_type === EventType.listing && event.is_private_listing) {
       return false
     }
     return true
@@ -160,7 +119,7 @@ export const fetchEvents = async (): Promise<any> => {
       event.payment.symbol === 'WETH'
     ) {
       const offerValue = FixedNumber.fromValue(
-        event.payment.quantity.toString(),
+        event.payment.quantity,
         event.payment.decimals,
       )
       return offerValue.gte(minOfferETH)

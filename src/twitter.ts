@@ -5,7 +5,7 @@ import {
   formatAmount,
   imageForNFT,
   logStart,
-  permalink,
+  snakeCaseToSentenceCase,
   timeout,
   username,
 } from './util'
@@ -35,6 +35,7 @@ const textForTweet = async (event: any) => {
     from_address,
     to_address,
     order_type,
+    maker,
     buyer,
     expiration_date,
   } = event
@@ -50,19 +51,20 @@ const textForTweet = async (event: any) => {
     text += `${TWITTER_PREPEND_TWEET} `
   }
 
+  if (nft) {
+    text += `#${nft.identifier} `
+  }
+
   if (event_type === 'order') {
     const { quantity, decimals, symbol } = payment
-    const name = await username(from_address)
+    const name = await username(maker)
     const price = formatAmount(quantity, decimals, symbol)
     if (order_type === 'auction') {
       const inTime = format(new Date(expiration_date * 1000))
-      text += `#${nft.identifier} `
       text += `auction started for ${price}, ends ${inTime}, by ${name}`
     } else if (order_type === 'listing') {
-      text += `#${nft.identifier} `
       text += `listed on sale for ${price} by ${name}`
     } else if (order_type === 'item_offer') {
-      text += `#${nft.identifier} `
       text += `has a new offer for ${price} by ${name}`
     } else if (order_type === 'collection_offer') {
       text += `has a new collection offer for ${price} by ${name}`
@@ -73,17 +75,15 @@ const textForTweet = async (event: any) => {
     const { quantity, decimals, symbol } = payment
     const amount = formatAmount(quantity, decimals, symbol)
     const name = await username(buyer)
-    text += `#${nft.identifier} `
     text += `purchased for ${amount} by ${name}`
   } else if (event_type === EventType.transfer) {
     const fromName = await username(from_address)
     const toName = await username(to_address)
-    text += `#${nft.identifier} `
     text += `transferred from ${fromName} to ${toName}`
   }
 
   if (nft.identifier) {
-    text += ` ${permalink(nft.identifier)}`
+    text += ` ${nft.opensea_url}`
   }
 
   if (TWITTER_APPEND_TWEET) {
@@ -114,17 +114,22 @@ export const base64Image = async (imageURL) => {
 const tweetEvent = async (client: any, uploadClient: any, event: any) => {
   try {
     // Fetch and upload image
-    const media_data = await base64Image(imageForNFT(event.nft))
-    const mediaUploadResponse = await uploadClient.post('media/upload', {
-      media_data,
-    })
+    let mediaUploadResponse
+    const image = imageForNFT(event.nft)
+    if (image) {
+      const media_data = await base64Image(image)
+      mediaUploadResponse = await uploadClient.post('media/upload', {
+        media_data,
+      })
+    }
 
     // Create tweet
     const status = await textForTweet(event)
-    await client.post('statuses/update', {
-      status,
-      media_ids: mediaUploadResponse.media_id_string,
-    })
+    const params: any = { status }
+    if (mediaUploadResponse) {
+      params.media_ids = mediaUploadResponse.media_id_string
+    }
+    await client.post('statuses/update', params)
     console.log(
       `${logStart}Twitter - Tweeted (event id: ${event.id}): ${status}`,
     )

@@ -1,7 +1,8 @@
 import { BigNumberish, FixedNumber, formatUnits } from 'ethers'
 import { opensea } from './opensea'
+import { LRUCache } from './lruCache'
 
-const { DEBUG, TOKEN_ADDRESS } = process.env
+const { DEBUG } = process.env
 
 export function timeout(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -9,20 +10,17 @@ export function timeout(ms: number) {
 
 export const unixTimestamp = (date: Date) => Math.floor(date.getTime() / 1000)
 
-/**
- * Formats string value with commas.
- */
-function commify(value: string) {
-  const match = value.match(/^(-?)([0-9]*)(\.?)([0-9]*)$/)
-  if (!match || (!match[2] && !match[4])) {
-    throw new Error(`bad formatted number: ${JSON.stringify(value)}`)
-  }
+export const snakeCaseToSentenceCase = (inputString: string): string => {
+  // Split the string into words using underscores as separators
+  const words = inputString.split('_')
 
-  const neg = match[1]
-  const whole = BigInt(match[2] || 0).toLocaleString('en-us')
-  const frac = match[4] ? match[4].match(/^(.*?)0*$/)[1] : '0'
+  // Capitalize the first letter of the first word and join them back into a sentence
+  const sentenceCaseString =
+    words[0].charAt(0).toUpperCase() +
+    words[0].slice(1) +
+    words.slice(1).join(' ')
 
-  return `${neg}${whole}.${frac}`
+  return sentenceCaseString
 }
 
 /**
@@ -35,29 +33,22 @@ export const shortAddr = (addr: string) =>
 /**
  * OpenSea utils and helpers
  */
-
-export const permalink = (tokenId: number) =>
-  `https://opensea.io/assets/${chain}/${TOKEN_ADDRESS}/${tokenId}`
-
-const fetchAccount = async (address: string) => {
+export const openseaGet = async (url: string) => {
   try {
-    const response = await fetch(opensea.getAccount(address), opensea.GET_OPTS)
+    const response = await fetch(url, opensea.GET_OPTS)
     if (!response.ok) {
       console.error(
-        `Fetch Error - ${response.status}: ${response.statusText}`,
+        `Fetch Error for ${url} - ${response.status}: ${response.statusText}`,
         DEBUG === 'true'
           ? `DEBUG: ${JSON.stringify(await response.text())}`
           : '',
       )
       return
     }
-    const account = await response.json()
-    if (!account) {
-      return
-    }
-    return account
+    const result = await response.json()
+    return result
   } catch (error) {
-    console.error(`Fetch Error: ${error?.message ?? error}`)
+    console.error(`Fetch Error for ${url}: ${error?.message ?? error}`)
   }
 }
 
@@ -66,18 +57,23 @@ const fetchAccount = async (address: string) => {
  * 1. An OpenSea username
  * 2. A short formatted address
  * */
-const cachedUsernames: { [key: string]: string } = {}
+const usernameCache = new LRUCache<string, string>(100)
+const usernameFormat = (username: string, address: string) =>
+  username == '' ? shortAddr(address) : username
 export const username = async (address: string) => {
-  if (address in cachedUsernames) {
-    return cachedUsernames[address]
-  }
+  const cached = usernameCache.get(address)
+  if (cached) return usernameFormat(cached, address)
+
   const account = await fetchAccount(address)
-  const username = account?.username
-  if (username && username !== '') {
-    cachedUsernames[address] = username
-    return username
-  }
-  return shortAddr(address)
+  const username = account?.username ?? ''
+  usernameCache.put(address, username)
+  return usernameFormat(username, address)
+}
+
+const fetchAccount = async (address: string) => {
+  const url = opensea.getAccount(address)
+  const result = await openseaGet(url)
+  return result
 }
 
 /**
@@ -88,7 +84,7 @@ export const formatAmount = (
   decimals: number,
   symbol: string,
 ) => {
-  let value = formatUnits(amount.toString(), decimals)
+  let value = formatUnits(amount, decimals)
   const split = value.split('.')
   if (split[1].length > 4) {
     // Trim to 4 decimals max
@@ -100,8 +96,8 @@ export const formatAmount = (
   return `${value} ${symbol}`
 }
 
-export const imageForNFT = (nft: any) => {
-  return nft.image_url.replace(/w=(\d)*/, 'w=1000')
+export const imageForNFT = (nft: any): string | undefined => {
+  return nft.image_url?.replace(/w=(\d)*/, 'w=1000')
 }
 
 /**

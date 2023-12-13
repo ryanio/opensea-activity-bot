@@ -5,7 +5,7 @@ import {
   formatAmount,
   imageForNFT,
   logStart,
-  permalink,
+  snakeCaseToSentenceCase,
   timeout,
   username,
 } from './util'
@@ -101,7 +101,7 @@ const embed = async (event: any) => {
     const inTime = format(new Date(expiration_date * 1000))
     if (order_type === 'auction') {
       title += 'Auction:'
-      const price = formatAmount(quantity.toString(), decimals, symbol)
+      const price = formatAmount(quantity, decimals, symbol)
       fields.push({
         name: 'Starting Price',
         value: price,
@@ -200,8 +200,11 @@ const embed = async (event: any) => {
     )
 
   if (Object.keys(nft).length > 0) {
-    embed.setURL(permalink(nft.identifier))
-    embed.setImage(imageForNFT(nft))
+    embed.setURL(nft.opensea_url)
+    const image = imageForNFT(nft)
+    if (image) {
+      embed.setImage(imageForNFT(nft))
+    }
   } else {
     embed.setURL(opensea.collectionPermalink())
   }
