@@ -4,24 +4,22 @@ import { LRUCache } from './lruCache'
 
 const { DEBUG } = process.env
 
+/**
+ * Env helpers
+ */
+export const botInterval = Number(process.env.OPENSEA_BOT_INTERVAL ?? 60)
+export const minOfferETH = FixedNumber.fromString(
+  process.env.MIN_OFFER_ETH ?? '0',
+)
+export const shortTokenAddr = shortAddr(process.env.TOKEN_ADDRESS)
+export const logStart = `${shortTokenAddr} - `
+export const chain = process.env.CHAIN ?? 'ethereum'
+
 export function timeout(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 export const unixTimestamp = (date: Date) => Math.floor(date.getTime() / 1000)
-
-export const snakeCaseToSentenceCase = (inputString: string): string => {
-  // Split the string into words using underscores as separators
-  const words = inputString.split('_')
-
-  // Capitalize the first letter of the first word and join them back into a sentence
-  const sentenceCaseString =
-    words[0].charAt(0).toUpperCase() +
-    words[0].slice(1) +
-    words.slice(1).join(' ')
-
-  return sentenceCaseString
-}
 
 /**
  * Returns a shortened version of a full ethereum address
@@ -100,13 +98,3 @@ export const imageForNFT = (nft: any): string | undefined => {
   return nft.image_url?.replace(/w=(\d)*/, 'w=1000')
 }
 
-/**
- * Env helpers
- */
-export const botInterval = Number(process.env.OPENSEA_BOT_INTERVAL ?? 60)
-export const minOfferETH = FixedNumber.fromString(
-  process.env.MIN_OFFER_ETH ?? '0',
-)
-export const shortTokenAddr = shortAddr(process.env.TOKEN_ADDRESS)
-export const logStart = `${shortTokenAddr} - `
-export const chain = process.env.CHAIN ?? 'ethereum'
