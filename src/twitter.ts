@@ -1,14 +1,7 @@
 import { format } from 'timeago.js'
 import Twitter from 'twitter-lite'
 import { EventType } from './opensea'
-import {
-  formatAmount,
-  imageForNFT,
-  logStart,
-  snakeCaseToSentenceCase,
-  timeout,
-  username,
-} from './util'
+import { formatAmount, imageForNFT, logStart, timeout, username } from './util'
 
 const {
   TWITTER_EVENTS,
