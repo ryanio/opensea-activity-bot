@@ -4,17 +4,6 @@ import { LRUCache } from './lruCache'
 
 const { DEBUG } = process.env
 
-/**
- * Env helpers
- */
-export const botInterval = Number(process.env.OPENSEA_BOT_INTERVAL ?? 60)
-export const minOfferETH = FixedNumber.fromString(
-  process.env.MIN_OFFER_ETH ?? '0',
-)
-export const shortTokenAddr = shortAddr(process.env.TOKEN_ADDRESS)
-export const logStart = `${shortTokenAddr} - `
-export const chain = process.env.CHAIN ?? 'ethereum'
-
 export function timeout(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -27,6 +16,17 @@ export const unixTimestamp = (date: Date) => Math.floor(date.getTime() / 1000)
  */
 export const shortAddr = (addr: string) =>
   addr.slice(0, 7) + '…' + addr.slice(37, 42)
+
+/**
+ * Env helpers
+ */
+export const botInterval = Number(process.env.OPENSEA_BOT_INTERVAL ?? 60)
+export const minOfferETH = FixedNumber.fromString(
+  process.env.MIN_OFFER_ETH ?? '0',
+)
+export const shortTokenAddr = shortAddr(process.env.TOKEN_ADDRESS)
+export const logStart = `${shortTokenAddr} - `
+export const chain = process.env.CHAIN ?? 'ethereum'
 
 /**
  * OpenSea utils and helpers
