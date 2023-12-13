@@ -192,14 +192,14 @@ const embed = async (event: any) => {
       }),
     )
 
-  if (Object.keys(nft).length > 0) {
+  if (nft && Object.keys(nft).length > 0) {
     embed.setURL(nft.opensea_url)
     const image = imageForNFT(nft)
     if (image) {
       embed.setImage(imageForNFT(nft))
     }
   } else {
-    embed.setURL(opensea.collectionPermalink())
+    embed.setURL(opensea.collectionURL())
   }
 
   return embed
@@ -271,6 +271,7 @@ export async function messageEvents(events: any[]) {
         channelEvents,
         discordChannels,
       )
+      if (channels.length === 0) continue
       console.log(
         `${logStart}Discord - Sending message in ${channels
           .map((c) => '#' + c.name ?? c.channelId)

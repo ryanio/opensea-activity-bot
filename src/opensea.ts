@@ -7,7 +7,6 @@ const {
   OPENSEA_API_TOKEN,
   TOKEN_ADDRESS,
   TWITTER_EVENTS,
-  DEBUG,
   LAST_EVENT_TIMESTAMP,
   QUERY_LIMIT,
 } = process.env
@@ -20,7 +19,7 @@ if (LAST_EVENT_TIMESTAMP) {
 
 export const opensea = {
   api: 'https://api.opensea.io/api/v2/',
-  collectionPermalink: () => `https://opensea.io/collection/${collectionSlug}`,
+  collectionURL: () => `https://opensea.io/collection/${collectionSlug}`,
   getEvents: () => `${opensea.api}events/collection/${collectionSlug}`,
   getContract: () => `${opensea.api}chain/${chain}/contract/${TOKEN_ADDRESS}`,
   getAccount: (address: string) => `${opensea.api}accounts/${address}`,
@@ -64,9 +63,7 @@ const enabledEventTypes = (): string[] => {
 
 let collectionSlug
 const fetchCollectionSlug = async (address: string) => {
-  if (collectionSlug) {
-    return collectionSlug
-  }
+  if (collectionSlug) return collectionSlug
   console.log(`Getting collection slug for ${address} on chain ${chain}…`)
   const url = opensea.getContract()
   const result = await openseaGet(url)
