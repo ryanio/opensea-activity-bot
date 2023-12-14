@@ -11,7 +11,7 @@ async function main() {
     if (!events || events.length === 0) return
 
     if (DEBUG) {
-      console.log(`${logStart}Opensea - DEBUG - Events:`)
+      console.log(`${logStart}OpenSea - DEBUG - Events:`)
       console.log(JSON.stringify(events))
     }
 

@@ -95,7 +95,7 @@ export const fetchEvents = async (): Promise<any> => {
 
   // Update lastEventTimestamp
   if (events.length > 0) {
-    lastEventTimestamp = events[events.length - 1].event_timestamp
+    lastEventTimestamp = events[0].event_timestamp
   }
 
   // Filter out private listings
@@ -128,7 +128,7 @@ export const fetchEvents = async (): Promise<any> => {
   const eventsFiltered = eventsPreFilter - eventsPostFilter
   if (eventsFiltered > 0) {
     console.log(
-      `${logStart}Opensea - Offers under ${minOfferETH} ETH filtered out: ${eventsFiltered}`,
+      `${logStart}OpenSea - Offers under ${minOfferETH} ETH filtered out: ${eventsFiltered}`,
     )
   }
 
