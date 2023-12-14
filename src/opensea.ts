@@ -95,7 +95,7 @@ export const fetchEvents = async (): Promise<any> => {
   let events = result.asset_events
 
   // Reverse so that oldest first
-  events = events.reverse
+  events = events.reverse()
 
   // Update last seen event
   if (events.length > 0) {
