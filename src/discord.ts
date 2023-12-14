@@ -50,20 +50,21 @@ const channelsForEventType = (
   return channels
 }
 
-const colorFor = (eventType: EventType) => {
-  switch (eventType) {
-    case EventType.listing:
-      return '#66dcf0'
-    case EventType.offer:
+const colorFor = (eventType: EventType, orderType: string) => {
+  if (eventType === EventType.order) {
+    if (orderType.includes('offer')) {
       return '#d63864'
-    case EventType.sale:
-      return '#62b778'
-    case EventType.cancel:
-      return '#9537b0'
-    case EventType.transfer:
-      return '#5296d5'
-    default:
-      return '#9537b0'
+    } else {
+      return '#66dcf0'
+    }
+  } else if (eventType === EventType.sale) {
+    return '#62b778'
+  } else if (eventType === EventType.cancel) {
+    return '#9537b0'
+  } else if (eventType === EventType.transfer) {
+    return '#5296d5'
+  } else {
+    return '#9537b0'
   }
 }
 
@@ -183,7 +184,7 @@ const embed = async (event: any) => {
   }
 
   const embed = new EmbedBuilder()
-    .setColor(colorFor(event_type))
+    .setColor(colorFor(event_type, order_type))
     .setTitle(title)
     .setFields(
       fields.map((f) => {
