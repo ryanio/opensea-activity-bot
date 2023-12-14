@@ -94,12 +94,12 @@ export const fetchEvents = async (): Promise<any> => {
 
   let events = result.asset_events
 
-  // Reverse so that oldest first
+  // Reverse so that oldest events are messaged first
   events = events.reverse()
 
   // Update last seen event
   if (events.length > 0) {
-    lastEventTimestamp = events[0].event_timestamp
+    lastEventTimestamp = events[events.length - 1].event_timestamp
   }
 
   // Filter out private listings
