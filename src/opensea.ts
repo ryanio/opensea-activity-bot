@@ -91,9 +91,13 @@ export const fetchEvents = async (): Promise<any> => {
 
   const url = `${opensea.getEvents()}?${urlParams}`
   const result = await openseaGet(url)
+
   let events = result.asset_events
 
-  // Update lastEventTimestamp
+  // Reverse so that oldest first
+  events = events.reverse
+
+  // Update last seen event
   if (events.length > 0) {
     lastEventTimestamp = events[0].event_timestamp
   }
