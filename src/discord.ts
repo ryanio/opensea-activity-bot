@@ -275,7 +275,7 @@ export async function messageEvents(events: any[]) {
       if (channels.length === 0) continue
       console.log(
         `${logStart}Discord - Sending message in ${channels
-          .map((c) => '#' + c.name ?? c.channelId)
+          .map((c) => '#' + c.name)
           .join(', ')}: ${message.embeds[0].data.title} `,
       )
       for (const channel of channels) {
