@@ -1,6 +1,7 @@
 import { format } from 'timeago.js'
 import { TwitterApi } from 'twitter-api-v2'
 import type { TwitterApiReadWrite } from 'twitter-api-v2'
+import sharp from 'sharp'
 import { EventType } from './opensea'
 import { formatAmount, imageForNFT, logStart, timeout, username } from './util'
 
@@ -101,9 +102,20 @@ const textForTweet = async (event: any) => {
 export const base64Image = async (imageURL: string) => {
   const response = await fetch(imageURL)
   const arrayBuffer = await response.arrayBuffer()
-  const buffer = Buffer.from(arrayBuffer)
+  let buffer: Buffer = Buffer.from(new Uint8Array(arrayBuffer)) as Buffer
   const contentType = response.headers.get('content-type') ?? undefined
-  const mimeType = contentType?.split(';')[0] ?? 'image/jpeg'
+  let mimeType = contentType?.split(';')[0] ?? 'image/jpeg'
+
+  // If it's an SVG, convert to PNG for Twitter media API compatibility
+  if (mimeType === 'image/svg+xml' || imageURL.toLowerCase().endsWith('.svg')) {
+    try {
+      buffer = (await sharp(buffer).png().toBuffer()) as Buffer
+      mimeType = 'image/png'
+    } catch (e) {
+      console.error(`${logStart}Twitter - SVG to PNG conversion failed, tweeting without media`)
+    }
+  }
+
   return { buffer, mimeType }
 }
 
