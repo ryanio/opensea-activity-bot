@@ -9,14 +9,14 @@
   },
   "scripts": {
     "postinstall": "yarn build",
-    "build": "npx tsc",
+    "build": "npx tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
     "start:dev": "ts-node src/index.ts",
     "test": "jest",
     "test:ci": "jest --ci --coverage --watchAll=false --maxWorkers=50%",
     "test:coverage": "jest --coverage --maxWorkers=50%",
-    "format": "ultracite format --unsafe && npx tsc --noEmit",
-    "lint": "ultracite lint && npx tsc --noEmit"
+    "format": "ultracite format --unsafe && npx tsc --noEmit -p tsconfig.build.json",
+    "lint": "ultracite lint && npx tsc --noEmit -p tsconfig.build.json"
   },
   "dependencies": {
     "discord.js": "^14.14.1",
