@@ -1,7 +1,7 @@
-import { URLSearchParams } from 'url'
-import { channelsWithEvents } from './discord'
-import { chain, logStart, minOfferETH, openseaGet, unixTimestamp } from './utils'
-import { FixedNumber } from 'ethers'
+import { URLSearchParams } from 'node:url';
+import { FixedNumber } from 'ethers';
+import { channelsWithEvents } from './discord';
+import { chain, minOfferETH, openseaGet, unixTimestamp } from './utils';
 
 const {
   OPENSEA_API_TOKEN,
@@ -9,12 +9,11 @@ const {
   TWITTER_EVENTS,
   LAST_EVENT_TIMESTAMP,
   QUERY_LIMIT,
-} = process.env
+} = process.env;
 
-let lastEventTimestamp = unixTimestamp(new Date())
+let lastEventTimestamp = unixTimestamp(new Date());
 if (LAST_EVENT_TIMESTAMP) {
-  console.log(`${logStart}Using LAST_EVENT_TIMESTAMP: ${LAST_EVENT_TIMESTAMP}`)
-  lastEventTimestamp = parseInt(LAST_EVENT_TIMESTAMP)
+  lastEventTimestamp = Number.parseInt(LAST_EVENT_TIMESTAMP, 10);
 }
 
 export const opensea = {
@@ -27,92 +26,94 @@ export const opensea = {
     `${opensea.api}chain/${chain}/contract/${TOKEN_ADDRESS}/nfts/${tokenId}`,
   GET_OPTS: {
     method: 'GET',
-    headers: { Accept: 'application/json', 'X-API-KEY': OPENSEA_API_TOKEN },
-  } as any,
-}
+    headers: {
+      Accept: 'application/json',
+      'X-API-KEY': OPENSEA_API_TOKEN ?? '',
+    } as Record<string, string>,
+  } as RequestInit,
+};
 
-export enum EventType {
-  order = 'order',
-  listing = 'listing',
-  offer = 'offer',
-  sale = 'sale',
-  cancel = 'cancel',
-  transfer = 'transfer',
-}
+export const EventType = {
+  order: 'order',
+  listing: 'listing',
+  offer: 'offer',
+  sale: 'sale',
+  cancel: 'cancel',
+  transfer: 'transfer',
+} as const;
+export type EventType = (typeof EventType)[keyof typeof EventType];
 
 const enabledEventTypes = (): string[] => {
-  const eventTypes = new Set<string>()
+  const eventTypes = new Set<string>();
   for (const [_channelId, discordEventTypes] of channelsWithEvents()) {
     for (const eventType of discordEventTypes) {
-      eventTypes.add(eventType)
+      eventTypes.add(eventType);
     }
   }
-  const twitterEventTypes = TWITTER_EVENTS?.split(',')
-  if (twitterEventTypes?.length > 0) {
+  const twitterEventTypes = TWITTER_EVENTS?.split(',') ?? [];
+  if (twitterEventTypes.length > 0) {
     for (const eventType of twitterEventTypes) {
-      eventTypes.add(eventType)
+      eventTypes.add(eventType);
     }
   }
   if (eventTypes.size === 0) {
     throw new Error(
-      'No events enabled. Please specify DISCORD_EVENTS or TWITTER_EVENTS',
-    )
+      'No events enabled. Please specify DISCORD_EVENTS or TWITTER_EVENTS'
+    );
   }
-  return [...eventTypes]
-}
+  return [...eventTypes];
+};
 
-let collectionSlug: string
+let collectionSlug: string;
 const fetchCollectionSlug = async (address: string) => {
-  if (collectionSlug) return collectionSlug
-  console.log(`Getting collection slug for ${address} on chain ${chain}…`)
-  const url = opensea.getContract()
-  const result = await openseaGet(url)
+  if (collectionSlug) {
+    return collectionSlug;
+  }
+  const url = opensea.getContract();
+  const result = await openseaGet(url);
   if (!result.collection) {
-    throw new Error(`No collection found for ${address} on chain ${chain}`)
+    throw new Error(`No collection found for ${address} on chain ${chain}`);
   }
-  console.log(`Got collection slug: ${result.collection}`)
-  collectionSlug = result.collection
-  return result.collection
-}
+  collectionSlug = result.collection;
+  return result.collection;
+};
 
-export const fetchEvents = async (): Promise<any> => {
-  await fetchCollectionSlug(TOKEN_ADDRESS)
+export const fetchEvents = async (): Promise<Record<string, unknown>[]> => {
+  await fetchCollectionSlug(TOKEN_ADDRESS ?? '');
 
-  console.log(`${logStart}OpenSea - Fetching events`)
-
-  const eventTypes = enabledEventTypes()
+  const eventTypes = enabledEventTypes();
+  const DEFAULT_QUERY_LIMIT = 50;
   const params: Record<string, string> = {
-    limit: (QUERY_LIMIT ?? 50).toString(),
+    limit: (QUERY_LIMIT ?? DEFAULT_QUERY_LIMIT).toString(),
     after: lastEventTimestamp.toString(),
-  }
-  const urlParams = new URLSearchParams(params)
+  };
+  const urlParams = new URLSearchParams(params);
   for (const eventType of eventTypes) {
-    urlParams.append('event_type', eventType)
+    urlParams.append('event_type', eventType);
   }
 
-  const url = `${opensea.getEvents()}?${urlParams}`
-  const result = await openseaGet(url)
+  const url = `${opensea.getEvents()}?${urlParams}`;
+  const result = await openseaGet(url);
 
-  let events = result.asset_events
+  let events = result.asset_events;
 
   // Reverse so that oldest events are messaged first
-  events = events.reverse()
+  events = events.reverse();
 
   // Update last seen event
   if (events.length > 0) {
-    lastEventTimestamp = events[events.length - 1].event_timestamp
+    lastEventTimestamp = events.at(-1).event_timestamp;
   }
 
   // Filter out private listings
   events = events.filter((event) => {
     if (event.order_type === EventType.listing && event.is_private_listing) {
-      return false
+      return false;
     }
-    return true
-  })
+    return true;
+  });
 
-  const eventsPreFilter = events.length
-  console.log(`${logStart}OpenSea - Fetched events: ${eventsPreFilter}`)
+  const eventsPreFilter = events.length;
 
   // Filter out low value offers
   events = events.filter((event) => {
@@ -122,20 +123,18 @@ export const fetchEvents = async (): Promise<any> => {
     ) {
       const offerValue = FixedNumber.fromValue(
         event.payment.quantity,
-        event.payment.decimals,
-      )
-      return offerValue.gte(minOfferETH)
+        event.payment.decimals
+      );
+      return offerValue.gte(minOfferETH);
     }
-    return true
-  })
+    return true;
+  });
 
-  const eventsPostFilter = events.length
-  const eventsFiltered = eventsPreFilter - eventsPostFilter
-  if (eventsFiltered > 0) {
-    console.log(
-      `${logStart}OpenSea - Offers under ${minOfferETH} ETH filtered out: ${eventsFiltered}`,
-    )
+  const eventsPostFilter = events.length;
+  const eventsFiltered = eventsPreFilter - eventsPostFilter;
+  if (eventsFiltered > 0 && process.env.DEBUG === 'true') {
+    // intentionally left for debug logging in verbose mode
   }
 
-  return events
-}
+  return events;
+};

@@ -1,33 +1,35 @@
-import { fetchEvents } from './opensea'
-import { messageEvents } from './discord'
-import { tweetEvents } from './twitter'
-import { botInterval, logStart } from './utils'
+import { messageEvents } from './discord';
+import { fetchEvents } from './opensea';
+import { tweetEvents } from './twitter';
+import { botInterval } from './utils';
 
-const { DEBUG } = process.env
+const { DEBUG } = process.env;
 
-async function main() {
+function main() {
   const run = async () => {
-    const events = await fetchEvents()
-    if (!events || events.length === 0) return
-
-    if (DEBUG) {
-      console.log(`${logStart}OpenSea - DEBUG - Events:`)
-      console.log(JSON.stringify(events))
+    const events = await fetchEvents();
+    if (!events || events.length === 0) {
+      return;
     }
 
-    void messageEvents(events)
-    void tweetEvents(events)
-  }
+    if (DEBUG === 'true') {
+      // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+      DEBUG;
+    }
 
-  run()
+    messageEvents(events);
+    tweetEvents(events);
+  };
 
-  const interval = setInterval(run.bind(this), botInterval * 1000)
+  run();
+
+  const MS_PER_SECOND = 1000;
+  const interval = setInterval(run.bind(this), botInterval * MS_PER_SECOND);
 
   process.on('SIGINT', () => {
-    console.log('Caught interrupt signal. Stopping...')
-    clearInterval(interval)
-    process.exit()
-  })
+    clearInterval(interval);
+    process.exit();
+  });
 }
 
-main()
+main();

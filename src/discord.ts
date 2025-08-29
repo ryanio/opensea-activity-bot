@@ -1,295 +1,323 @@
-import { Client, EmbedBuilder } from 'discord.js'
-import { format } from 'timeago.js'
-import { EventType, opensea } from './opensea'
-import { formatAmount, imageForNFT, logStart, timeout, username } from './utils'
+import {
+  Client,
+  EmbedBuilder,
+  type MessageCreateOptions,
+  type TextBasedChannel,
+} from 'discord.js';
+import { format } from 'timeago.js';
+import type { AggregatorEvent } from './aggregator';
+import { logger } from './logger';
+import { EventType, opensea } from './opensea';
+import {
+  formatAmount,
+  imageForNFT,
+  logStart,
+  timeout,
+  username,
+} from './utils';
 
-const { DISCORD_EVENTS, DISCORD_TOKEN } = process.env
+const { DISCORD_EVENTS, DISCORD_TOKEN } = process.env;
 
-type ChannelEvents = Array<[channelId: string, eventTypes: EventType[]]>
+type ChannelEvents = [channelId: string, eventTypes: EventType[]][];
 export const channelsWithEvents = (): ChannelEvents => {
-  if (!DISCORD_EVENTS) return []
+  if (!DISCORD_EVENTS) {
+    return [];
+  }
 
-  const list = []
+  const list: ChannelEvents = [];
   for (const channel of DISCORD_EVENTS.split('&')) {
-    const channelWithEvents = channel.split('=')
-    const channelId = channelWithEvents[0]
-    const eventTypes = channelWithEvents[1].split(',')
+    const channelWithEvents = channel.split('=');
+    const channelId = channelWithEvents[0];
+    const eventTypes = channelWithEvents[1].split(',');
     if (
       eventTypes.includes(EventType.listing) ||
       eventTypes.includes(EventType.offer)
     ) {
       // Workaround
-      eventTypes.push(EventType.order)
+      eventTypes.push(EventType.order);
     }
-    list.push([channelId, eventTypes])
+    list.push([channelId, eventTypes as unknown as EventType[]]);
   }
 
-  return list
-}
+  return list;
+};
 
 const channelsForEventType = (
   eventType: EventType,
   orderType: string,
   channelEvents: ChannelEvents,
-  discordChannels: any[],
+  discordChannels: Record<string, TextBasedChannel>
 ) => {
-  if (eventType === EventType.order) {
+  let effectiveType = eventType;
+  if (effectiveType === EventType.order) {
     if (orderType.includes('offer')) {
-      eventType = EventType.offer
+      effectiveType = EventType.offer;
     } else {
-      eventType = EventType.listing
+      effectiveType = EventType.listing;
     }
   }
-  const channels = []
+  const channels: TextBasedChannel[] = [];
   for (const [channelId, eventTypes] of channelEvents) {
-    if (eventTypes.includes(eventType)) {
-      const channel = discordChannels[channelId]
-      channels.push(channel)
+    if (eventTypes.includes(effectiveType)) {
+      const channel = discordChannels[channelId];
+      channels.push(channel);
     }
   }
-  return channels
-}
+  return channels;
+};
 
 const colorFor = (eventType: EventType, orderType: string) => {
   if (eventType === EventType.order) {
     if (orderType.includes('offer')) {
-      return '#d63864'
-    } else {
-      return '#66dcf0'
+      return '#d63864';
     }
-  } else if (eventType === EventType.sale) {
-    return '#62b778'
-  } else if (eventType === EventType.cancel) {
-    return '#9537b0'
-  } else if (eventType === EventType.transfer) {
-    return '#5296d5'
+    return '#66dcf0';
+  }
+  if (eventType === EventType.sale) {
+    return '#62b778';
+  }
+  if (eventType === EventType.cancel) {
+    return '#9537b0';
+  }
+  if (eventType === EventType.transfer) {
+    return '#5296d5';
+  }
+  return '#9537b0';
+};
+
+type Field = { name: string; value: string; inline?: true };
+
+const buildOrderEmbed = async (
+  event: AggregatorEvent
+): Promise<{ title: string; fields: Field[] }> => {
+  const { payment, order_type, expiration_date, maker, criteria } = event as {
+    payment: { quantity: string | number; decimals: number; symbol: string };
+    order_type: string;
+    expiration_date: number;
+    maker: string;
+    criteria: { trait: { type: string; value: string } };
+  };
+  const fields: Field[] = [];
+  let title = '';
+  const { quantity, decimals, symbol } = payment;
+  const MS_PER_SECOND = 1000;
+  const inTime = format(new Date(expiration_date * MS_PER_SECOND));
+  if (order_type === 'auction') {
+    title += 'Auction:';
+    const price = formatAmount(quantity, decimals, symbol);
+    fields.push({ name: 'Starting Price', value: price });
+    fields.push({ name: 'Ends', value: inTime });
+  } else if (order_type === 'trait_offer') {
+    const traitType = criteria.trait.type;
+    const traitValue = criteria.trait.value;
+    title += `Trait offer: ${traitType} -> ${traitValue}`;
+    const price = formatAmount(quantity, decimals, symbol);
+    fields.push({ name: 'Price', value: price });
+    fields.push({ name: 'Expires', value: inTime });
+  } else if (order_type === 'item_offer') {
+    title += 'Item offer:';
+    const price = formatAmount(quantity, decimals, symbol);
+    fields.push({ name: 'Price', value: price });
+    fields.push({ name: 'Expires', value: inTime });
+  } else if (order_type === 'collection_offer') {
+    title += 'Collection offer';
+    const price = formatAmount(quantity, decimals, symbol);
+    fields.push({ name: 'Price', value: price });
+    fields.push({ name: 'Expires', value: inTime });
   } else {
-    return '#9537b0'
+    title += 'Listed for sale:';
+    const price = formatAmount(quantity, decimals, symbol);
+    fields.push({ name: 'Price', value: price });
+    fields.push({ name: 'Expires', value: inTime });
   }
-}
+  fields.push({ name: 'By', value: await username(maker) });
+  return { title, fields };
+};
 
-const embed = async (event: any) => {
-  const {
-    event_type,
-    payment,
-    from_address,
-    to_address,
-    asset,
-    order_type,
-    expiration_date,
-    maker,
-    buyer,
-    criteria,
-  } = event
+const buildSaleEmbed = async (
+  event: AggregatorEvent
+): Promise<{ title: string; fields: Field[] }> => {
+  const { payment, buyer } = event as {
+    payment: { quantity: string | number; decimals: number; symbol: string };
+    buyer: string;
+  };
+  const fields: Field[] = [];
+  const { quantity, decimals, symbol } = payment;
+  const price = formatAmount(quantity, decimals, symbol);
+  fields.push({ name: 'Price', value: price });
+  fields.push({ name: 'By', value: await username(buyer) });
+  return { title: 'Purchased:', fields };
+};
 
-  let { nft } = event
+const buildTransferEmbed = async (
+  event: AggregatorEvent
+): Promise<{ title: string; fields: Field[] }> => {
+  const { from_address, to_address } = event as {
+    from_address: string;
+    to_address: string;
+  };
+  const fields: Field[] = [];
+  fields.push({ name: 'From', value: await username(from_address) });
+  fields.push({ name: 'To', value: await username(to_address) });
+  return { title: 'Transferred:', fields };
+};
+
+const embed = async (event: AggregatorEvent) => {
+  const { event_type, asset, order_type } = event as unknown as {
+    event_type?: EventType | string;
+    asset?: { opensea_url?: string; name?: string };
+    order_type?: string;
+  };
+
+  let { nft } = event;
   if (!nft && asset) {
-    nft = asset
+    nft = asset;
   }
-  const fields: any[] = []
-
-  let title = ''
-
+  let fields: Field[] = [];
+  let title = '';
   if (event_type === EventType.order) {
-    const { quantity, decimals, symbol } = payment
-    const inTime = format(new Date(expiration_date * 1000))
-    if (order_type === 'auction') {
-      title += 'Auction:'
-      const price = formatAmount(quantity, decimals, symbol)
-      fields.push({
-        name: 'Starting Price',
-        value: price,
-      })
-      fields.push({
-        name: 'Ends',
-        value: inTime,
-      })
-    } else if (order_type === 'trait_offer') {
-      const traitType = criteria.trait.type
-      const traitValue = criteria.trait.value
-      title += `Trait offer: ${traitType} -> ${traitValue}`
-      const price = formatAmount(quantity, decimals, symbol)
-      fields.push({
-        name: 'Price',
-        value: price,
-      })
-      fields.push({
-        name: 'Expires',
-        value: inTime,
-      })
-    } else if (order_type === 'item_offer') {
-      title += 'Item offer:'
-      const price = formatAmount(quantity, decimals, symbol)
-      fields.push({
-        name: 'Price',
-        value: price,
-      })
-      fields.push({
-        name: 'Expires',
-        value: inTime,
-      })
-    } else if (order_type === 'collection_offer') {
-      title += 'Collection offer'
-      const price = formatAmount(quantity, decimals, symbol)
-      fields.push({
-        name: 'Price',
-        value: price,
-      })
-      fields.push({
-        name: 'Expires',
-        value: inTime,
-      })
-    } else {
-      title += 'Listed for sale:'
-      const price = formatAmount(quantity, decimals, symbol)
-      fields.push({
-        name: 'Price',
-        value: price,
-      })
-      fields.push({
-        name: 'Expires',
-        value: inTime,
-      })
-    }
-    fields.push({
-      name: 'By',
-      value: await username(maker),
-    })
+    ({ title, fields } = await buildOrderEmbed(event));
   } else if (event_type === EventType.sale) {
-    const { quantity, decimals, symbol } = payment
-    title += 'Purchased:'
-    const price = formatAmount(quantity, decimals, symbol)
-    fields.push({
-      name: 'Price',
-      value: price,
-    })
-    fields.push({
-      name: 'By',
-      value: await username(buyer),
-    })
+    ({ title, fields } = await buildSaleEmbed(event));
   } else if (event_type === EventType.transfer) {
-    title += 'Transferred:'
-    fields.push({
-      name: 'From',
-      value: await username(from_address),
-    })
-    fields.push({
-      name: 'To',
-      value: await username(to_address),
-    })
+    ({ title, fields } = await buildTransferEmbed(event));
   }
 
   if (nft?.name) {
-    title += ` ${nft.name}`
+    title += ` ${nft.name}`;
   }
 
-  const embed = new EmbedBuilder()
-    .setColor(colorFor(event_type, order_type))
+  const built = new EmbedBuilder()
+    .setColor(colorFor(event_type as EventType, order_type ?? ''))
     .setTitle(title)
     .setFields(
       fields.map((f) => {
-        f.inline = true
-        return f
-      }),
-    )
+        f.inline = true;
+        return f;
+      })
+    );
 
   if (nft && Object.keys(nft).length > 0) {
-    embed.setURL(nft.opensea_url)
-    const image = imageForNFT(nft)
+    built.setURL(nft.opensea_url ?? null);
+    const image = imageForNFT(nft);
     if (image) {
-      embed.setImage(imageForNFT(nft))
+      built.setImage(image ?? null);
     }
   } else {
-    embed.setURL(opensea.collectionURL())
+    built.setURL(opensea.collectionURL());
   }
 
-  return embed
-}
+  return built;
+};
 
-const messagesForEvents = async (events: any[]) => {
-  const messages = []
+const messagesForEvents = async (
+  events: AggregatorEvent[]
+): Promise<MessageCreateOptions[]> => {
+  const messages: MessageCreateOptions[] = [];
   for (const event of events) {
-    const embeds = [await embed(event)]
-    const message = { embeds }
-    messages.push(message)
+    const embeds = [await embed(event)];
+    const message: MessageCreateOptions = { embeds };
+    messages.push(message);
   }
-  return messages
-}
+  return messages;
+};
 
-const login = async (client: Client): Promise<void> => {
+const login = (client: Client): Promise<void> => {
   return new Promise<void>((resolve) => {
-    client.on('ready', async () => {
-      console.log(`${logStart}Discord - Logged in as: ${client?.user?.tag}`)
-      resolve()
-    })
-    client.login(DISCORD_TOKEN)
-  })
-}
+    client.on('ready', () => {
+      resolve();
+    });
+    client.login(DISCORD_TOKEN);
+  });
+};
 
 const getChannels = async (
   client: Client,
-  channelEvents: ChannelEvents,
-): Promise<any> => {
-  const channels = {}
-  console.log(`${logStart}Discord - Selected channels:`)
+  channelEvents: ChannelEvents
+): Promise<Record<string, TextBasedChannel>> => {
+  const channels: Record<string, TextBasedChannel> = {};
+  logger.info(`${logStart}Discord - Selected channels:`);
   for (const [channelId, events] of channelEvents) {
-    const channel = await client.channels.fetch(channelId)
-    channels[channelId] = channel
-    console.log(
+    const channel = await client.channels.fetch(channelId);
+    channels[channelId] = channel as TextBasedChannel;
+    logger.info(
       `${logStart}Discord - * #${
-        (channel as any).name ?? (channel as any).channelId
-      }: ${events.join(', ')}`,
-    )
+        (channel as unknown as { name?: string; channelId?: string }).name ??
+        (channel as unknown as { name?: string; channelId?: string }).channelId
+      }: ${events.join(', ')}`
+    );
   }
-  return channels
-}
+  return channels;
+};
 
-export async function messageEvents(events: any[]) {
-  if (!DISCORD_EVENTS) return
+export async function messageEvents(events: AggregatorEvent[]) {
+  if (!DISCORD_EVENTS) {
+    return;
+  }
 
-  const client = new Client({ intents: [] })
-  const channelEvents = channelsWithEvents()
+  const client = new Client({ intents: [] });
+  const channelEvents = channelsWithEvents();
 
   // only handle event types specified by DISCORD_EVENTS
   const filteredEvents = events.filter((event) =>
-    [...channelEvents.map((c) => c[1])].flat().includes(event.event_type),
-  )
+    [...channelEvents.map((c) => c[1])]
+      .flat()
+      .includes((event as { event_type?: string }).event_type as EventType)
+  );
 
-  console.log(`${logStart}Discord - Relevant events: ${filteredEvents.length}`)
+  logger.info(`${logStart}Discord - Relevant events: ${filteredEvents.length}`);
 
-  if (filteredEvents.length === 0) return
+  if (filteredEvents.length === 0) {
+    return;
+  }
 
   try {
-    await login(client)
-    const discordChannels = await getChannels(client, channelEvents)
-    const messages = await messagesForEvents(filteredEvents)
+    await login(client);
+    const discordChannels = await getChannels(client, channelEvents);
+    const messages = await messagesForEvents(filteredEvents);
 
     for (const [index, message] of messages.entries()) {
-      const { event_type, order_type } = filteredEvents[index]
+      const { event_type, order_type } = filteredEvents[index] as unknown as {
+        event_type: EventType;
+        order_type: string;
+      };
       const channels = channelsForEventType(
         event_type,
         order_type,
         channelEvents,
-        discordChannels,
-      )
-      if (channels.length === 0) continue
-      console.log(
-        `${logStart}Discord - Sending message in ${channels
-          .map((c) => '#' + c.name)
-          .join(', ')}: ${message.embeds[0].data.title} `,
-      )
+        discordChannels
+      );
+      if (channels.length === 0) {
+        continue;
+      }
+      logger.info(`${logStart}Discord - Sending message`);
+      const isSendableChannel = (
+        ch: TextBasedChannel
+      ): ch is TextBasedChannel & {
+        send: (options: MessageCreateOptions) => Promise<unknown>;
+      } => {
+        const maybe = ch as unknown as {
+          send?: (options: MessageCreateOptions) => Promise<unknown>;
+        };
+        return typeof maybe.send === 'function';
+      };
+
       for (const channel of channels) {
-        await channel.send(message)
+        if (!isSendableChannel(channel)) {
+          continue;
+        }
+        await channel.send(message);
 
         // Wait 3s between messages
         if (messages[index + 1]) {
-          await timeout(3000)
+          const INTER_MESSAGE_DELAY_MS = 3000;
+          await timeout(INTER_MESSAGE_DELAY_MS);
         }
       }
     }
   } catch (error) {
-    console.error(error)
+    logger.error(error);
   }
 
-  client.destroy()
+  client.destroy();
 }

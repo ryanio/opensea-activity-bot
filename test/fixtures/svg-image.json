@@ -1,0 +1,20 @@
+{
+  "asset_events": [
+    {
+      "event_type": "sale",
+      "event_timestamp": 1756492379,
+      "payment": {
+        "quantity": "1000000000000000",
+        "decimals": 18,
+        "symbol": "ETH"
+      },
+      "buyer": "0x123",
+      "nft": {
+        "identifier": "3333",
+        "name": "GlyphBot #3333 - Glitchyflux",
+        "image_url": "https://raw2.seadn.io/ethereum/0xb6c2c2d2999c1b532e089a7ad4cb7f8c91cf5075/3c2e726f9eea0a2d6ffe83b93fde24/383c2e726f9eea0a2d6ffe83b93fde24.svg",
+        "opensea_url": "https://opensea.io/assets/ethereum/0xb6c2c2d2999c1b532e089a7ad4cb7f8c91cf5075/3333"
+      }
+    }
+  ]
+}

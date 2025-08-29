@@ -1,454 +1,491 @@
-import { format } from "timeago.js";
-import { TwitterApi } from "twitter-api-v2";
-import type { TwitterApiReadWrite } from "twitter-api-v2";
-import sharp from "sharp";
-import { EventType, opensea } from "./opensea";
+import { TwitterApi } from 'twitter-api-v2';
+import { type AggregatorEvent, SweepAggregator, txHashFor } from './aggregator';
+import { logger } from './logger';
+import { LRUCache } from './lru-cache';
+import { EventType, opensea } from './opensea';
+import { AsyncQueue } from './queue';
 import {
-	formatAmount,
-	imageForNFT,
-	logStart,
-	timeout,
-	username,
-} from "./utils";
-import { LRUCache } from "./lruCache";
+  base64Image,
+  formatAmount,
+  imageForNFT,
+  logStart,
+  username,
+} from './utils';
 
-const {
-	TWITTER_EVENTS,
-	// OAuth1 tokens
-	TWITTER_CONSUMER_KEY,
-	TWITTER_CONSUMER_SECRET,
-	TWITTER_ACCESS_TOKEN,
-	TWITTER_ACCESS_TOKEN_SECRET,
-	TWITTER_PREPEND_TWEET,
-	TWITTER_APPEND_TWEET,
-	TOKEN_ADDRESS,
-} = process.env;
+// Read env dynamically in functions to respect runtime changes (tests)
+
+const { DEBUG } = process.env;
 
 // In-memory dedupe for tweeted events
-const tweetedEventsCache = new LRUCache<string, boolean>(2000);
-
-// Queue + backoff config
-const PER_TWEET_DELAY_MS = Number(process.env.TWITTER_QUEUE_DELAY_MS ?? 3000);
-const BACKOFF_BASE_MS = Number(process.env.TWITTER_BACKOFF_BASE_MS ?? 15000);
-const BACKOFF_MAX_MS = Number(
-	process.env.TWITTER_BACKOFF_MAX_MS ?? 15 * 60 * 1000,
+const TWEETED_EVENTS_CACHE_CAPACITY = 2000;
+const tweetedEventsCache = new LRUCache<string, boolean>(
+  TWEETED_EVENTS_CACHE_CAPACITY
 );
 
-type TweetQueueItem = { event: any; attempts: number };
-const tweetQueue: TweetQueueItem[] = [];
-let isProcessing = false;
-let pauseUntilMs = 0;
-let twitterClient:
-	| (TwitterApi & TwitterApiReadWrite)
-	| TwitterApiReadWrite
-	| undefined;
-let dailyLimitActive = false;
-let dailyLimitSnapshotKeys: string[] | undefined;
+// Queue + backoff config
+const DEFAULT_TWEET_DELAY_MS = 3000;
+const DEFAULT_BACKOFF_BASE_MS = 15_000;
+const MINUTES = 60;
+const MS_PER_SECOND = 1000;
+const BACKOFF_MAX_MINUTES = 15;
+const DEFAULT_BACKOFF_MAX_MS = BACKOFF_MAX_MINUTES * MINUTES * MS_PER_SECOND;
+const PER_TWEET_DELAY_MS = Number(
+  process.env.TWITTER_QUEUE_DELAY_MS ?? DEFAULT_TWEET_DELAY_MS
+);
+const BACKOFF_BASE_MS = Number(
+  process.env.TWITTER_BACKOFF_BASE_MS ?? DEFAULT_BACKOFF_BASE_MS
+);
+const BACKOFF_MAX_MS = Number(
+  process.env.TWITTER_BACKOFF_MAX_MS ?? DEFAULT_BACKOFF_MAX_MS
+);
 
-const jitter = (ms: number) => {
-	const delta = Math.floor(ms * 0.2);
-	return ms + Math.floor(Math.random() * (2 * delta + 1)) - delta;
+type MinimalTwitterClient = {
+  v1: {
+    uploadMedia: (
+      buffer: Buffer,
+      opts: { mimeType: string }
+    ) => Promise<string>;
+  };
+  v2: {
+    tweet: (params: {
+      text: string;
+      media?: { media_ids: string[] };
+    }) => Promise<unknown>;
+  };
 };
 
-const calcBackoffMs = (attempts: number) => {
-	const exp = BACKOFF_BASE_MS * Math.pow(2, Math.max(0, attempts - 1));
-	return Math.min(jitter(exp), BACKOFF_MAX_MS);
+let twitterClient: MinimalTwitterClient | undefined;
+type SweepEvent = { kind: 'sweep'; txHash: string; events: AggregatorEvent[] };
+type TweetEvent = AggregatorEvent | SweepEvent;
+type TweetQueueItem = { event: TweetEvent };
+
+type TwitterPayment = {
+  quantity: string | number;
+  decimals: number;
+  symbol: string;
+};
+type TwitterEvent = AggregatorEvent & {
+  payment?: TwitterPayment;
+  from_address?: string;
+  to_address?: string;
+  order_type?: string;
+  maker?: string;
+  buyer?: string;
+  expiration_date?: number;
+};
+
+const isSweepEvent = (e: TweetEvent): e is SweepEvent => {
+  return (
+    (e as { kind?: string }).kind === 'sweep' &&
+    Array.isArray((e as { events?: unknown[] }).events)
+  );
+};
+
+// Sweep aggregation across runs
+const DEFAULT_SWEEP_SETTLE_MS = 15_000;
+const DEFAULT_SWEEP_MIN_GROUP_SIZE = 5;
+const SWEEP_SETTLE_MS = Number(
+  process.env.TWITTER_SWEEP_SETTLE_MS ?? DEFAULT_SWEEP_SETTLE_MS
+);
+const SWEEP_MIN_GROUP_SIZE = Number(
+  process.env.TWITTER_SWEEP_MIN_GROUP_SIZE ?? DEFAULT_SWEEP_MIN_GROUP_SIZE
+);
+const sweepAggregator = new SweepAggregator({
+  settleMs: SWEEP_SETTLE_MS,
+  minGroupSize: SWEEP_MIN_GROUP_SIZE,
+});
+
+// Generic async queue for tweeting
+const tweetQueue = new AsyncQueue<TweetQueueItem>({
+  perItemDelayMs: PER_TWEET_DELAY_MS,
+  backoffBaseMs: BACKOFF_BASE_MS,
+  backoffMaxMs: BACKOFF_MAX_MS,
+  debug: DEBUG === 'true',
+  keyFor: (i) => keyForQueueItem(i),
+  isAlreadyProcessed: (key) => tweetedEventsCache.get(key) === true,
+  onProcessed: (item) => {
+    const event = item?.event;
+    if (isSweepEvent(event)) {
+      for (const e of event.events) {
+        tweetedEventsCache.put(eventKeyFor(e), true);
+      }
+    } else if (event) {
+      tweetedEventsCache.put(eventKeyFor(event as AggregatorEvent), true);
+    }
+  },
+  process: async (item) => {
+    if (!twitterClient) {
+      throw new Error('twitterClient not initialized');
+    }
+    await tweetEvent(twitterClient, item.event);
+  },
+  classifyError: (error: unknown) => {
+    const err = error as {
+      code?: number;
+      rateLimit?: { day?: { remaining?: number; reset?: number } };
+    };
+    const errCode = err?.code;
+    const rateLimit = err?.rateLimit;
+    const HTTP_TOO_MANY_REQUESTS = 429;
+    if (errCode === HTTP_TOO_MANY_REQUESTS) {
+      const dayRemaining = rateLimit?.day?.remaining;
+      const dayReset = rateLimit?.day?.reset;
+      if (dayRemaining === 0 && typeof dayReset === 'number') {
+        return {
+          type: 'rate_limit',
+          pauseUntilMs: (dayReset as number) * MS_PER_SECOND,
+        } as const;
+      }
+      return { type: 'transient' } as const;
+    }
+    const status =
+      (error as { data?: { status?: number }; status?: number })?.data
+        ?.status ?? (error as { status?: number })?.status;
+    const SERVER_ERROR_MIN = 500;
+    if (
+      (status as number) >= SERVER_ERROR_MIN ||
+      status === 0 ||
+      (error as { name?: string })?.name === 'FetchError'
+    ) {
+      return { type: 'transient' } as const;
+    }
+    return { type: 'fatal' } as const;
+  },
+});
+
+const JITTER_FACTOR = 0.2;
+const jitter = (ms: number) => {
+  const delta = Math.floor(ms * JITTER_FACTOR);
+  return ms + Math.floor(Math.random() * (2 * delta + 1)) - delta;
+};
+
+const _calcBackoffMs = (attempts: number) => {
+  const exp = BACKOFF_BASE_MS * 2 ** Math.max(0, attempts - 1);
+  return Math.min(jitter(exp), BACKOFF_MAX_MS);
 };
 
 const keyForQueueItem = (item: TweetQueueItem): string => {
-	if (item?.event?.kind === "sweep") {
-		const tx =
-			item?.event?.txHash ?? txHashFor(item?.event?.events?.[0]) ?? "unknown";
-		return `sweep:${tx}`;
-	}
-	return eventKeyFor(item.event);
+  const ev = item.event;
+  if (isSweepEvent(ev)) {
+    const tx = ev.txHash ?? txHashFor(ev.events?.[0]) ?? 'unknown';
+    return `sweep:${tx}`;
+  }
+  return eventKeyFor(item.event as AggregatorEvent);
 };
 
-const markDeduped = (item: TweetQueueItem) => {
-	if (item?.event?.kind === "sweep" && Array.isArray(item?.event?.events)) {
-		for (const e of item.event.events) {
-			const key = eventKeyFor(e);
-			tweetedEventsCache.put(key, true);
-		}
-		return;
-	}
-	const key = eventKeyFor(item.event);
-	tweetedEventsCache.put(key, true);
+const _markDeduped = (item: TweetQueueItem) => {
+  const ev = item.event;
+  if (isSweepEvent(ev)) {
+    for (const e of ev.events) {
+      const key = eventKeyFor(e);
+      tweetedEventsCache.put(key, true);
+    }
+    return;
+  }
+  const key = eventKeyFor(item.event as AggregatorEvent);
+  tweetedEventsCache.put(key, true);
 };
 
-const eventKeyFor = (event: any): string => {
-	const ts = String(event?.event_timestamp ?? "");
-	const nft = event?.nft ?? event?.asset ?? {};
-	const tokenId = String(nft?.identifier ?? nft?.token_id ?? "");
-	return `${ts}|${tokenId}`;
+const eventKeyFor = (event: AggregatorEvent): string => {
+  const ts = String(event?.event_timestamp ?? '');
+  const nft = event?.nft ?? event?.asset ?? {};
+  const tokenId = String(nft?.identifier ?? nft?.token_id ?? '');
+  return `${ts}|${tokenId}`;
 };
 
-const txHashFor = (event: any): string | undefined => {
-	return (
-		event?.transaction?.hash ||
-		event?.transaction_hash ||
-		event?.tx_hash ||
-		event?.hash ||
-		undefined
-	);
+// txHashFor provided by utils
+
+const formatNftPrefix = (
+  nft: { name?: string; identifier?: string | number } | undefined
+): string => {
+  if (!nft) {
+    return '';
+  }
+  const specialContract =
+    process.env.TOKEN_ADDRESS?.toLowerCase() ===
+    '0xb6c2c2d2999c1b532e089a7ad4cb7f8c91cf5075';
+  if (specialContract && nft.name && nft.identifier !== undefined) {
+    const nameParts = String(nft.name).split(' - ');
+    const suffix = nameParts.length > 1 ? nameParts[1].trim() : undefined;
+    const idStr = String(nft.identifier);
+    return suffix ? `${suffix} #${idStr} ` : `#${idStr} `;
+  }
+  return `#${String(nft.identifier)} `;
 };
 
-const textForTweet = async (event: any) => {
-	const {
-		asset,
-		event_type,
-		payment,
-		from_address,
-		to_address,
-		order_type,
-		maker,
-		buyer,
-		expiration_date,
-	} = event;
-
-	let { nft } = event;
-	if (!nft && asset) {
-		nft = asset;
-	}
-
-	let text = "";
-
-	if (TWITTER_PREPEND_TWEET) {
-		text += `${TWITTER_PREPEND_TWEET} `;
-	}
-
-	if (nft) {
-		// Special display for GlyphBots collection (contract 0xb6c2...5075)
-		const specialContract =
-			TOKEN_ADDRESS?.toLowerCase() ===
-			"0xb6c2c2d2999c1b532e089a7ad4cb7f8c91cf5075";
-
-		if (specialContract && nft.name && nft.identifier) {
-			// nft.name example: "GlyphBot #211 - Snappy the Playful" → we want "Snappy the Playful #211"
-			const nameParts = String(nft.name).split(" - ");
-			const suffix = nameParts.length > 1 ? nameParts[1].trim() : undefined;
-			if (suffix) {
-				text += `${suffix} #${nft.identifier} `;
-			} else {
-				text += `#${nft.identifier} `;
-			}
-		} else {
-			text += `#${nft.identifier} `;
-		}
-	}
-
-	if (event_type === "order") {
-		const { quantity, decimals, symbol } = payment;
-		const name = await username(maker);
-		const price = formatAmount(quantity, decimals, symbol);
-		if (order_type === "auction") {
-			const inTime = format(new Date(expiration_date * 1000));
-			text += `auction started for ${price}, ends ${inTime}, by ${name}`;
-		} else if (order_type === "listing") {
-			text += `listed on sale for ${price} by ${name}`;
-		} else if (order_type === "item_offer") {
-			text += `has a new offer for ${price} by ${name}`;
-		} else if (order_type === "collection_offer") {
-			text += `has a new collection offer for ${price} by ${name}`;
-		} else if (order_type === "trait_offer") {
-			text += `has a new trait offer for ${price} by ${name}`;
-		}
-	} else if (event_type === EventType.sale) {
-		const { quantity, decimals, symbol } = payment;
-		const amount = formatAmount(quantity, decimals, symbol);
-		const name = await username(buyer);
-		text += `purchased for ${amount} by ${name}`;
-	} else if (event_type === EventType.transfer) {
-		const fromName = await username(from_address);
-		const toName = await username(to_address);
-		text += `transferred from ${fromName} to ${toName}`;
-	}
-
-	if (nft.identifier) {
-		text += ` ${nft.opensea_url}`;
-	}
-
-	if (TWITTER_APPEND_TWEET) {
-		text += ` ${TWITTER_APPEND_TWEET}`;
-	}
-
-	return text;
-};
-
-export const base64Image = async (imageURL: string) => {
-	const response = await fetch(imageURL);
-	const arrayBuffer = await response.arrayBuffer();
-	let buffer: Buffer = Buffer.from(new Uint8Array(arrayBuffer)) as Buffer;
-	const contentType = response.headers.get("content-type") ?? undefined;
-	let mimeType = contentType?.split(";")[0] ?? "image/jpeg";
-
-	// If it's an SVG, convert to PNG for Twitter media API compatibility
-	if (mimeType === "image/svg+xml" || imageURL.toLowerCase().endsWith(".svg")) {
-		try {
-			buffer = (await sharp(buffer).png().toBuffer()) as Buffer;
-			mimeType = "image/png";
-		} catch (e) {
-			console.error(
-				`${logStart}Twitter - SVG to PNG conversion failed, tweeting without media`,
-			);
-		}
-	}
-
-	return { buffer, mimeType };
-};
-
-const tweetEvent = async (
-	client: TwitterApi | TwitterApiReadWrite,
-	event: any,
+const formatOrderText = async (
+  payment: TwitterPayment,
+  maker: string,
+  order_type: string,
+  _expiration_date: number
 ) => {
-	// Sweep group handling
-	if (event?.kind === "sweep" && Array.isArray(event?.events)) {
-		const group: any[] = event.events;
-		const count = group.length;
-		const images: string[] = [];
-		for (const e of group) {
-			const url = imageForNFT(e.nft ?? e.asset);
-			if (url) images.push(url);
-			if (images.length >= 4) break;
-		}
-
-		const media_ids: string[] = [];
-		for (const imageUrl of images) {
-			try {
-				const { buffer, mimeType } = await base64Image(imageUrl);
-				const id = await client.v1.uploadMedia(buffer, { mimeType });
-				media_ids.push(id);
-			} catch (uploadError) {
-				console.error(
-					`${logStart}Twitter - Sweep media upload failed; continuing:`,
-				);
-				console.error(uploadError);
-			}
-		}
-
-		let text = "";
-		if (TWITTER_PREPEND_TWEET) text += `${TWITTER_PREPEND_TWEET} `;
-		text += `${count} purchased`;
-		const activityUrl = `${opensea.collectionURL()}/activity`;
-		text += ` ${activityUrl}`;
-		if (TWITTER_APPEND_TWEET) text += ` ${TWITTER_APPEND_TWEET}`;
-
-		const params: any =
-			media_ids.length > 0 ? { text, media: { media_ids } } : { text };
-		await client.v2.tweet(params);
-		for (const e of group) {
-			const key = eventKeyFor(e);
-			tweetedEventsCache.put(key, true);
-		}
-		console.log(`${logStart}Twitter - Sweep tweeted: ${count} items`);
-		return;
-	}
-
-	// Single-event handling
-	let mediaId: string | undefined;
-	const image = imageForNFT(event.nft);
-	if (image) {
-		try {
-			const { buffer, mimeType } = await base64Image(image);
-			mediaId = await client.v1.uploadMedia(buffer, { mimeType });
-		} catch (uploadError) {
-			console.error(
-				`${logStart}Twitter - Media upload failed, tweeting without media:`,
-			);
-			console.error(uploadError);
-		}
-	}
-
-	const status = await textForTweet(event);
-	const tweetParams: any = mediaId
-		? { text: status, media: { media_ids: [mediaId] } }
-		: { text: status };
-	await client.v2.tweet(tweetParams);
-	const key = eventKeyFor(event);
-	console.log(`${logStart}Twitter - Tweeted (event key: ${key}): ${status}`);
-	tweetedEventsCache.put(key, true);
+  const name = await username(maker);
+  const price = formatAmount(
+    payment.quantity,
+    payment.decimals,
+    payment.symbol
+  );
+  if (order_type === 'listing') {
+    return `listed on sale for ${price} by ${name}`;
+  }
+  if (order_type === 'item_offer') {
+    return `has a new offer for ${price} by ${name}`;
+  }
+  if (order_type === 'collection_offer') {
+    return `has a new collection offer for ${price} by ${name}`;
+  }
+  if (order_type === 'trait_offer') {
+    return `has a new trait offer for ${price} by ${name}`;
+  }
+  return '';
 };
 
-const processQueue = async (client: TwitterApi | TwitterApiReadWrite) => {
-	if (isProcessing) return;
-	isProcessing = true;
-	try {
-		// eslint-disable-next-line no-constant-condition
-		while (tweetQueue.length > 0) {
-			const now = Date.now();
-			if (pauseUntilMs > now) {
-				const waitMs = pauseUntilMs - now;
-				console.log(
-					`${logStart}Twitter - Paused until reset. Waiting ${Math.ceil(waitMs / 1000)}s…`,
-				);
-				await timeout(waitMs);
-				pauseUntilMs = 0;
-				if (dailyLimitActive) {
-					const maxAfterReset = 5;
-					const snapshot =
-						dailyLimitSnapshotKeys ?? tweetQueue.map((i) => keyForQueueItem(i));
-					const keepKeys = new Set(snapshot.slice(-maxAfterReset));
-					const originalLen = tweetQueue.length;
-					const newQueue: TweetQueueItem[] = [];
-					let dropped = 0;
-					for (const item of tweetQueue) {
-						const key = keyForQueueItem(item);
-						const wasInSnapshot = snapshot.includes(key);
-						if (wasInSnapshot && !keepKeys.has(key)) {
-							// Drop from processing but mark deduped
-							markDeduped(item);
-							dropped += 1;
-							continue;
-						}
-						newQueue.push(item);
-					}
-					tweetQueue.length = 0;
-					for (const item of newQueue) tweetQueue.push(item);
-					console.log(
-						`${logStart}Twitter - Daily limit reset. Keeping ${Math.min(snapshot.length, maxAfterReset)} from snapshot, dropped ${dropped}, queue now ${tweetQueue.length}/${originalLen}.`,
-					);
-					dailyLimitSnapshotKeys = undefined;
-					dailyLimitActive = false;
-				}
-			}
-
-			const item = tweetQueue[0];
-			const key = eventKeyFor(item.event);
-			if (tweetedEventsCache.get(key)) {
-				console.log(
-					`${logStart}Twitter - Skipping duplicate (event key: ${key})`,
-				);
-				tweetQueue.shift();
-				continue;
-			}
-
-			try {
-				await tweetEvent(client, item.event);
-				tweetQueue.shift();
-				if (tweetQueue.length > 0) {
-					await timeout(PER_TWEET_DELAY_MS);
-				}
-			} catch (error: any) {
-				const errCode = error?.code;
-				const rateLimit = error?.rateLimit;
-				if (errCode === 429) {
-					const dayRemaining = rateLimit?.day?.remaining;
-					const dayReset = rateLimit?.day?.reset;
-					if (dayRemaining === 0 && typeof dayReset === "number") {
-						const targetMs = dayReset * 1000;
-						const waitMs = Math.max(targetMs - Date.now(), BACKOFF_BASE_MS);
-						pauseUntilMs = Date.now() + waitMs;
-						dailyLimitActive = true;
-						// Snapshot keys to identify which items were queued at the time limit was hit
-						dailyLimitSnapshotKeys = tweetQueue.map((i) => keyForQueueItem(i));
-						console.error(
-							`${logStart}Twitter - Daily limit reached. Pausing for ${Math.ceil(waitMs / 1000)}s (until ${new Date(pauseUntilMs).toISOString()}).`,
-						);
-						// do not shift; retry same item after pause
-						continue;
-					}
-					item.attempts += 1;
-					const waitMs = calcBackoffMs(item.attempts);
-					console.error(
-						`${logStart}Twitter - 429. Backing off ${Math.ceil(waitMs / 1000)}s (attempt ${item.attempts}).`,
-					);
-					await timeout(waitMs);
-					continue;
-				}
-
-				// 5xx or transient
-				const status = error?.data?.status ?? error?.status;
-				if (status >= 500 || status === 0 || error?.name === "FetchError") {
-					item.attempts += 1;
-					const waitMs = calcBackoffMs(item.attempts);
-					console.error(
-						`${logStart}Twitter - Server/transient error. Backing off ${Math.ceil(waitMs / 1000)}s (attempt ${item.attempts}).`,
-					);
-					await timeout(waitMs);
-					continue;
-				}
-
-				// Unrecoverable client error: drop
-				console.error(
-					`${logStart}Twitter - Unrecoverable error, dropping event:`,
-				);
-				console.error(error);
-				tweetQueue.shift();
-			}
-		}
-	} finally {
-		isProcessing = false;
-	}
+const formatSaleText = async (payment: TwitterPayment, buyer: string) => {
+  const amount = formatAmount(
+    payment.quantity,
+    payment.decimals,
+    payment.symbol
+  );
+  const name = await username(buyer);
+  return `purchased for ${amount} by ${name}`;
 };
 
-export const tweetEvents = async (events: any[]) => {
-	if (!TWITTER_EVENTS) return;
+const formatTransferText = async (from_address: string, to_address: string) => {
+  const fromName = await username(from_address);
+  const toName = await username(to_address);
+  return `transferred from ${fromName} to ${toName}`;
+};
 
-	if (
-		!TWITTER_CONSUMER_KEY ||
-		!TWITTER_CONSUMER_SECRET ||
-		!TWITTER_ACCESS_TOKEN ||
-		!TWITTER_ACCESS_TOKEN_SECRET
-	) {
-		console.error(
-			`${logStart}Twitter - Missing OAuth1 credentials. Require TWITTER_CONSUMER_KEY, TWITTER_CONSUMER_SECRET, TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET`,
-		);
-		return;
-	}
+const textForTweet = async (event: AggregatorEvent) => {
+  const ev = event as TwitterEvent;
+  const {
+    asset,
+    event_type,
+    payment,
+    from_address,
+    to_address,
+    order_type,
+    maker,
+    buyer,
+    expiration_date,
+  } = ev;
+  const nft = ev.nft ?? asset;
+  let text = '';
+  if (process.env.TWITTER_PREPEND_TWEET) {
+    text += `${process.env.TWITTER_PREPEND_TWEET} `;
+  }
+  if (nft) {
+    text += formatNftPrefix(nft);
+  }
+  if (
+    event_type === 'order' &&
+    payment &&
+    maker &&
+    order_type &&
+    typeof expiration_date === 'number'
+  ) {
+    text += await formatOrderText(payment, maker, order_type, expiration_date);
+  } else if (event_type === EventType.sale && payment && buyer) {
+    text += await formatSaleText(payment, buyer);
+  } else if (event_type === EventType.transfer && from_address && to_address) {
+    text += await formatTransferText(from_address, to_address);
+  }
+  if (nft?.identifier) {
+    text += ` ${nft.opensea_url}`;
+  }
+  if (process.env.TWITTER_APPEND_TWEET) {
+    text += ` ${process.env.TWITTER_APPEND_TWEET}`;
+  }
+  return text;
+};
 
-	if (!twitterClient) {
-		twitterClient = new TwitterApi({
-			appKey: TWITTER_CONSUMER_KEY,
-			appSecret: TWITTER_CONSUMER_SECRET,
-			accessToken: TWITTER_ACCESS_TOKEN,
-			accessSecret: TWITTER_ACCESS_TOKEN_SECRET,
-		}).readWrite;
-	}
+// base64Image moved to utils
 
-	// only handle event types specified by TWITTER_EVENTS
-	const filteredEvents = events.filter((event) =>
-		TWITTER_EVENTS.split(",").includes(event.event_type),
-	);
+const MAX_MEDIA_IMAGES = 4;
 
-	console.log(`${logStart}Twitter - Relevant events: ${filteredEvents.length}`);
+const uploadImagesForGroup = async (
+  client: MinimalTwitterClient,
+  group: AggregatorEvent[]
+): Promise<string[]> => {
+  const images: string[] = [];
+  for (const e of group) {
+    const url = imageForNFT(e.nft ?? e.asset);
+    if (url) {
+      images.push(url);
+    }
+    if (images.length >= MAX_MEDIA_IMAGES) {
+      break;
+    }
+  }
+  const mediaIds: string[] = [];
+  for (const imageUrl of images) {
+    try {
+      const { buffer, mimeType } = await base64Image(imageUrl);
+      const id = await client.v1.uploadMedia(buffer, { mimeType });
+      mediaIds.push(id);
+    } catch (uploadError) {
+      logger.warn(
+        `${logStart}Twitter - Sweep media upload failed; continuing:`,
+        uploadError
+      );
+    }
+  }
+  return mediaIds;
+};
 
-	if (filteredEvents.length === 0) return;
+const tweetSweep = async (
+  client: MinimalTwitterClient,
+  group: AggregatorEvent[]
+) => {
+  const count = group.length;
+  const media_ids = await uploadImagesForGroup(client, group);
+  let text = '';
+  if (process.env.TWITTER_PREPEND_TWEET) {
+    text += `${process.env.TWITTER_PREPEND_TWEET} `;
+  }
+  text += `${count} purchased`;
+  const activityUrl = `${opensea.collectionURL()}/activity`;
+  text += ` ${activityUrl}`;
+  if (process.env.TWITTER_APPEND_TWEET) {
+    text += ` ${process.env.TWITTER_APPEND_TWEET}`;
+  }
+  const params: { text: string; media?: { media_ids: string[] } } =
+    media_ids.length > 0 ? { text, media: { media_ids } } : { text };
+  await client.v2.tweet(params);
+  for (const e of group) {
+    const key = eventKeyFor(e);
+    tweetedEventsCache.put(key, true);
+  }
+  logger.info(`${logStart}Twitter - Sweep tweeted: ${count} items`);
+};
 
-	// Group by transaction hash for sweeps
-	const hashToEvents = new Map<string, any[]>();
-	for (const event of filteredEvents) {
-		const tx = txHashFor(event);
-		if (!tx) continue;
-		if (!hashToEvents.has(tx)) hashToEvents.set(tx, []);
-		hashToEvents.get(tx)!.push(event);
-	}
+const tweetSingle = async (
+  client: MinimalTwitterClient,
+  event: AggregatorEvent
+) => {
+  let mediaId: string | undefined;
+  const image = imageForNFT(event.nft ?? event.asset);
+  if (image) {
+    try {
+      const { buffer, mimeType } = await base64Image(image);
+      mediaId = await client.v1.uploadMedia(buffer, { mimeType });
+    } catch (uploadError) {
+      logger.warn(
+        `${logStart}Twitter - Media upload failed, tweeting without media:`,
+        uploadError
+      );
+    }
+  }
+  const status = await textForTweet(event);
+  const tweetParams: { text: string; media?: { media_ids: string[] } } = mediaId
+    ? { text: status, media: { media_ids: [mediaId] } }
+    : { text: status };
+  await client.v2.tweet(tweetParams);
+  const key = eventKeyFor(event);
+  logger.info(`${logStart}Twitter - Tweeted (event key: ${key}): ${status}`);
+  tweetedEventsCache.put(key, true);
+};
 
-	const groupedHashes = new Set<string>();
-	for (const [hash, evts] of hashToEvents.entries()) {
-		if (evts.length > 4) {
-			groupedHashes.add(hash);
-			// Enqueue one sweep item
-			tweetQueue.push({
-				event: { kind: "sweep", txHash: hash, events: evts },
-				attempts: 0,
-			});
-		}
-	}
+const tweetEvent = async (client: MinimalTwitterClient, event: TweetEvent) => {
+  if (isSweepEvent(event)) {
+    await tweetSweep(client, event.events);
+    return;
+  }
+  await tweetSingle(client, event as AggregatorEvent);
+};
 
-	// Enqueue remaining individual events
-	for (const event of filteredEvents) {
-		const key = eventKeyFor(event);
-		if (tweetedEventsCache.get(key)) {
-			console.log(
-				`${logStart}Twitter - Skipping duplicate (event key: ${key})`,
-			);
-			continue;
-		}
-		const tx = txHashFor(event);
-		if (tx && groupedHashes.has(tx)) continue; // covered by sweep tweet
-		tweetQueue.push({ event, attempts: 0 });
-	}
+// Manual processQueue removed; AsyncQueue handles processing
 
-	// Fire and forget
-	void processQueue(twitterClient);
+const hasTwitterCreds = (): boolean =>
+  Boolean(
+    process.env.TWITTER_CONSUMER_KEY &&
+      process.env.TWITTER_CONSUMER_SECRET &&
+      process.env.TWITTER_ACCESS_TOKEN &&
+      process.env.TWITTER_ACCESS_TOKEN_SECRET
+  );
+
+const ensureTwitterClient = () => {
+  if (!twitterClient) {
+    twitterClient = new TwitterApi({
+      appKey: String(process.env.TWITTER_CONSUMER_KEY),
+      appSecret: String(process.env.TWITTER_CONSUMER_SECRET),
+      accessToken: String(process.env.TWITTER_ACCESS_TOKEN),
+      accessSecret: String(process.env.TWITTER_ACCESS_TOKEN_SECRET),
+    }).readWrite as unknown as MinimalTwitterClient;
+  }
+};
+
+export const tweetEvents = (events: AggregatorEvent[]) => {
+  if (!process.env.TWITTER_EVENTS) {
+    return;
+  }
+  if (!hasTwitterCreds()) {
+    return;
+  }
+  ensureTwitterClient();
+
+  // only handle event types specified by TWITTER_EVENTS
+  const filteredEvents = events.filter((event) =>
+    (process.env.TWITTER_EVENTS ?? '')
+      .split(',')
+      .includes((event as { event_type?: string }).event_type as string)
+  );
+
+  logger.info(`${logStart}Twitter - Relevant events: ${filteredEvents.length}`);
+
+  if (filteredEvents.length === 0) {
+    return;
+  }
+
+  // Add to sweep aggregator; this supports >50 event sweeps across batches
+  sweepAggregator.add(filteredEvents);
+  const pendingLarge = sweepAggregator.pendingLargeTxHashes();
+  const pendingAll = sweepAggregator.pendingTxHashes();
+  if (DEBUG === 'true') {
+    logger.debug(
+      `${logStart}Twitter - Aggregator state: pendingTxs=${pendingAll.size} pendingLargeTxs=${pendingLarge.size}`
+    );
+  }
+
+  // Flush any sweeps that have settled
+  const readySweeps = sweepAggregator.flushReady();
+  for (const { tx, events: evts } of readySweeps) {
+    tweetQueue.enqueue({ event: { kind: 'sweep', txHash: tx, events: evts } });
+  }
+  if (DEBUG === 'true' && readySweeps.length > 0) {
+    const counts = readySweeps.map((r) => r.events.length).join(',');
+    logger.debug(
+      `${logStart}Twitter - Enqueued ${readySweeps.length} sweep(s) [sizes=${counts}] queue=${tweetQueue.size()}`
+    );
+  }
+
+  // Enqueue remaining individual events when not part of a pending/ready sweep
+  let queuedSingles = 0;
+  let skippedDupes = 0;
+  let skippedPending = 0;
+  for (const event of filteredEvents) {
+    const key = eventKeyFor(event);
+    if (tweetedEventsCache.get(key)) {
+      logger.debug(
+        `${logStart}Twitter - Skipping duplicate (event key: ${key})`
+      );
+      skippedDupes += 1;
+      continue;
+    }
+    const tx = txHashFor(event);
+    if (tx && pendingLarge.has(tx)) {
+      skippedPending += 1; // awaiting or covered by sweep tweet
+      continue;
+    }
+    tweetQueue.enqueue({ event });
+    queuedSingles += 1;
+  }
+  if (DEBUG === 'true') {
+    logger.debug(
+      `${logStart}Twitter - Enqueue summary: singles=${queuedSingles} skippedDupes=${skippedDupes} skippedPendingSweep=${skippedPending} queue=${tweetQueue.size()}`
+    );
+  }
+
+  // Fire and forget
+  tweetQueue.start();
 };

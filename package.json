@@ -1,6 +1,6 @@
 {
   "name": "opensea-activity-bot",
-  "version": "2.0.8",
+  "version": "2.0.9",
   "description": "A bot that shares new OpenSea events for a collection to Discord and Twitter.",
   "author": "Ryan Ghods <ryan@ryanio.com>",
   "license": "MIT",
@@ -11,7 +11,12 @@
     "postinstall": "yarn build",
     "build": "npx tsc",
     "start": "node dist/index.js",
-    "start:dev": "ts-node src/index.ts"
+    "start:dev": "ts-node src/index.ts",
+    "test": "jest",
+    "test:ci": "jest --ci --coverage --watchAll=false --maxWorkers=50%",
+    "test:coverage": "jest --coverage --maxWorkers=50%",
+    "format": "ultracite format --unsafe && npx tsc --noEmit",
+    "lint": "ultracite lint && npx tsc --noEmit"
   },
   "dependencies": {
     "discord.js": "^14.14.1",
@@ -21,9 +26,20 @@
     "twitter-api-v2": "^1.25.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.2.2",
+    "@types/jest": "^30.0.0",
     "@types/node": "^18.0.0",
-    "prettier": "^3.1.1",
+    "jest": "^30.1.1",
+    "jest-mock-extended": "^4.0.0",
+    "lint-staged": "^16.1.5",
+    "ts-jest": "^29.4.1",
     "ts-node": "^10.9.2",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "ultracite": "5.2.9"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,json,jsonc,css,scss,md,mdx}": [
+      "yarn dlx ultracite format"
+    ]
   }
 }
