@@ -1,6 +1,6 @@
 import { URLSearchParams } from 'url'
 import { channelsWithEvents } from './discord'
-import { chain, logStart, minOfferETH, openseaGet, unixTimestamp } from './util'
+import { chain, logStart, minOfferETH, openseaGet, unixTimestamp } from './utils'
 import { FixedNumber } from 'ethers'
 
 const {

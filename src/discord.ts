@@ -1,7 +1,7 @@
 import { Client, EmbedBuilder } from 'discord.js'
 import { format } from 'timeago.js'
 import { EventType, opensea } from './opensea'
-import { formatAmount, imageForNFT, logStart, timeout, username } from './util'
+import { formatAmount, imageForNFT, logStart, timeout, username } from './utils'
 
 const { DISCORD_EVENTS, DISCORD_TOKEN } = process.env
 
