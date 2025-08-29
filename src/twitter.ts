@@ -4,6 +4,7 @@ import type { TwitterApiReadWrite } from 'twitter-api-v2'
 import sharp from 'sharp'
 import { EventType } from './opensea'
 import { formatAmount, imageForNFT, logStart, timeout, username } from './util'
+import { LRUCache } from './lruCache'
 
 const {
   TWITTER_EVENTS,
@@ -16,6 +17,16 @@ const {
   TWITTER_APPEND_TWEET,
   TOKEN_ADDRESS,
 } = process.env
+
+// In-memory dedupe for tweeted events
+const tweetedEventsCache = new LRUCache<string, boolean>(2000)
+
+const eventKeyFor = (event: any): string => {
+  const ts = String(event?.event_timestamp ?? '')
+  const nft = event?.nft ?? event?.asset ?? {}
+  const tokenId = String(nft?.identifier ?? nft?.token_id ?? '')
+  return `${ts}|${tokenId}`
+}
 
 const textForTweet = async (event: any) => {
   const {
@@ -143,9 +154,9 @@ const tweetEvent = async (
       ? { text: status, media: { media_ids: [mediaId] } }
       : { text: status }
     await client.v2.tweet(tweetParams)
-    console.log(
-      `${logStart}Twitter - Tweeted (event id: ${event.id}): ${status}`,
-    )
+    const key = eventKeyFor(event)
+    console.log(`${logStart}Twitter - Tweeted (event key: ${key}): ${status}`)
+    tweetedEventsCache.put(key, true)
   } catch (error) {
     console.error(`${logStart}Twitter - Error:`)
     console.error(error)
@@ -184,6 +195,11 @@ export const tweetEvents = async (events: any[]) => {
   if (filteredEvents.length === 0) return
 
   for (const [index, event] of filteredEvents.entries()) {
+    const key = eventKeyFor(event)
+    if (tweetedEventsCache.get(key)) {
+      console.log(`${logStart}Twitter - Skipping duplicate (event key: ${key})`)
+      continue
+    }
     await tweetEvent(client, event)
     // Wait 5s between tweets
     if (filteredEvents[index + 1]) {
