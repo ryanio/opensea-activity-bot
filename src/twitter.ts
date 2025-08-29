@@ -3,7 +3,7 @@ import { TwitterApi } from 'twitter-api-v2'
 import type { TwitterApiReadWrite } from 'twitter-api-v2'
 import sharp from 'sharp'
 import { EventType, opensea } from './opensea'
-import { formatAmount, imageForNFT, logStart, timeout, username } from './utils'
+import { formatAmount, imageForNFT, logStart, timeout, username } from './util'
 import { LRUCache } from './lruCache'
 
 const {
