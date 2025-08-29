@@ -105,20 +105,9 @@ const textForTweet = async (event: any) => {
 
 export const base64Image = async (imageURL: string) => {
   const response = await fetch(imageURL)
-  const blob = await response.blob()
-  return await new Promise((resolve) => {
-    const reader = new FileReader()
-    reader.onload = function (ev: any) {
-      const base64Image = ev.target.result
-      // Format to satisfy Twitter API
-      const formattedBase64Image = base64Image.replace(
-        /^data:image\/png;base64/,
-        '',
-      )
-      resolve(formattedBase64Image)
-    }
-    reader.readAsDataURL(blob)
-  })
+  const arrayBuffer = await response.arrayBuffer()
+  const base64 = Buffer.from(arrayBuffer).toString('base64')
+  return base64
 }
 
 const tweetEvent = async (client: any, uploadClient: any, event: any) => {
