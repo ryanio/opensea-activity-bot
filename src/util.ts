@@ -57,7 +57,7 @@ export const openseaGet = async (url: string) => {
  * */
 const usernameCache = new LRUCache<string, string>(100)
 const usernameFormat = (username: string, address: string) =>
-  username == '' ? shortAddr(address) : username
+  username === '' ? shortAddr(address) : username
 export const username = async (address: string) => {
   const cached = usernameCache.get(address)
   if (cached) return usernameFormat(cached, address)

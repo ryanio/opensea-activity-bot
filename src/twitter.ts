@@ -11,6 +11,7 @@ const {
   TWITTER_ACCESS_TOKEN_SECRET,
   TWITTER_PREPEND_TWEET,
   TWITTER_APPEND_TWEET,
+  TOKEN_ADDRESS,
 } = process.env
 
 const secrets = {
@@ -45,7 +46,23 @@ const textForTweet = async (event: any) => {
   }
 
   if (nft) {
-    text += `#${nft.identifier} `
+    // Special display for GlyphBots collection (contract 0xb6c2...5075)
+    const specialContract =
+      TOKEN_ADDRESS?.toLowerCase() ===
+      '0xb6c2c2d2999c1b532e089a7ad4cb7f8c91cf5075'
+
+    if (specialContract && nft.name && nft.identifier) {
+      // nft.name example: "GlyphBot #211 - Snappy the Playful" → we want "Snappy the Playful #211"
+      const nameParts = String(nft.name).split(' - ')
+      const suffix = nameParts.length > 1 ? nameParts[1].trim() : undefined
+      if (suffix) {
+        text += `${suffix} #${nft.identifier} `
+      } else {
+        text += `#${nft.identifier} `
+      }
+    } else {
+      text += `#${nft.identifier} `
+    }
   }
 
   if (event_type === 'order') {
@@ -86,16 +103,16 @@ const textForTweet = async (event: any) => {
   return text
 }
 
-export const base64Image = async (imageURL) => {
-  return await new Promise(async (resolve) => {
-    const response = await fetch(imageURL)
-    const blob = await response.blob()
+export const base64Image = async (imageURL: string) => {
+  const response = await fetch(imageURL)
+  const blob = await response.blob()
+  return await new Promise((resolve) => {
     const reader = new FileReader()
     reader.onload = function (ev: any) {
       const base64Image = ev.target.result
       // Format to satisfy Twitter API
       const formattedBase64Image = base64Image.replace(
-        /^data:image\/png;base64,/,
+        /^data:image\/png;base64/,
         '',
       )
       resolve(formattedBase64Image)
@@ -107,7 +124,7 @@ export const base64Image = async (imageURL) => {
 const tweetEvent = async (client: any, uploadClient: any, event: any) => {
   try {
     // Fetch and upload image
-    let mediaUploadResponse
+    let mediaUploadResponse: any
     const image = imageForNFT(event.nft)
     if (image) {
       const media_data = await base64Image(image)

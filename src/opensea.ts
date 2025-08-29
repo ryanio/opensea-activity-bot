@@ -61,7 +61,7 @@ const enabledEventTypes = (): string[] => {
   return [...eventTypes]
 }
 
-let collectionSlug
+let collectionSlug: string
 const fetchCollectionSlug = async (address: string) => {
   if (collectionSlug) return collectionSlug
   console.log(`Getting collection slug for ${address} on chain ${chain}…`)
@@ -76,13 +76,14 @@ const fetchCollectionSlug = async (address: string) => {
 }
 
 export const fetchEvents = async (): Promise<any> => {
+  await fetchCollectionSlug(TOKEN_ADDRESS)
+
   console.log(`${logStart}OpenSea - Fetching events`)
-  const slug = await fetchCollectionSlug(TOKEN_ADDRESS)
 
   const eventTypes = enabledEventTypes()
-  const params: any = {
-    limit: QUERY_LIMIT ?? 50,
-    after: lastEventTimestamp,
+  const params: Record<string, string> = {
+    limit: (QUERY_LIMIT ?? 50).toString(),
+    after: lastEventTimestamp.toString(),
   }
   const urlParams = new URLSearchParams(params)
   for (const eventType of eventTypes) {
