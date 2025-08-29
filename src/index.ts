@@ -4,8 +4,6 @@ import { fetchEvents } from './opensea';
 import { tweetEvents } from './twitter';
 import { botInterval, logStart } from './utils';
 
-const { DEBUG } = process.env;
-
 function main() {
   const run = async () => {
     const events = await fetchEvents();
@@ -13,9 +11,7 @@ function main() {
       return;
     }
 
-    if (DEBUG === 'true') {
-      logger.debug(`${logStart}OpenSea - DEBUG - Events:`, events);
-    }
+    logger.debug(`${logStart} OpenSea API Events:`, events);
 
     messageEvents(events);
     tweetEvents(events);

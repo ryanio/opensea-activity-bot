@@ -5,8 +5,6 @@ import { logger } from './logger';
 import { LRUCache } from './lru-cache';
 import { opensea } from './opensea';
 
-const { DEBUG } = process.env;
-
 export function timeout(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -33,7 +31,7 @@ export const minOfferETH = FixedNumber.fromString(
   process.env.MIN_OFFER_ETH ?? '0'
 );
 export const shortTokenAddr = shortAddr(process.env.TOKEN_ADDRESS ?? '');
-export const logStart = `${shortTokenAddr} - `;
+export const logStart = `[${shortTokenAddr}]`;
 export const chain = process.env.CHAIN ?? 'ethereum';
 
 /**
@@ -45,7 +43,7 @@ export const openseaGet = async (url: string) => {
     if (!response.ok) {
       logger.error(
         `Fetch Error for ${url} - ${response.status}: ${response.statusText}`,
-        DEBUG === 'true' ? await response.text() : undefined
+        process.env.LOG_LEVEL === 'debug' ? await response.text() : undefined
       );
       return;
     }
@@ -136,9 +134,7 @@ export const base64Image = async (
       buffer = (await sharp(buffer).png().toBuffer()) as Buffer;
       mimeType = 'image/png';
     } catch (_e) {
-      if (DEBUG === 'true') {
-        logger.warn(`${logStart}Utils - SVG to PNG conversion failed`);
-      }
+      logger.debug(`${logStart}Utils - SVG to PNG conversion failed`);
     }
   }
 

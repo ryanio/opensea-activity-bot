@@ -78,6 +78,12 @@ The bot uses `twitter-api-v2` and tweets via the v2 API with media uploaded thro
 - `TWITTER_APPEND_TWEET`
   - Message to add to end of tweet, such as a hashtag
 
+#### Logging
+
+- `LOG_LEVEL`
+  - Controls log verbosity: `debug`, `info`, `warn`, or `error` (default: `info`)
+  - Example: `LOG_LEVEL=debug yarn start` enables debug logs across the app
+
 ### Run
 
 `yarn start`

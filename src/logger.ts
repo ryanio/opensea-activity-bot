@@ -2,7 +2,7 @@ import { inspect } from 'node:util';
 
 type Level = 'debug' | 'info' | 'warn' | 'error';
 
-const { DEBUG, LOG_LEVEL } = process.env;
+const { LOG_LEVEL } = process.env;
 
 const levelOrder: Record<Level, number> = {
   debug: 10,
@@ -12,7 +12,7 @@ const levelOrder: Record<Level, number> = {
 };
 
 const selectedLevel: Level = ((): Level => {
-  if (LOG_LEVEL === 'debug' || DEBUG === 'true') {
+  if (LOG_LEVEL === 'debug') {
     return 'debug';
   }
   if (LOG_LEVEL === 'info') {
@@ -48,7 +48,7 @@ const write = (level: Level, parts: unknown[]) => {
   }
   const ts = new Date().toISOString();
   const msg = parts.map(serialize).join(' ');
-  const line = `${ts} [${level.toUpperCase()}] ${msg}\n`;
+  const line = `${ts} [${level.toUpperCase()}] [Activity] ${msg}\n`;
   if (level === 'error' || level === 'warn') {
     process.stderr.write(line);
   } else {

@@ -21,7 +21,9 @@ const {
 
 let lastEventTimestamp = unixTimestamp(new Date());
 if (LAST_EVENT_TIMESTAMP) {
-  logger.info(`${logStart}Using LAST_EVENT_TIMESTAMP: ${LAST_EVENT_TIMESTAMP}`);
+  logger.info(
+    `${logStart} Using LAST_EVENT_TIMESTAMP: ${LAST_EVENT_TIMESTAMP}`
+  );
   lastEventTimestamp = Number.parseInt(LAST_EVENT_TIMESTAMP, 10);
 }
 
@@ -117,7 +119,7 @@ const fetchCollectionSlug = async (address: string) => {
 export const fetchEvents = async (): Promise<Record<string, unknown>[]> => {
   await fetchCollectionSlug(TOKEN_ADDRESS ?? '');
 
-  logger.info(`${logStart}OpenSea - Fetching events`);
+  logger.info(`${logStart} Fetching events`);
 
   const eventTypes = enabledEventTypes();
   const DEFAULT_QUERY_LIMIT = 50;
@@ -152,7 +154,7 @@ export const fetchEvents = async (): Promise<Record<string, unknown>[]> => {
   });
 
   const eventsPreFilter = events.length;
-  logger.info(`${logStart}OpenSea - Fetched events: ${eventsPreFilter}`);
+  logger.info(`${logStart} Fetched events: ${eventsPreFilter}`);
 
   // Filter out low value offers
   events = events.filter((event) => {
@@ -173,7 +175,7 @@ export const fetchEvents = async (): Promise<Record<string, unknown>[]> => {
   const eventsFiltered = eventsPreFilter - eventsPostFilter;
   if (eventsFiltered > 0) {
     logger.info(
-      `${logStart}OpenSea - Offers under ${minOfferETH} ETH filtered out: ${eventsFiltered}`
+      `${logStart} Offers under ${minOfferETH} ETH filtered out: ${eventsFiltered}`
     );
   }
 

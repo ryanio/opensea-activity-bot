@@ -17,6 +17,8 @@ import {
   username,
 } from './utils';
 
+const logStartDiscord = `${logStart} [Discord]`;
+
 const { DISCORD_EVENTS, DISCORD_TOKEN } = process.env;
 
 type ChannelEvents = [
@@ -240,12 +242,12 @@ const getChannels = async (
   channelEvents: ChannelEvents
 ): Promise<Record<string, TextBasedChannel>> => {
   const channels: Record<string, TextBasedChannel> = {};
-  logger.info(`${logStart}Discord - Selected channels:`);
+  logger.info(`${logStartDiscord} Selected channels:`);
   for (const [channelId, events] of channelEvents) {
     const channel = await client.channels.fetch(channelId);
     channels[channelId] = channel as TextBasedChannel;
     logger.info(
-      `${logStart}Discord - * #${
+      `${logStartDiscord} * #${
         (channel as unknown as { name?: string; channelId?: string }).name ??
         (channel as unknown as { name?: string; channelId?: string }).channelId
       }: ${events.join(', ')}`
@@ -269,7 +271,7 @@ export async function messageEvents(events: AggregatorEvent[]) {
       .includes((event as { event_type?: string }).event_type as EventType)
   );
 
-  logger.info(`${logStart}Discord - Relevant events: ${filteredEvents.length}`);
+  logger.info(`${logStartDiscord} Relevant events: ${filteredEvents.length}`);
 
   if (filteredEvents.length === 0) {
     return;
@@ -294,7 +296,7 @@ export async function messageEvents(events: AggregatorEvent[]) {
       if (channels.length === 0) {
         continue;
       }
-      logger.info(`${logStart}Discord - Sending message`);
+      logger.info(`${logStartDiscord} Sending message`);
       const isSendableChannel = (
         ch: TextBasedChannel
       ): ch is TextBasedChannel & {
