@@ -1,6 +1,6 @@
 {
   "name": "opensea-activity-bot",
-  "version": "2.0.3",
+  "version": "2.0.5",
   "description": "A bot that shares new OpenSea events for a collection to Discord and Twitter.",
   "author": "Ryan Ghods <ryan@ryanio.com>",
   "license": "MIT",
@@ -17,7 +17,7 @@
     "discord.js": "^14.14.1",
     "ethers": "^6.9.0",
     "timeago.js": "^4.0.2",
-    "twitter-lite": "^1.1.0"
+    "twitter-api-v2": "^1.25.0"
   },
   "devDependencies": {
     "@types/node": "^18.0.0",

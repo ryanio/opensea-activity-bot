@@ -1,10 +1,12 @@
 import { format } from 'timeago.js'
-import Twitter from 'twitter-lite'
+import { TwitterApi } from 'twitter-api-v2'
+import type { TwitterApiReadWrite } from 'twitter-api-v2'
 import { EventType } from './opensea'
 import { formatAmount, imageForNFT, logStart, timeout, username } from './util'
 
 const {
   TWITTER_EVENTS,
+  // OAuth1 tokens
   TWITTER_CONSUMER_KEY,
   TWITTER_CONSUMER_SECRET,
   TWITTER_ACCESS_TOKEN,
@@ -13,13 +15,6 @@ const {
   TWITTER_APPEND_TWEET,
   TOKEN_ADDRESS,
 } = process.env
-
-const secrets = {
-  consumer_key: TWITTER_CONSUMER_KEY,
-  consumer_secret: TWITTER_CONSUMER_SECRET,
-  access_token_key: TWITTER_ACCESS_TOKEN,
-  access_token_secret: TWITTER_ACCESS_TOKEN_SECRET,
-}
 
 const textForTweet = async (event: any) => {
   const {
@@ -106,29 +101,36 @@ const textForTweet = async (event: any) => {
 export const base64Image = async (imageURL: string) => {
   const response = await fetch(imageURL)
   const arrayBuffer = await response.arrayBuffer()
-  const base64 = Buffer.from(arrayBuffer).toString('base64')
-  return base64
+  const buffer = Buffer.from(arrayBuffer)
+  const contentType = response.headers.get('content-type') ?? undefined
+  const mimeType = contentType?.split(';')[0] ?? 'image/jpeg'
+  return { buffer, mimeType }
 }
 
-const tweetEvent = async (client: any, uploadClient: any, event: any) => {
+const tweetEvent = async (
+  client: TwitterApi | TwitterApiReadWrite,
+  event: any,
+) => {
   try {
     // Fetch and upload image
-    let mediaUploadResponse: any
+    let mediaId: string | undefined
     const image = imageForNFT(event.nft)
     if (image) {
-      const media_data = await base64Image(image)
-      mediaUploadResponse = await uploadClient.post('media/upload', {
-        media_data,
-      })
+      try {
+        const { buffer, mimeType } = await base64Image(image)
+        mediaId = await client.v1.uploadMedia(buffer, { mimeType })
+      } catch (uploadError) {
+        console.error(`${logStart}Twitter - Media upload failed, tweeting without media:`)
+        console.error(uploadError)
+      }
     }
 
     // Create tweet
     const status = await textForTweet(event)
-    const params: any = { status }
-    if (mediaUploadResponse) {
-      params.media_ids = mediaUploadResponse.media_id_string
-    }
-    await client.post('statuses/update', params)
+    const tweetParams: any = mediaId
+      ? { text: status, media: { media_ids: [mediaId] } }
+      : { text: status }
+    await client.v2.tweet(tweetParams)
     console.log(
       `${logStart}Twitter - Tweeted (event id: ${event.id}): ${status}`,
     )
@@ -141,11 +143,24 @@ const tweetEvent = async (client: any, uploadClient: any, event: any) => {
 export const tweetEvents = async (events: any[]) => {
   if (!TWITTER_EVENTS) return
 
-  const client = new Twitter(secrets)
-  const uploadClient = new Twitter({
-    subdomain: 'upload',
-    ...secrets,
-  })
+  if (
+    !TWITTER_CONSUMER_KEY ||
+    !TWITTER_CONSUMER_SECRET ||
+    !TWITTER_ACCESS_TOKEN ||
+    !TWITTER_ACCESS_TOKEN_SECRET
+  ) {
+    console.error(
+      `${logStart}Twitter - Missing OAuth1 credentials. Require TWITTER_CONSUMER_KEY, TWITTER_CONSUMER_SECRET, TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET`,
+    )
+    return
+  }
+
+  const client = new TwitterApi({
+    appKey: TWITTER_CONSUMER_KEY,
+    appSecret: TWITTER_CONSUMER_SECRET,
+    accessToken: TWITTER_ACCESS_TOKEN,
+    accessSecret: TWITTER_ACCESS_TOKEN_SECRET,
+  }).readWrite
 
   // only handle event types specified by TWITTER_EVENTS
   const filteredEvents = events.filter((event) =>
@@ -157,7 +172,7 @@ export const tweetEvents = async (events: any[]) => {
   if (filteredEvents.length === 0) return
 
   for (const [index, event] of filteredEvents.entries()) {
-    await tweetEvent(client, uploadClient, event)
+    await tweetEvent(client, event)
     // Wait 5s between tweets
     if (filteredEvents[index + 1]) {
       await timeout(3000)

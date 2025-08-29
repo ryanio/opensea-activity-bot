@@ -56,14 +56,14 @@ If your discord bot is not able to post messages ensure it is added to the chann
   - Comma separated list of event types for the bot to tweet
   - e.g. `sale,transfer`
 
-Create an application in the [Twitter Developer Platform](https://developer.twitter.com/) and provide:
+Create an application in the [Twitter Developer Platform](https://developer.twitter.com/) with write permissions. Provide OAuth1 tokens:
 
 - `TWITTER_CONSUMER_KEY`
 - `TWITTER_CONSUMER_SECRET`
 - `TWITTER_ACCESS_TOKEN`
 - `TWITTER_ACCESS_TOKEN_SECRET`
 
-Ensure your key is created with "write" permissions, the default key may be "read" only. If that happens you will get an error when trying to tweet; you can regenerate and provide the updated key.
+The bot uses `twitter-api-v2` and tweets via the v2 API with media uploaded through v1.1 using OAuth1. See library docs for details: [node-twitter-api-v2 docs](https://github.com/PLhery/node-twitter-api-v2/tree/master/doc).
 
 #### Optional
 
