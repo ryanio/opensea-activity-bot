@@ -1,7 +1,15 @@
 import { URLSearchParams } from 'node:url';
 import { FixedNumber } from 'ethers';
 import { channelsWithEvents } from './discord';
-import { chain, minOfferETH, openseaGet, unixTimestamp } from './utils';
+import { logger } from './logger';
+import { BotEvent, botEventSet } from './types';
+import {
+  chain,
+  logStart,
+  minOfferETH,
+  openseaGet,
+  unixTimestamp,
+} from './utils';
 
 const {
   OPENSEA_API_TOKEN,
@@ -13,6 +21,7 @@ const {
 
 let lastEventTimestamp = unixTimestamp(new Date());
 if (LAST_EVENT_TIMESTAMP) {
+  logger.info(`${logStart}Using LAST_EVENT_TIMESTAMP: ${LAST_EVENT_TIMESTAMP}`);
   lastEventTimestamp = Number.parseInt(LAST_EVENT_TIMESTAMP, 10);
 }
 
@@ -45,17 +54,42 @@ export type EventType = (typeof EventType)[keyof typeof EventType];
 
 const enabledEventTypes = (): string[] => {
   const eventTypes = new Set<string>();
+  // Include any Discord-declared event types verbatim (Discord supports 'order')
   for (const [_channelId, discordEventTypes] of channelsWithEvents()) {
     for (const eventType of discordEventTypes) {
       eventTypes.add(eventType);
     }
   }
-  const twitterEventTypes = TWITTER_EVENTS?.split(',') ?? [];
-  if (twitterEventTypes.length > 0) {
-    for (const eventType of twitterEventTypes) {
-      eventTypes.add(eventType);
+
+  // Parse and validate TWITTER_EVENTS: only allow listing|offer|sale|transfer
+  const rawTwitter = (TWITTER_EVENTS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  if (rawTwitter.length > 0) {
+    const invalid = rawTwitter.filter((t) => !botEventSet.has(t));
+    if (invalid.length > 0) {
+      throw new Error(
+        `Invalid TWITTER_EVENTS value(s): ${invalid.join(
+          ', '
+        )}. Allowed: ${Object.values(BotEvent).join(', ')}`
+      );
+    }
+    // Map listing/offer into OpenSea 'order' event_type
+    if (
+      rawTwitter.includes(BotEvent.listing) ||
+      rawTwitter.includes(BotEvent.offer)
+    ) {
+      eventTypes.add('order');
+    }
+    if (rawTwitter.includes(BotEvent.sale)) {
+      eventTypes.add('sale');
+    }
+    if (rawTwitter.includes(BotEvent.transfer)) {
+      eventTypes.add('transfer');
     }
   }
+
   if (eventTypes.size === 0) {
     throw new Error(
       'No events enabled. Please specify DISCORD_EVENTS or TWITTER_EVENTS'
@@ -69,17 +103,21 @@ const fetchCollectionSlug = async (address: string) => {
   if (collectionSlug) {
     return collectionSlug;
   }
+  logger.info(`Getting collection slug for ${address} on chain ${chain}…`);
   const url = opensea.getContract();
   const result = await openseaGet(url);
   if (!result.collection) {
     throw new Error(`No collection found for ${address} on chain ${chain}`);
   }
+  logger.info(`Got collection slug: ${result.collection}`);
   collectionSlug = result.collection;
   return result.collection;
 };
 
 export const fetchEvents = async (): Promise<Record<string, unknown>[]> => {
   await fetchCollectionSlug(TOKEN_ADDRESS ?? '');
+
+  logger.info(`${logStart}OpenSea - Fetching events`);
 
   const eventTypes = enabledEventTypes();
   const DEFAULT_QUERY_LIMIT = 50;
@@ -114,6 +152,7 @@ export const fetchEvents = async (): Promise<Record<string, unknown>[]> => {
   });
 
   const eventsPreFilter = events.length;
+  logger.info(`${logStart}OpenSea - Fetched events: ${eventsPreFilter}`);
 
   // Filter out low value offers
   events = events.filter((event) => {
@@ -132,8 +171,10 @@ export const fetchEvents = async (): Promise<Record<string, unknown>[]> => {
 
   const eventsPostFilter = events.length;
   const eventsFiltered = eventsPreFilter - eventsPostFilter;
-  if (eventsFiltered > 0 && process.env.DEBUG === 'true') {
-    // intentionally left for debug logging in verbose mode
+  if (eventsFiltered > 0) {
+    logger.info(
+      `${logStart}OpenSea - Offers under ${minOfferETH} ETH filtered out: ${eventsFiltered}`
+    );
   }
 
   return events;

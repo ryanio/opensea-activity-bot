@@ -4,6 +4,7 @@ import { logger } from './logger';
 import { LRUCache } from './lru-cache';
 import { EventType, opensea } from './opensea';
 import { AsyncQueue } from './queue';
+import { BotEvent, botEventSet } from './types';
 import {
   base64Image,
   formatAmount,
@@ -117,7 +118,16 @@ const tweetQueue = new AsyncQueue<TweetQueueItem>({
     if (!twitterClient) {
       throw new Error('twitterClient not initialized');
     }
-    await tweetEvent(twitterClient, item.event);
+    try {
+      await tweetEvent(twitterClient, item.event);
+    } catch (error) {
+      const key = keyForQueueItem(item);
+      logger.warn(
+        `${logStart}Twitter - Tweet failed for item (key: ${key}). Will classify for retry/drop:`,
+        error
+      );
+      throw error; // let queue classify and decide
+    }
   },
   classifyError: (error: unknown) => {
     const err = error as {
@@ -415,6 +425,60 @@ const ensureTwitterClient = () => {
   }
 };
 
+// ---- Selection helpers (top-level to keep tweetEvents complexity low) ----
+export const parseRequestedEvents = (
+  raw: string | undefined
+): Set<BotEvent> => {
+  const parts = (raw ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  const invalid = parts.filter((t) => !botEventSet.has(t));
+  if (invalid.length > 0) {
+    throw new Error(
+      `Invalid TWITTER_EVENTS value(s): ${invalid.join(', ')}. Allowed: ${Object.values(
+        BotEvent
+      ).join(', ')}`
+    );
+  }
+  return new Set(parts as BotEvent[]);
+};
+
+const isOrderListing = (orderType: string): boolean =>
+  orderType === BotEvent.listing;
+const isOrderOffer = (orderType: string): boolean =>
+  orderType.includes(BotEvent.offer);
+
+export const matchesSelection = (
+  ev: AggregatorEvent,
+  selectionSet: Set<BotEvent>
+): boolean => {
+  const type = (ev as { event_type?: string }).event_type as string;
+  if (type === 'order') {
+    const wantsListing = selectionSet.has(BotEvent.listing);
+    const wantsOffer = selectionSet.has(BotEvent.offer);
+    const wantsAnyOrder = wantsListing || wantsOffer;
+    if (!wantsAnyOrder) {
+      return false;
+    }
+    const orderType = (ev as { order_type?: string }).order_type ?? '';
+    if (isOrderListing(orderType)) {
+      return wantsListing;
+    }
+    if (isOrderOffer(orderType)) {
+      return wantsOffer;
+    }
+    return false;
+  }
+  if (type === EventType.sale) {
+    return selectionSet.has(BotEvent.sale);
+  }
+  if (type === EventType.transfer) {
+    return selectionSet.has(BotEvent.transfer);
+  }
+  return false;
+};
+
 export const tweetEvents = (events: AggregatorEvent[]) => {
   if (!process.env.TWITTER_EVENTS) {
     return;
@@ -424,11 +488,9 @@ export const tweetEvents = (events: AggregatorEvent[]) => {
   }
   ensureTwitterClient();
 
-  // only handle event types specified by TWITTER_EVENTS
+  const requestedSet = parseRequestedEvents(process.env.TWITTER_EVENTS);
   const filteredEvents = events.filter((event) =>
-    (process.env.TWITTER_EVENTS ?? '')
-      .split(',')
-      .includes((event as { event_type?: string }).event_type as string)
+    matchesSelection(event, requestedSet)
   );
 
   logger.info(`${logStart}Twitter - Relevant events: ${filteredEvents.length}`);

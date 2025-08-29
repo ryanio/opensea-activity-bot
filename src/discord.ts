@@ -8,6 +8,7 @@ import { format } from 'timeago.js';
 import type { AggregatorEvent } from './aggregator';
 import { logger } from './logger';
 import { EventType, opensea } from './opensea';
+import { BotEvent } from './types';
 import {
   formatAmount,
   imageForNFT,
@@ -18,7 +19,10 @@ import {
 
 const { DISCORD_EVENTS, DISCORD_TOKEN } = process.env;
 
-type ChannelEvents = [channelId: string, eventTypes: EventType[]][];
+type ChannelEvents = [
+  channelId: string,
+  eventTypes: (EventType | BotEvent)[],
+][];
 export const channelsWithEvents = (): ChannelEvents => {
   if (!DISCORD_EVENTS) {
     return [];
@@ -30,13 +34,13 @@ export const channelsWithEvents = (): ChannelEvents => {
     const channelId = channelWithEvents[0];
     const eventTypes = channelWithEvents[1].split(',');
     if (
-      eventTypes.includes(EventType.listing) ||
-      eventTypes.includes(EventType.offer)
+      eventTypes.includes(BotEvent.listing) ||
+      eventTypes.includes(BotEvent.offer)
     ) {
       // Workaround
       eventTypes.push(EventType.order);
     }
-    list.push([channelId, eventTypes as unknown as EventType[]]);
+    list.push([channelId, eventTypes as unknown as (EventType | BotEvent)[]]);
   }
 
   return list;
@@ -50,10 +54,10 @@ const channelsForEventType = (
 ) => {
   let effectiveType = eventType;
   if (effectiveType === EventType.order) {
-    if (orderType.includes('offer')) {
-      effectiveType = EventType.offer;
+    if (orderType.includes(BotEvent.offer)) {
+      effectiveType = BotEvent.offer as unknown as EventType;
     } else {
-      effectiveType = EventType.listing;
+      effectiveType = BotEvent.listing as unknown as EventType;
     }
   }
   const channels: TextBasedChannel[] = [];

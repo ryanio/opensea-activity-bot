@@ -3,7 +3,7 @@ import path from 'node:path';
 import { jest } from '@jest/globals';
 
 // Mock env
-process.env.TWITTER_EVENTS = 'sale,order,transfer';
+process.env.TWITTER_EVENTS = 'sale,listing,offer,transfer';
 process.env.TOKEN_ADDRESS = '0xb6c2c2d2999c1b532e089a7ad4cb7f8c91cf5075';
 process.env.TWITTER_CONSUMER_KEY = 'x';
 process.env.TWITTER_CONSUMER_SECRET = 'y';
