@@ -1,4 +1,4 @@
-import { SweepAggregator } from '../src/aggregator';
+import { SweepAggregator } from '../src/utils/aggregator';
 
 const mk = (tx: string, id: number) => ({
   transaction_hash: tx,

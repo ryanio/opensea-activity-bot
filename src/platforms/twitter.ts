@@ -1,9 +1,15 @@
 import { TwitterApi } from 'twitter-api-v2';
-import { txHashFor } from './aggregator';
-import { logger } from './logger';
-import { LRUCache } from './lru-cache';
-import { EventType, opensea, username } from './opensea';
-import { AsyncQueue } from './queue';
+import { EventType, opensea, username } from '../opensea';
+import {
+  BotEvent,
+  botEventSet,
+  type OpenSeaAssetEvent,
+  type OpenSeaPayment,
+} from '../types';
+import { txHashFor } from '../utils/aggregator';
+import { logger } from '../utils/logger';
+import { LRUCache } from '../utils/lru-cache';
+import { AsyncQueue } from '../utils/queue';
 import {
   calculateTotalSpent,
   eventKeyFor,
@@ -11,14 +17,9 @@ import {
   isSweepEvent,
   type SweepEvent,
   SweepManager,
-} from './sweep-utils';
-import {
-  BotEvent,
-  botEventSet,
-  type OpenSeaAssetEvent,
-  type OpenSeaPayment,
-} from './types';
-import { fetchImageBuffer, formatAmount, imageForNFT } from './utils';
+  sortEventsByPrice,
+} from '../utils/sweep';
+import { fetchImageBuffer, formatAmount, imageForNFT } from '../utils/utils';
 
 const logStart = '[Twitter]';
 
@@ -260,37 +261,14 @@ const textForTweet = async (event: OpenSeaAssetEvent) => {
 
 const MAX_MEDIA_IMAGES = 4;
 
-// Helper function to extract numeric price from payment.quantity for sorting
-const getPurchasePrice = (event: OpenSeaAssetEvent): bigint => {
-  const payment = event.payment;
-  if (!payment?.quantity) {
-    return 0n;
-  }
-
-  // Convert string quantity to BigInt for proper precision
-  try {
-    return BigInt(payment.quantity);
-  } catch {
-    return 0n;
-  }
-};
+// getPurchasePrice is now imported from sweep-utils
 
 const uploadImagesForGroup = async (
   client: MinimalTwitterClient,
   group: OpenSeaAssetEvent[]
 ): Promise<string[]> => {
   // Sort events by purchase price in descending order before selecting images
-  const sortedGroup = [...group].sort((a, b) => {
-    const priceA = getPurchasePrice(a);
-    const priceB = getPurchasePrice(b);
-    if (priceA > priceB) {
-      return -1;
-    }
-    if (priceA < priceB) {
-      return 1;
-    }
-    return 0;
-  });
+  const sortedGroup = sortEventsByPrice(group);
 
   const images: string[] = [];
   for (const e of sortedGroup) {
@@ -404,8 +382,6 @@ const tweetEvent = async (client: MinimalTwitterClient, event: TweetEvent) => {
   }
   await tweetSingle(client, event as OpenSeaAssetEvent);
 };
-
-// Manual processQueue removed; AsyncQueue handles processing
 
 const hasTwitterCreds = (): boolean =>
   Boolean(

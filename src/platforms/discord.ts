@@ -5,17 +5,18 @@ import {
   type TextBasedChannel,
 } from 'discord.js';
 import { format } from 'timeago.js';
-import type { AggregatorEvent } from './aggregator';
-import { logger } from './logger';
-import { EventType, opensea, username } from './opensea';
+import { EventType, opensea, username } from '../opensea';
+import { BotEvent, type OpenSeaAssetEvent } from '../types';
+import type { AggregatorEvent } from '../utils/aggregator';
+import { logger } from '../utils/logger';
 import {
   calculateTotalSpent,
   getDefaultSweepConfig,
+  getTopExpensiveEvents,
   type SweepEvent,
   SweepManager,
-} from './sweep-utils';
-import { BotEvent, type OpenSeaAssetEvent } from './types';
-import { formatAmount, imageForNFT, timeout } from './utils';
+} from '../utils/sweep';
+import { formatAmount, imageForNFT, timeout } from '../utils/utils';
 
 const logStart = '[Discord]';
 
@@ -250,6 +251,34 @@ const buildSweepEmbed = async (sweep: SweepEvent): Promise<EmbedBuilder> => {
     });
   }
 
+  // Add top 4 most expensive items
+  const TOP_ITEMS_COUNT = 4;
+  const topExpensiveItems = getTopExpensiveEvents(
+    sweep.events,
+    TOP_ITEMS_COUNT
+  );
+  if (topExpensiveItems.length > 0) {
+    const itemsList = topExpensiveItems
+      .map((item, index) => {
+        const { nft, price } = item;
+        const identifier = nft?.identifier ? `#${nft.identifier}` : '';
+        const name = nft?.name || 'Unknown';
+        const priceText = price ? ` - ${price}` : '';
+        const url = nft?.opensea_url;
+
+        if (url) {
+          return `${index + 1}. [${name} ${identifier}](${url})${priceText}`;
+        }
+        return `${index + 1}. ${name} ${identifier}${priceText}`;
+      })
+      .join('\n');
+
+    fields.push({
+      name: 'Top Items',
+      value: itemsList,
+    });
+  }
+
   const sweepEmbed = new EmbedBuilder()
     .setColor('#62b778') // Green color for sweeps
     .setTitle(title)
@@ -257,21 +286,9 @@ const buildSweepEmbed = async (sweep: SweepEvent): Promise<EmbedBuilder> => {
     .setURL(opensea.collectionURL());
 
   // Add thumbnail from highest value NFT
-  const sortedEvents = [...sweep.events].sort((a, b) => {
-    const priceA = BigInt(a.payment?.quantity ?? '0');
-    const priceB = BigInt(b.payment?.quantity ?? '0');
-    if (priceA > priceB) {
-      return -1;
-    }
-    if (priceA < priceB) {
-      return 1;
-    }
-    return 0;
-  });
-
-  const highestValueNft = sortedEvents[0]?.nft ?? sortedEvents[0]?.asset;
-  if (highestValueNft) {
-    const image = imageForNFT(highestValueNft);
+  const highestValueItem = topExpensiveItems[0];
+  if (highestValueItem?.nft) {
+    const image = imageForNFT(highestValueItem.nft);
     if (image) {
       sweepEmbed.setThumbnail(image);
     }

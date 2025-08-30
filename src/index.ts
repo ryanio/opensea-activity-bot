@@ -1,9 +1,9 @@
-import { messageEvents } from './discord';
-import { logger } from './logger';
 import { fetchEvents } from './opensea';
-import { tweetEvents } from './twitter';
+import { messageEvents } from './platforms/discord';
+import { tweetEvents } from './platforms/twitter';
 import type { OpenSeaAssetEvent } from './types';
-import { botInterval } from './utils';
+import { logger } from './utils/logger';
+import { botInterval } from './utils/utils';
 
 function main() {
   const run = async () => {

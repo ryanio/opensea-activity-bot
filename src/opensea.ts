@@ -1,8 +1,6 @@
 import { URLSearchParams } from 'node:url';
 import { FixedNumber } from 'ethers';
-import { channelsWithEvents } from './discord';
-import { logger } from './logger';
-import { LRUCache } from './lru-cache';
+import { channelsWithEvents } from './platforms/discord';
 import {
   BotEvent,
   botEventSet,
@@ -11,7 +9,9 @@ import {
   type OpenSeaContractResponse,
   type OpenSeaEventsResponse,
 } from './types';
-import { chain, minOfferETH, shortAddr, unixTimestamp } from './utils';
+import { logger } from './utils/logger';
+import { LRUCache } from './utils/lru-cache';
+import { chain, minOfferETH, shortAddr, unixTimestamp } from './utils/utils';
 
 const {
   OPENSEA_API_TOKEN,

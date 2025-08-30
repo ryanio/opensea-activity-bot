@@ -11,10 +11,10 @@ process.env.TWITTER_ACCESS_TOKEN = 'z';
 process.env.TWITTER_ACCESS_TOKEN_SECRET = 'w';
 
 // Stub utils (must be defined before importing code that uses it)
-jest.mock('../src/utils', () => {
+jest.mock('../src/utils/utils', () => {
   const actual = jest.requireActual(
-    '../src/utils'
-  ) as typeof import('../src/utils');
+    '../src/utils/utils'
+  ) as typeof import('../src/utils/utils');
   const BYTE_ONE = 1;
   const BYTE_TWO = 2;
   const BYTE_THREE = 3;
@@ -28,7 +28,7 @@ jest.mock('../src/utils', () => {
   return {
     ...actual,
     fetchImageBuffer,
-  } satisfies typeof import('../src/utils');
+  } satisfies typeof import('../src/utils/utils');
 });
 
 // Stub opensea module to avoid cross-import init
@@ -100,7 +100,7 @@ describe('twitter flows', () => {
 
   it('tweets a sweep for grouped sales', async () => {
     const { asset_events } = loadFixture('opensea/events-sales-group.json');
-    const { tweetEvents } = await import('../src/twitter');
+    const { tweetEvents } = await import('../src/platforms/twitter');
     tweetEvents(asset_events);
     const m = require('twitter-api-v2') as {
       __mockReadWrite: {
@@ -126,7 +126,7 @@ describe('twitter flows', () => {
 
   it('only tweets one sweep per tx across repeated runs', async () => {
     const { asset_events } = loadFixture('opensea/events-sales-group.json');
-    const { tweetEvents } = await import('../src/twitter');
+    const { tweetEvents } = await import('../src/platforms/twitter');
     // Simulate polling loop invoking with same batch repeatedly
     tweetEvents(asset_events);
     tweetEvents(asset_events);
@@ -151,7 +151,7 @@ describe('twitter flows', () => {
 
   it('converts SVG to PNG when tweeting single image', async () => {
     const { asset_events } = loadFixture('svg-image.json');
-    const { tweetEvents } = await import('../src/twitter');
+    const { tweetEvents } = await import('../src/platforms/twitter');
     tweetEvents(asset_events);
     const m = require('twitter-api-v2') as {
       __mockReadWrite: {
@@ -176,7 +176,7 @@ describe('twitter flows', () => {
 
   it('tweets a single sale event with correct text', async () => {
     const { asset_events } = loadFixture('opensea/events-sales.json');
-    const { tweetEvents } = await import('../src/twitter');
+    const { tweetEvents } = await import('../src/platforms/twitter');
     tweetEvents(asset_events);
     const m = require('twitter-api-v2') as {
       __mockReadWrite: {
@@ -198,7 +198,7 @@ describe('twitter flows', () => {
 
   it('tweets a listing event with correct text', async () => {
     const listings = loadFixture('opensea/get-listings.json');
-    const { tweetEvents } = await import('../src/twitter');
+    const { tweetEvents } = await import('../src/platforms/twitter');
     tweetEvents(listings.asset_events ?? []);
     expect(true).toBe(true);
   });
@@ -206,7 +206,7 @@ describe('twitter flows', () => {
   it('sorts sweep images by purchase price descending', async () => {
     // Load batch events with different prices to test sorting
     const batchSales = loadFixture('opensea/events-sales-batch.json');
-    const { tweetEvents } = await import('../src/twitter');
+    const { tweetEvents } = await import('../src/platforms/twitter');
 
     // Check that we have events with different prices
     const events = batchSales.asset_events ?? [];

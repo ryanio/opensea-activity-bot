@@ -1,7 +1,7 @@
+import type { OpenSeaAssetEvent } from '../types';
 import type { AggregatorEvent } from './aggregator';
 import { SweepAggregator, txHashFor } from './aggregator';
 import { LRUCache } from './lru-cache';
-import type { OpenSeaAssetEvent } from './types';
 
 // Common sweep configuration with environment variable support
 export type SweepConfig = {
@@ -138,6 +138,65 @@ export class SweepManager {
     return { processableEvents, skippedDupes, skippedPending };
   }
 }
+
+// Helper function to extract numeric price from payment.quantity for sorting
+export const getPurchasePrice = (event: OpenSeaAssetEvent): bigint => {
+  const payment = event.payment;
+  if (!payment?.quantity) {
+    return 0n;
+  }
+
+  // Convert string quantity to BigInt for proper precision
+  try {
+    return BigInt(payment.quantity);
+  } catch {
+    return 0n;
+  }
+};
+
+// Sort events by purchase price in descending order (highest first)
+export const sortEventsByPrice = (
+  events: OpenSeaAssetEvent[]
+): OpenSeaAssetEvent[] => {
+  return [...events].sort((a, b) => {
+    const priceA = getPurchasePrice(a);
+    const priceB = getPurchasePrice(b);
+    if (priceA > priceB) {
+      return -1;
+    }
+    if (priceA < priceB) {
+      return 1;
+    }
+    return 0;
+  });
+};
+
+// Get top N most expensive events with their details
+export const getTopExpensiveEvents = (
+  events: OpenSeaAssetEvent[],
+  limit = 4
+): Array<{
+  event: OpenSeaAssetEvent;
+  price: string | null;
+  nft: { identifier?: string; name?: string; opensea_url?: string } | undefined;
+}> => {
+  const sortedEvents = sortEventsByPrice(events);
+  const { formatAmount } = require('./utils');
+
+  return sortedEvents.slice(0, limit).map((event) => {
+    const payment = event.payment;
+    const price = payment
+      ? formatAmount(payment.quantity, payment.decimals, payment.symbol)
+      : null;
+    const nft = event.nft ?? event.asset;
+
+    return {
+      event,
+      price,
+      nft,
+    };
+  });
+};
 
 // Utility to calculate total spent across events (ETH/WETH only)
 export const calculateTotalSpent = (
