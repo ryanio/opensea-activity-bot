@@ -99,6 +99,10 @@ const tweetQueue = new AsyncQueue<TweetQueueItem>({
   keyFor: (i) => keyForQueueItem(i),
   isAlreadyProcessed: (key) => tweetedEventsCache.get(key) === true,
   onProcessed: (item) => {
+    // Mark the queue key as processed to prevent reprocessing the same sweep/solo
+    const queueKey = keyForQueueItem(item);
+    tweetedEventsCache.put(queueKey, true);
+
     const event = item?.event;
     if (isSweepEvent(event)) {
       for (const e of event.events) {
@@ -343,13 +347,28 @@ const tweetSweep = async (
 ) => {
   const count = group.length;
   const media_ids = await uploadImagesForGroup(client, group);
+
+  // Get buyer from first event (all events in sweep should have same buyer)
+  const firstEvent = group[0] as TwitterEvent;
+  const buyerAddress = firstEvent?.buyer;
+
   let text = '';
   if (process.env.TWITTER_PREPEND_TWEET) {
     text += `${process.env.TWITTER_PREPEND_TWEET} `;
   }
-  text += `${count} purchased`;
-  const activityUrl = `${opensea.collectionURL()}/activity`;
-  text += ` ${activityUrl}`;
+
+  if (buyerAddress) {
+    const buyerName = await username(buyerAddress);
+    text += `${count} purchased by ${buyerName}`;
+    const profileUrl = `https://opensea.io/${buyerAddress}?collectionSlugs=glyphbots`;
+    text += ` ${profileUrl}`;
+  } else {
+    // Fallback to old format if buyer info unavailable
+    text += `${count} purchased`;
+    const activityUrl = `${opensea.collectionURL()}/activity`;
+    text += ` ${activityUrl}`;
+  }
+
   if (process.env.TWITTER_APPEND_TWEET) {
     text += ` ${process.env.TWITTER_APPEND_TWEET}`;
   }

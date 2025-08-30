@@ -115,7 +115,37 @@ describe('twitter flows', () => {
     expect(calls.length).toBeGreaterThan(0);
     const first = calls[0][0] as { text: string };
     expect(typeof first.text).toBe('string');
-    expect(first.text.includes('purchased')).toBeTruthy();
+    expect(first.text.includes('purchased by user')).toBeTruthy();
+    expect(
+      first.text.includes(
+        'opensea.io/0x6b5566150d8671adfcf6304a4190f176f65188e9?collectionSlugs=glyphbots'
+      )
+    ).toBeTruthy();
+  });
+
+  it('only tweets one sweep per tx across repeated runs', async () => {
+    const { asset_events } = loadFixture('sales-group.json');
+    const { tweetEvents } = await import('../src/twitter');
+    // Simulate polling loop invoking with same batch repeatedly
+    tweetEvents(asset_events);
+    tweetEvents(asset_events);
+    tweetEvents(asset_events);
+    const m = require('twitter-api-v2') as {
+      __mockReadWrite: {
+        v1: { uploadMedia: jest.Mock };
+        v2: { tweet: jest.Mock };
+      };
+    };
+    await waitFor(
+      () => (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls.length > 0
+    );
+    // Allow the queue to process/skip any duplicates enqueued
+    const QUEUE_DRAIN_MS = 100;
+    await new Promise((r) => setTimeout(r, QUEUE_DRAIN_MS));
+    const calls = (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls;
+    expect(calls.length).toBe(1);
+    const first = calls[0][0] as { text: string };
+    expect(first.text.includes('purchased by user')).toBeTruthy();
   });
 
   it('converts SVG to PNG when tweeting single image', async () => {
