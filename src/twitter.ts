@@ -341,6 +341,31 @@ const uploadImagesForGroup = async (
   return mediaIds;
 };
 
+const calculateTotalSpent = (group: AggregatorEvent[]): string | null => {
+  const paymentsWithETH = group
+    .map((event) => (event as TwitterEvent).payment)
+    .filter(
+      (payment): payment is TwitterPayment =>
+        payment !== undefined &&
+        (payment.symbol === 'ETH' || payment.symbol === 'WETH')
+    );
+
+  if (paymentsWithETH.length === 0) {
+    return null;
+  }
+
+  // Use the first payment to get decimals (should be consistent for ETH)
+  const firstPayment = paymentsWithETH[0];
+  const { decimals, symbol } = firstPayment;
+
+  // Sum all quantities (as BigInt to avoid precision issues)
+  const totalQuantity = paymentsWithETH.reduce((sum, payment) => {
+    return sum + BigInt(payment.quantity);
+  }, BigInt(0));
+
+  return formatAmount(totalQuantity.toString(), decimals, symbol);
+};
+
 const tweetSweep = async (
   client: MinimalTwitterClient,
   group: AggregatorEvent[]
@@ -352,6 +377,9 @@ const tweetSweep = async (
   const firstEvent = group[0] as TwitterEvent;
   const buyerAddress = firstEvent?.buyer;
 
+  // Calculate total spent
+  const totalSpent = calculateTotalSpent(group);
+
   let text = '';
   if (process.env.TWITTER_PREPEND_TWEET) {
     text += `${process.env.TWITTER_PREPEND_TWEET} `;
@@ -360,11 +388,17 @@ const tweetSweep = async (
   if (buyerAddress) {
     const buyerName = await username(buyerAddress);
     text += `${count} purchased by ${buyerName}`;
+    if (totalSpent) {
+      text += ` for ${totalSpent}`;
+    }
     const profileUrl = `https://opensea.io/${buyerAddress}?collectionSlugs=glyphbots`;
     text += ` ${profileUrl}`;
   } else {
     // Fallback to old format if buyer info unavailable
     text += `${count} purchased`;
+    if (totalSpent) {
+      text += ` for ${totalSpent}`;
+    }
     const activityUrl = `${opensea.collectionURL()}/activity`;
     text += ` ${activityUrl}`;
   }

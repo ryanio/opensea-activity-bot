@@ -25,11 +25,9 @@ jest.mock('../src/utils', () => {
       mimeType: 'image/png',
     })
   );
-  const username: typeof actual.username = jest.fn(async () => 'user');
   return {
     ...actual,
     fetchImageBuffer,
-    username,
   } satisfies typeof import('../src/utils');
 });
 
@@ -56,6 +54,7 @@ jest.mock('../src/opensea', () => ({
     cancel: 'cancel',
     transfer: 'transfer',
   },
+  username: jest.fn(async () => 'user'),
 }));
 
 // Manual stable mock for twitter-api-v2
