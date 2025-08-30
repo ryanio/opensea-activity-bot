@@ -1,0 +1,55 @@
+{
+  "order_hash": "0x2a80696ea331f16fb687d700590503bdb5e8c504546c21d65c9dcc262de34841",
+  "chain": "ethereum",
+  "protocol_data": {
+    "parameters": {
+      "offerer": "0x0bb3643abb6594c2c8e0eec8baec80bcc31f0d42",
+      "offer": [
+        {
+          "itemType": 2,
+          "token": "0xb6c2c2d2999c1b532e089a7ad4cb7f8c91cf5075",
+          "identifierOrCriteria": "9940",
+          "startAmount": "1",
+          "endAmount": "1"
+        }
+      ],
+      "consideration": [
+        {
+          "itemType": 0,
+          "token": "0x0000000000000000000000000000000000000000",
+          "identifierOrCriteria": "0",
+          "startAmount": "517400000000000",
+          "endAmount": "517400000000000",
+          "recipient": "0x0bb3643abb6594c2c8e0eec8baec80bcc31f0d42"
+        },
+        {
+          "itemType": 0,
+          "token": "0x0000000000000000000000000000000000000000",
+          "identifierOrCriteria": "0",
+          "startAmount": "2600000000000",
+          "endAmount": "2600000000000",
+          "recipient": "0x0000a26b00c1f0df003000390027140000faa719"
+        }
+      ],
+      "startTime": "1756534363",
+      "endTime": "1772086363",
+      "orderType": 0,
+      "zone": "0x0000000000000000000000000000000000000000",
+      "zoneHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "salt": "0x3d958fe20000000000000000000000000000000000000000d6686cfa7dd1bcc0",
+      "conduitKey": "0x0000007b02230091a7ed01230072f7006a004d60a8d4e71d599b8104250f0000",
+      "totalOriginalConsiderationItems": 2,
+      "counter": 0
+    },
+    "signature": null
+  },
+  "protocol_address": "0x0000000000000068f116a894984e2db1123eb395",
+  "price": {
+    "current": {
+      "currency": "ETH",
+      "decimals": 18,
+      "value": "520000000000000"
+    }
+  },
+  "type": "basic"
+}

@@ -1,0 +1,124 @@
+{
+  "nft": {
+    "identifier": "3333",
+    "collection": "glyphbots",
+    "contract": "0xb6c2c2d2999c1b532e089a7ad4cb7f8c91cf5075",
+    "token_standard": "erc721",
+    "name": "GlyphBot #3333 - Glitchyflux",
+    "description": "Onchain text robots assembled from Unicode glyphs. Deterministic per tokenId.",
+    "image_url": "https://raw2.seadn.io/ethereum/0xb6c2c2d2999c1b532e089a7ad4cb7f8c91cf5075/3c2e726f9eea0a2d6ffe83b93fde24/383c2e726f9eea0a2d6ffe83b93fde24.svg",
+    "display_image_url": "https://raw2.seadn.io/ethereum/0xb6c2c2d2999c1b532e089a7ad4cb7f8c91cf5075/3c2e726f9eea0a2d6ffe83b93fde24/383c2e726f9eea0a2d6ffe83b93fde24.svg",
+    "display_animation_url": null,
+    "metadata_url": null,
+    "opensea_url": "https://opensea.io/assets/ethereum/0xb6c2c2d2999c1b532e089a7ad4cb7f8c91cf5075/3333",
+    "updated_at": "2025-08-30T06:24:07.571597",
+    "is_disabled": false,
+    "is_nsfw": false,
+    "animation_url": null,
+    "is_suspicious": false,
+    "creator": "",
+    "traits": [
+      {
+        "trait_type": "Name",
+        "display_type": null,
+        "max_value": null,
+        "value": "Glitchyflux"
+      },
+      {
+        "trait_type": "Head",
+        "display_type": null,
+        "max_value": null,
+        "value": "┌═┴═┐"
+      },
+      {
+        "trait_type": "Eyes",
+        "display_type": null,
+        "max_value": null,
+        "value": "◍ ◍"
+      },
+      {
+        "trait_type": "Mouth",
+        "display_type": null,
+        "max_value": null,
+        "value": "▂"
+      },
+      {
+        "trait_type": "Arms",
+        "display_type": null,
+        "max_value": null,
+        "value": "◣"
+      },
+      {
+        "trait_type": "Body",
+        "display_type": null,
+        "max_value": null,
+        "value": "◯"
+      },
+      {
+        "trait_type": "Legs",
+        "display_type": null,
+        "max_value": null,
+        "value": "╟╢"
+      },
+      {
+        "trait_type": "Hat",
+        "display_type": null,
+        "max_value": null,
+        "value": "None"
+      },
+      {
+        "trait_type": "Glasses",
+        "display_type": null,
+        "max_value": null,
+        "value": "None"
+      },
+      {
+        "trait_type": "Backpack",
+        "display_type": null,
+        "max_value": null,
+        "value": "None"
+      },
+      {
+        "trait_type": "Weapon",
+        "display_type": null,
+        "max_value": null,
+        "value": "None"
+      },
+      {
+        "trait_type": "Antenna",
+        "display_type": null,
+        "max_value": null,
+        "value": "No"
+      },
+      {
+        "trait_type": "Chest Light",
+        "display_type": null,
+        "max_value": null,
+        "value": "No"
+      },
+      {
+        "trait_type": "Treads",
+        "display_type": null,
+        "max_value": null,
+        "value": "No"
+      },
+      {
+        "trait_type": "Theme",
+        "display_type": null,
+        "max_value": null,
+        "value": "Matrix"
+      }
+    ],
+    "owners": [
+      {
+        "address": "0x09fbbdd6d153a451f13a3f5a6ed1c90e6ab8decb",
+        "quantity": 1
+      }
+    ],
+    "rarity": {
+      "strategy_id": "openrarity",
+      "strategy_version": "1.0",
+      "rank": 10208
+    }
+  }
+}

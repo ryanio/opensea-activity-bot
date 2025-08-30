@@ -2,8 +2,6 @@ import { type BigNumberish, FixedNumber, formatUnits } from 'ethers';
 import sharp from 'sharp';
 import type { NFTLike } from './aggregator';
 import { logger } from './logger';
-import { LRUCache } from './lru-cache';
-import { opensea } from './opensea';
 
 export function timeout(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -30,59 +28,8 @@ export const botInterval = Number(process.env.OPENSEA_BOT_INTERVAL ?? 60);
 export const minOfferETH = FixedNumber.fromString(
   process.env.MIN_OFFER_ETH ?? '0'
 );
-export const shortTokenAddr = shortAddr(process.env.TOKEN_ADDRESS ?? '');
 export const chain = process.env.CHAIN ?? 'ethereum';
-
-/**
- * OpenSea utils and helpers
- */
-export const openseaGet = async (url: string) => {
-  try {
-    const response = await fetch(url, opensea.GET_OPTS);
-    if (!response.ok) {
-      logger.error(
-        `Fetch Error for ${url} - ${response.status}: ${response.statusText}`,
-        process.env.LOG_LEVEL === 'debug' ? await response.text() : undefined
-      );
-      return;
-    }
-    const result = await response.json();
-    return result;
-  } catch (error) {
-    const message =
-      typeof (error as { message?: unknown })?.message === 'string'
-        ? (error as { message: string }).message
-        : String(error);
-    logger.error(`Fetch Error for ${url}: ${message}`);
-  }
-};
-
-/**
- * Processes an OpenSea user object and returns, in order:
- * 1. An OpenSea username
- * 2. A short formatted address
- */
-const USERNAME_CACHE_CAPACITY = 100;
-const usernameCache = new LRUCache<string, string>(USERNAME_CACHE_CAPACITY);
-const formatUsername = (name: string, address: string) =>
-  name === '' ? shortAddr(address) : name;
-export const username = async (address: string) => {
-  const cached = usernameCache.get(address);
-  if (cached) {
-    return formatUsername(cached, address);
-  }
-
-  const account = await fetchAccount(address);
-  const fetchedName = account?.username ?? '';
-  usernameCache.put(address, fetchedName);
-  return formatUsername(fetchedName, address);
-};
-
-const fetchAccount = async (address: string) => {
-  const url = opensea.getAccount(address);
-  const result = await openseaGet(url);
-  return result;
-};
+export const shortTokenAddr = shortAddr(process.env.TOKEN_ADDRESS ?? '');
 
 /**
  * Formats amount, decimals, and symbols to final string output.
@@ -114,7 +61,7 @@ export const imageForNFT = (nft?: NFTLike): string | undefined => {
  * Fetch an image and return a buffer and mimeType.
  * Converts SVGs to PNG for broader compatibility.
  */
-export const base64Image = async (
+export const fetchImageBuffer = async (
   imageURL: string
 ): Promise<{ buffer: Buffer; mimeType: string }> => {
   const response = await fetch(imageURL);

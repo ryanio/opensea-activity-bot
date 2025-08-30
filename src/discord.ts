@@ -7,9 +7,9 @@ import {
 import { format } from 'timeago.js';
 import type { AggregatorEvent } from './aggregator';
 import { logger } from './logger';
-import { EventType, opensea } from './opensea';
+import { EventType, opensea, username } from './opensea';
 import { BotEvent } from './types';
-import { formatAmount, imageForNFT, timeout, username } from './utils';
+import { formatAmount, imageForNFT, timeout } from './utils';
 
 const logStart = '[Discord]';
 

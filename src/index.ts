@@ -2,11 +2,12 @@ import { messageEvents } from './discord';
 import { logger } from './logger';
 import { fetchEvents } from './opensea';
 import { tweetEvents } from './twitter';
+import type { OpenSeaAssetEvent } from './types';
 import { botInterval } from './utils';
 
 function main() {
   const run = async () => {
-    const events = await fetchEvents();
+    const events: OpenSeaAssetEvent[] = await fetchEvents();
     if (!events || events.length === 0) {
       return;
     }

@@ -2,10 +2,10 @@ import { TwitterApi } from 'twitter-api-v2';
 import { type AggregatorEvent, SweepAggregator, txHashFor } from './aggregator';
 import { logger } from './logger';
 import { LRUCache } from './lru-cache';
-import { EventType, opensea } from './opensea';
+import { EventType, opensea, username } from './opensea';
 import { AsyncQueue } from './queue';
 import { BotEvent, botEventSet } from './types';
-import { base64Image, formatAmount, imageForNFT, username } from './utils';
+import { fetchImageBuffer, formatAmount, imageForNFT } from './utils';
 
 const logStart = '[Twitter]';
 
@@ -307,7 +307,7 @@ const textForTweet = async (event: AggregatorEvent) => {
   return text;
 };
 
-// base64Image moved to utils
+// fetchImageBuffer moved to utils
 
 const MAX_MEDIA_IMAGES = 4;
 
@@ -328,7 +328,7 @@ const uploadImagesForGroup = async (
   const mediaIds: string[] = [];
   for (const imageUrl of images) {
     try {
-      const { buffer, mimeType } = await base64Image(imageUrl);
+      const { buffer, mimeType } = await fetchImageBuffer(imageUrl);
       const id = await client.v1.uploadMedia(buffer, { mimeType });
       mediaIds.push(id);
     } catch (uploadError) {
@@ -390,7 +390,7 @@ const tweetSingle = async (
   const image = imageForNFT(event.nft ?? event.asset);
   if (image) {
     try {
-      const { buffer, mimeType } = await base64Image(image);
+      const { buffer, mimeType } = await fetchImageBuffer(image);
       mediaId = await client.v1.uploadMedia(buffer, { mimeType });
     } catch (uploadError) {
       logger.warn(

@@ -2,8 +2,16 @@ import { URLSearchParams } from 'node:url';
 import { FixedNumber } from 'ethers';
 import { channelsWithEvents } from './discord';
 import { logger } from './logger';
-import { BotEvent, botEventSet } from './types';
-import { chain, minOfferETH, openseaGet, unixTimestamp } from './utils';
+import { LRUCache } from './lru-cache';
+import {
+  BotEvent,
+  botEventSet,
+  type OpenSeaAccount,
+  type OpenSeaAssetEvent,
+  type OpenSeaContractResponse,
+  type OpenSeaEventsResponse,
+} from './types';
+import { chain, minOfferETH, shortAddr, unixTimestamp } from './utils';
 
 const {
   OPENSEA_API_TOKEN,
@@ -34,6 +42,61 @@ export const opensea = {
       'X-API-KEY': OPENSEA_API_TOKEN ?? '',
     } as Record<string, string>,
   } as RequestInit,
+};
+
+/**
+ * OpenSea utils and helpers
+ */
+export const openseaGet = async <T = unknown>(
+  url: string
+): Promise<T | undefined> => {
+  try {
+    const response = await fetch(url, opensea.GET_OPTS);
+    if (!response.ok) {
+      logger.error(
+        `Fetch Error for ${url} - ${response.status}: ${response.statusText}`,
+        process.env.LOG_LEVEL === 'debug' ? await response.text() : undefined
+      );
+      return;
+    }
+    const result = (await response.json()) as T;
+    return result;
+  } catch (error) {
+    const message =
+      typeof (error as { message?: unknown })?.message === 'string'
+        ? (error as { message: string }).message
+        : String(error);
+    logger.error(`Fetch Error for ${url}: ${message}`);
+  }
+};
+
+/**
+ * Processes an OpenSea user object and returns, in order:
+ * 1. An OpenSea username
+ * 2. A short formatted address
+ */
+const USERNAME_CACHE_CAPACITY = 100;
+const usernameCache = new LRUCache<string, string>(USERNAME_CACHE_CAPACITY);
+const formatUsername = (name: string, address: string) =>
+  name === '' ? shortAddr(address) : name;
+export const username = async (address: string) => {
+  const cached = usernameCache.get(address);
+  if (cached) {
+    return formatUsername(cached, address);
+  }
+
+  const account = await fetchAccount(address);
+  const fetchedName = account?.username ?? '';
+  usernameCache.put(address, fetchedName);
+  return formatUsername(fetchedName, address);
+};
+
+const fetchAccount = async (
+  address: string
+): Promise<OpenSeaAccount | undefined> => {
+  const url = opensea.getAccount(address);
+  const result = await openseaGet<OpenSeaAccount>(url);
+  return result;
 };
 
 export const EventType = {
@@ -93,14 +156,14 @@ const enabledEventTypes = (): string[] => {
 };
 
 let collectionSlug: string;
-const fetchCollectionSlug = async (address: string) => {
+const fetchCollectionSlug = async (address: string): Promise<string> => {
   if (collectionSlug) {
     return collectionSlug;
   }
   logger.info(`Getting collection slug for ${address} on chain ${chain}…`);
   const url = opensea.getContract();
-  const result = await openseaGet(url);
-  if (!result.collection) {
+  const result = await openseaGet<OpenSeaContractResponse>(url);
+  if (!result?.collection) {
     throw new Error(`No collection found for ${address} on chain ${chain}`);
   }
   logger.info(`Got collection slug: ${result.collection}`);
@@ -108,7 +171,7 @@ const fetchCollectionSlug = async (address: string) => {
   return result.collection;
 };
 
-export const fetchEvents = async (): Promise<Record<string, unknown>[]> => {
+export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
   await fetchCollectionSlug(TOKEN_ADDRESS ?? '');
 
   logger.info('Fetching events');
@@ -125,7 +188,12 @@ export const fetchEvents = async (): Promise<Record<string, unknown>[]> => {
   }
 
   const url = `${opensea.getEvents()}?${urlParams}`;
-  const result = await openseaGet(url);
+  const result = await openseaGet<OpenSeaEventsResponse>(url);
+
+  if (!result?.asset_events) {
+    logger.warn('No asset_events found in response');
+    return [];
+  }
 
   let events = result.asset_events;
 
@@ -134,7 +202,10 @@ export const fetchEvents = async (): Promise<Record<string, unknown>[]> => {
 
   // Update last seen event
   if (events.length > 0) {
-    lastEventTimestamp = events.at(-1).event_timestamp;
+    const lastEvent = events.at(-1);
+    if (lastEvent) {
+      lastEventTimestamp = lastEvent.event_timestamp;
+    }
   }
 
   // Filter out private listings
@@ -152,7 +223,7 @@ export const fetchEvents = async (): Promise<Record<string, unknown>[]> => {
   events = events.filter((event) => {
     if (
       event.order_type?.includes('offer') &&
-      event.payment.symbol === 'WETH'
+      event.payment?.symbol === 'WETH'
     ) {
       const offerValue = FixedNumber.fromValue(
         event.payment.quantity,

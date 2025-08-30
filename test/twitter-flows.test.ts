@@ -19,14 +19,16 @@ jest.mock('../src/utils', () => {
   const BYTE_TWO = 2;
   const BYTE_THREE = 3;
   const TEST_IMAGE_BYTES: readonly number[] = [BYTE_ONE, BYTE_TWO, BYTE_THREE];
-  const base64Image: typeof actual.base64Image = jest.fn(async () => ({
-    buffer: Buffer.from(TEST_IMAGE_BYTES),
-    mimeType: 'image/png',
-  }));
+  const fetchImageBuffer: typeof actual.fetchImageBuffer = jest.fn(
+    async () => ({
+      buffer: Buffer.from(TEST_IMAGE_BYTES),
+      mimeType: 'image/png',
+    })
+  );
   const username: typeof actual.username = jest.fn(async () => 'user');
   return {
     ...actual,
-    base64Image,
+    fetchImageBuffer,
     username,
   } satisfies typeof import('../src/utils');
 });
@@ -98,7 +100,7 @@ describe('twitter flows', () => {
   });
 
   it('tweets a sweep for grouped sales', async () => {
-    const { asset_events } = loadFixture('sales-group.json');
+    const { asset_events } = loadFixture('opensea/events-sales-group.json');
     const { tweetEvents } = await import('../src/twitter');
     tweetEvents(asset_events);
     const m = require('twitter-api-v2') as {
@@ -124,7 +126,7 @@ describe('twitter flows', () => {
   });
 
   it('only tweets one sweep per tx across repeated runs', async () => {
-    const { asset_events } = loadFixture('sales-group.json');
+    const { asset_events } = loadFixture('opensea/events-sales-group.json');
     const { tweetEvents } = await import('../src/twitter');
     // Simulate polling loop invoking with same batch repeatedly
     tweetEvents(asset_events);
@@ -174,7 +176,7 @@ describe('twitter flows', () => {
   });
 
   it('tweets a single sale event with correct text', async () => {
-    const { asset_events } = loadFixture('sales-real.json');
+    const { asset_events } = loadFixture('opensea/events-sales.json');
     const { tweetEvents } = await import('../src/twitter');
     tweetEvents(asset_events);
     const m = require('twitter-api-v2') as {
@@ -196,7 +198,7 @@ describe('twitter flows', () => {
   });
 
   it('tweets a listing event with correct text', async () => {
-    const listings = loadFixture('listings-real.json');
+    const listings = loadFixture('opensea/get-listings.json');
     const { tweetEvents } = await import('../src/twitter');
     tweetEvents(listings.asset_events ?? []);
     expect(true).toBe(true);
