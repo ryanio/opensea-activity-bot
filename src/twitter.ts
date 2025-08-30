@@ -4,7 +4,12 @@ import { logger } from './logger';
 import { LRUCache } from './lru-cache';
 import { EventType, opensea, username } from './opensea';
 import { AsyncQueue } from './queue';
-import { BotEvent, botEventSet } from './types';
+import {
+  BotEvent,
+  botEventSet,
+  type OpenSeaAssetEvent,
+  type OpenSeaPayment,
+} from './types';
 import { fetchImageBuffer, formatAmount, imageForNFT } from './utils';
 
 const logStart = '[Twitter]';
@@ -50,24 +55,13 @@ type MinimalTwitterClient = {
 };
 
 let twitterClient: MinimalTwitterClient | undefined;
-type SweepEvent = { kind: 'sweep'; txHash: string; events: AggregatorEvent[] };
-type TweetEvent = AggregatorEvent | SweepEvent;
+type SweepEvent = {
+  kind: 'sweep';
+  txHash: string;
+  events: OpenSeaAssetEvent[];
+};
+type TweetEvent = OpenSeaAssetEvent | SweepEvent;
 type TweetQueueItem = { event: TweetEvent };
-
-type TwitterPayment = {
-  quantity: string;
-  decimals: number;
-  symbol: string;
-};
-type TwitterEvent = AggregatorEvent & {
-  payment?: TwitterPayment;
-  from_address?: string;
-  to_address?: string;
-  order_type?: string;
-  maker?: string;
-  buyer?: string;
-  expiration_date?: number;
-};
 
 const isSweepEvent = (e: TweetEvent): e is SweepEvent => {
   return (
@@ -109,7 +103,7 @@ const tweetQueue = new AsyncQueue<TweetQueueItem>({
         tweetedEventsCache.put(eventKeyFor(e), true);
       }
     } else if (event) {
-      tweetedEventsCache.put(eventKeyFor(event as AggregatorEvent), true);
+      tweetedEventsCache.put(eventKeyFor(event as OpenSeaAssetEvent), true);
     }
   },
   process: async (item) => {
@@ -161,43 +155,19 @@ const tweetQueue = new AsyncQueue<TweetQueueItem>({
   },
 });
 
-const JITTER_FACTOR = 0.2;
-const jitter = (ms: number) => {
-  const delta = Math.floor(ms * JITTER_FACTOR);
-  return ms + Math.floor(Math.random() * (2 * delta + 1)) - delta;
-};
-
-const _calcBackoffMs = (attempts: number) => {
-  const exp = BACKOFF_BASE_MS * 2 ** Math.max(0, attempts - 1);
-  return Math.min(jitter(exp), BACKOFF_MAX_MS);
-};
-
 const keyForQueueItem = (item: TweetQueueItem): string => {
   const ev = item.event;
   if (isSweepEvent(ev)) {
     const tx = ev.txHash ?? txHashFor(ev.events?.[0]) ?? 'unknown';
     return `sweep:${tx}`;
   }
-  return eventKeyFor(item.event as AggregatorEvent);
+  return eventKeyFor(item.event as OpenSeaAssetEvent);
 };
 
-const _markDeduped = (item: TweetQueueItem) => {
-  const ev = item.event;
-  if (isSweepEvent(ev)) {
-    for (const e of ev.events) {
-      const key = eventKeyFor(e);
-      tweetedEventsCache.put(key, true);
-    }
-    return;
-  }
-  const key = eventKeyFor(item.event as AggregatorEvent);
-  tweetedEventsCache.put(key, true);
-};
-
-const eventKeyFor = (event: AggregatorEvent): string => {
+const eventKeyFor = (event: OpenSeaAssetEvent): string => {
   const ts = String(event?.event_timestamp ?? '');
-  const nft = event?.nft ?? event?.asset ?? {};
-  const tokenId = String(nft?.identifier ?? nft?.token_id ?? '');
+  const nft = event?.nft ?? event?.asset;
+  const tokenId = String(nft?.identifier ?? '');
   return `${ts}|${tokenId}`;
 };
 
@@ -222,7 +192,7 @@ const formatNftPrefix = (
 };
 
 const formatOrderText = async (
-  payment: TwitterPayment,
+  payment: OpenSeaPayment,
   maker: string,
   order_type: string,
   _expiration_date: number
@@ -248,7 +218,7 @@ const formatOrderText = async (
   return '';
 };
 
-const formatSaleText = async (payment: TwitterPayment, buyer: string) => {
+const formatSaleText = async (payment: OpenSeaPayment, buyer: string) => {
   const amount = formatAmount(
     payment.quantity,
     payment.decimals,
@@ -264,8 +234,8 @@ const formatTransferText = async (from_address: string, to_address: string) => {
   return `transferred from ${fromName} to ${toName}`;
 };
 
-const textForTweet = async (event: AggregatorEvent) => {
-  const ev = event as TwitterEvent;
+const textForTweet = async (event: OpenSeaAssetEvent) => {
+  const ev = event;
   const {
     asset,
     event_type,
@@ -312,8 +282,8 @@ const textForTweet = async (event: AggregatorEvent) => {
 const MAX_MEDIA_IMAGES = 4;
 
 // Helper function to extract numeric price from payment.quantity for sorting
-const getPurchasePrice = (event: AggregatorEvent): bigint => {
-  const payment = (event as TwitterEvent).payment;
+const getPurchasePrice = (event: OpenSeaAssetEvent): bigint => {
+  const payment = event.payment;
   if (!payment?.quantity) {
     return 0n;
   }
@@ -328,7 +298,7 @@ const getPurchasePrice = (event: AggregatorEvent): bigint => {
 
 const uploadImagesForGroup = async (
   client: MinimalTwitterClient,
-  group: AggregatorEvent[]
+  group: OpenSeaAssetEvent[]
 ): Promise<string[]> => {
   // Sort events by purchase price in descending order before selecting images
   const sortedGroup = [...group].sort((a, b) => {
@@ -369,11 +339,11 @@ const uploadImagesForGroup = async (
   return mediaIds;
 };
 
-const calculateTotalSpent = (group: AggregatorEvent[]): string | null => {
+const calculateTotalSpent = (group: OpenSeaAssetEvent[]): string | null => {
   const paymentsWithETH = group
-    .map((event) => (event as TwitterEvent).payment)
+    .map((event) => event.payment)
     .filter(
-      (payment): payment is TwitterPayment =>
+      (payment): payment is OpenSeaPayment =>
         payment !== undefined &&
         (payment.symbol === 'ETH' || payment.symbol === 'WETH')
     );
@@ -396,13 +366,13 @@ const calculateTotalSpent = (group: AggregatorEvent[]): string | null => {
 
 const tweetSweep = async (
   client: MinimalTwitterClient,
-  group: AggregatorEvent[]
+  group: OpenSeaAssetEvent[]
 ) => {
   const count = group.length;
   const media_ids = await uploadImagesForGroup(client, group);
 
   // Get buyer from first event (all events in sweep should have same buyer)
-  const firstEvent = group[0] as TwitterEvent;
+  const firstEvent = group[0];
   const buyerAddress = firstEvent?.buyer;
 
   // Calculate total spent
@@ -446,7 +416,7 @@ const tweetSweep = async (
 
 const tweetSingle = async (
   client: MinimalTwitterClient,
-  event: AggregatorEvent
+  event: OpenSeaAssetEvent
 ) => {
   let mediaId: string | undefined;
   const image = imageForNFT(event.nft ?? event.asset);
@@ -476,7 +446,7 @@ const tweetEvent = async (client: MinimalTwitterClient, event: TweetEvent) => {
     await tweetSweep(client, event.events);
     return;
   }
-  await tweetSingle(client, event as AggregatorEvent);
+  await tweetSingle(client, event as OpenSeaAssetEvent);
 };
 
 // Manual processQueue removed; AsyncQueue handles processing
@@ -525,10 +495,10 @@ const isOrderOffer = (orderType: string): boolean =>
   orderType.includes(BotEvent.offer);
 
 export const matchesSelection = (
-  ev: AggregatorEvent,
+  ev: OpenSeaAssetEvent,
   selectionSet: Set<BotEvent>
 ): boolean => {
-  const type = (ev as { event_type?: string }).event_type as string;
+  const type = ev.event_type;
   if (type === 'order') {
     const wantsListing = selectionSet.has(BotEvent.listing);
     const wantsOffer = selectionSet.has(BotEvent.offer);
@@ -536,7 +506,7 @@ export const matchesSelection = (
     if (!wantsAnyOrder) {
       return false;
     }
-    const orderType = (ev as { order_type?: string }).order_type ?? '';
+    const orderType = ev.order_type ?? '';
     if (isOrderListing(orderType)) {
       return wantsListing;
     }
@@ -554,7 +524,7 @@ export const matchesSelection = (
   return false;
 };
 
-export const tweetEvents = (events: AggregatorEvent[]) => {
+export const tweetEvents = (events: OpenSeaAssetEvent[]) => {
   if (!process.env.TWITTER_EVENTS) {
     return;
   }
@@ -575,7 +545,7 @@ export const tweetEvents = (events: AggregatorEvent[]) => {
   }
 
   // Add to sweep aggregator; this supports >50 event sweeps across batches
-  sweepAggregator.add(filteredEvents);
+  sweepAggregator.add(filteredEvents as AggregatorEvent[]);
   const pendingLarge = sweepAggregator.pendingLargeTxHashes();
   const pendingAll = sweepAggregator.pendingTxHashes();
   logger.debug(
@@ -585,7 +555,9 @@ export const tweetEvents = (events: AggregatorEvent[]) => {
   // Flush any sweeps that have settled
   const readySweeps = sweepAggregator.flushReady();
   for (const { tx, events: evts } of readySweeps) {
-    tweetQueue.enqueue({ event: { kind: 'sweep', txHash: tx, events: evts } });
+    tweetQueue.enqueue({
+      event: { kind: 'sweep', txHash: tx, events: evts as OpenSeaAssetEvent[] },
+    });
   }
   if (readySweeps.length > 0) {
     const counts = readySweeps.map((r) => r.events.length).join(',');
