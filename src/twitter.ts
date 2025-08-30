@@ -1,9 +1,17 @@
 import { TwitterApi } from 'twitter-api-v2';
-import { type AggregatorEvent, SweepAggregator, txHashFor } from './aggregator';
+import { txHashFor } from './aggregator';
 import { logger } from './logger';
 import { LRUCache } from './lru-cache';
 import { EventType, opensea, username } from './opensea';
 import { AsyncQueue } from './queue';
+import {
+  calculateTotalSpent,
+  eventKeyFor,
+  getDefaultSweepConfig,
+  isSweepEvent,
+  type SweepEvent,
+  SweepManager,
+} from './sweep-utils';
 import {
   BotEvent,
   botEventSet,
@@ -55,34 +63,12 @@ type MinimalTwitterClient = {
 };
 
 let twitterClient: MinimalTwitterClient | undefined;
-type SweepEvent = {
-  kind: 'sweep';
-  txHash: string;
-  events: OpenSeaAssetEvent[];
-};
 type TweetEvent = OpenSeaAssetEvent | SweepEvent;
 type TweetQueueItem = { event: TweetEvent };
 
-const isSweepEvent = (e: TweetEvent): e is SweepEvent => {
-  return (
-    (e as { kind?: string }).kind === 'sweep' &&
-    Array.isArray((e as { events?: unknown[] }).events)
-  );
-};
-
-// Sweep aggregation across runs
-const DEFAULT_SWEEP_SETTLE_MS = 15_000;
-const DEFAULT_SWEEP_MIN_GROUP_SIZE = 5;
-const SWEEP_SETTLE_MS = Number(
-  process.env.TWITTER_SWEEP_SETTLE_MS ?? DEFAULT_SWEEP_SETTLE_MS
-);
-const SWEEP_MIN_GROUP_SIZE = Number(
-  process.env.TWITTER_SWEEP_MIN_GROUP_SIZE ?? DEFAULT_SWEEP_MIN_GROUP_SIZE
-);
-const sweepAggregator = new SweepAggregator({
-  settleMs: SWEEP_SETTLE_MS,
-  minGroupSize: SWEEP_MIN_GROUP_SIZE,
-});
+// Initialize sweep manager for Twitter
+const sweepConfig = getDefaultSweepConfig('TWITTER');
+const sweepManager = new SweepManager(sweepConfig);
 
 // Generic async queue for tweeting
 const tweetQueue = new AsyncQueue<TweetQueueItem>({
@@ -99,11 +85,9 @@ const tweetQueue = new AsyncQueue<TweetQueueItem>({
 
     const event = item?.event;
     if (isSweepEvent(event)) {
-      for (const e of event.events) {
-        tweetedEventsCache.put(eventKeyFor(e), true);
-      }
+      sweepManager.markSweepProcessed(event);
     } else if (event) {
-      tweetedEventsCache.put(eventKeyFor(event as OpenSeaAssetEvent), true);
+      sweepManager.markProcessed(event as OpenSeaAssetEvent);
     }
   },
   process: async (item) => {
@@ -164,12 +148,7 @@ const keyForQueueItem = (item: TweetQueueItem): string => {
   return eventKeyFor(item.event as OpenSeaAssetEvent);
 };
 
-const eventKeyFor = (event: OpenSeaAssetEvent): string => {
-  const ts = String(event?.event_timestamp ?? '');
-  const nft = event?.nft ?? event?.asset;
-  const tokenId = String(nft?.identifier ?? '');
-  return `${ts}|${tokenId}`;
-};
+// eventKeyFor is now imported from sweep-utils
 
 // txHashFor provided by utils
 
@@ -339,30 +318,7 @@ const uploadImagesForGroup = async (
   return mediaIds;
 };
 
-const calculateTotalSpent = (group: OpenSeaAssetEvent[]): string | null => {
-  const paymentsWithETH = group
-    .map((event) => event.payment)
-    .filter(
-      (payment): payment is OpenSeaPayment =>
-        payment !== undefined &&
-        (payment.symbol === 'ETH' || payment.symbol === 'WETH')
-    );
-
-  if (paymentsWithETH.length === 0) {
-    return null;
-  }
-
-  // Use the first payment to get decimals (should be consistent for ETH)
-  const firstPayment = paymentsWithETH[0];
-  const { decimals, symbol } = firstPayment;
-
-  // Sum all quantities (as BigInt to avoid precision issues)
-  const totalQuantity = paymentsWithETH.reduce((sum, payment) => {
-    return sum + BigInt(payment.quantity);
-  }, BigInt(0));
-
-  return formatAmount(totalQuantity.toString(), decimals, symbol);
-};
+// calculateTotalSpent is now imported from sweep-utils
 
 const tweetSweep = async (
   client: MinimalTwitterClient,
@@ -545,18 +501,18 @@ export const tweetEvents = (events: OpenSeaAssetEvent[]) => {
   }
 
   // Add to sweep aggregator; this supports >50 event sweeps across batches
-  sweepAggregator.add(filteredEvents as AggregatorEvent[]);
-  const pendingLarge = sweepAggregator.pendingLargeTxHashes();
-  const pendingAll = sweepAggregator.pendingTxHashes();
+  sweepManager.addEvents(filteredEvents);
+  const pendingLarge = sweepManager.getPendingLargeTxHashes();
+  const pendingAll = sweepManager.getPendingTxHashes();
   logger.debug(
     `${logStart} Aggregator state: pendingTxs=${pendingAll.size} pendingLargeTxs=${pendingLarge.size}`
   );
 
   // Flush any sweeps that have settled
-  const readySweeps = sweepAggregator.flushReady();
+  const readySweeps = sweepManager.getReadySweeps();
   for (const { tx, events: evts } of readySweeps) {
     tweetQueue.enqueue({
-      event: { kind: 'sweep', txHash: tx, events: evts as OpenSeaAssetEvent[] },
+      event: { kind: 'sweep', txHash: tx, events: evts },
     });
   }
   if (readySweeps.length > 0) {
@@ -566,27 +522,17 @@ export const tweetEvents = (events: OpenSeaAssetEvent[]) => {
     );
   }
 
-  // Enqueue remaining individual events when not part of a pending/ready sweep
-  let queuedSingles = 0;
-  let skippedDupes = 0;
-  let skippedPending = 0;
-  for (const event of filteredEvents) {
-    const key = eventKeyFor(event);
-    if (tweetedEventsCache.get(key)) {
-      logger.debug(`${logStart} Skipping duplicate (event key: ${key})`);
-      skippedDupes += 1;
-      continue;
-    }
-    const tx = txHashFor(event);
-    if (tx && pendingLarge.has(tx)) {
-      skippedPending += 1; // awaiting or covered by sweep tweet
-      continue;
-    }
+  // Use sweep manager to filter processable events
+  const { processableEvents, skippedDupes, skippedPending } =
+    sweepManager.filterProcessableEvents(filteredEvents);
+
+  // Enqueue remaining individual events
+  for (const event of processableEvents) {
     tweetQueue.enqueue({ event });
-    queuedSingles += 1;
   }
+
   logger.debug(
-    `${logStart} Enqueue summary: singles=${queuedSingles} skippedDupes=${skippedDupes} skippedPendingSweep=${skippedPending} queue=${tweetQueue.size()}`
+    `${logStart} Enqueue summary: singles=${processableEvents.length} skippedDupes=${skippedDupes} skippedPendingSweep=${skippedPending} queue=${tweetQueue.size()}`
   );
 
   // Fire and forget

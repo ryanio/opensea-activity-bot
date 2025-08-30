@@ -1,0 +1,7 @@
+---
+description: Run format to find and fix errors and warnings
+globs: "**/*.{ts,tsx,js,jsx}"
+alwaysApply: true
+---
+
+After writing code, run `npm run format` to format code and fix all warnings and errors.

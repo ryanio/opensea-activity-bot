@@ -8,12 +8,22 @@ import { format } from 'timeago.js';
 import type { AggregatorEvent } from './aggregator';
 import { logger } from './logger';
 import { EventType, opensea, username } from './opensea';
-import { BotEvent } from './types';
+import {
+  calculateTotalSpent,
+  getDefaultSweepConfig,
+  type SweepEvent,
+  SweepManager,
+} from './sweep-utils';
+import { BotEvent, type OpenSeaAssetEvent } from './types';
 import { formatAmount, imageForNFT, timeout } from './utils';
 
 const logStart = '[Discord]';
 
 const { DISCORD_EVENTS, DISCORD_TOKEN } = process.env;
+
+// Initialize sweep manager for Discord
+const sweepConfig = getDefaultSweepConfig('DISCORD');
+const sweepManager = new SweepManager(sweepConfig);
 
 type ChannelEvents = [
   channelId: string,
@@ -210,6 +220,66 @@ const embed = async (event: AggregatorEvent) => {
   return built;
 };
 
+const buildSweepEmbed = async (sweep: SweepEvent): Promise<EmbedBuilder> => {
+  const count = sweep.events.length;
+  const totalSpent = calculateTotalSpent(sweep.events);
+
+  // Get buyer from first event (all events in sweep should have same buyer)
+  const firstEvent = sweep.events[0];
+  const buyerAddress = firstEvent?.buyer;
+
+  const title = `${count} items purchased`;
+  const fields: Field[] = [];
+
+  if (totalSpent) {
+    fields.push({ name: 'Total Spent', value: totalSpent, inline: true });
+  }
+
+  if (buyerAddress) {
+    const buyerName = await username(buyerAddress);
+    fields.push({ name: 'Buyer', value: buyerName, inline: true });
+  }
+
+  // Show transaction hash
+  if (sweep.txHash) {
+    const etherscanUrl = `https://etherscan.io/tx/${sweep.txHash}`;
+    fields.push({
+      name: 'Transaction',
+      value: `[View on Etherscan](${etherscanUrl})`,
+      inline: true,
+    });
+  }
+
+  const sweepEmbed = new EmbedBuilder()
+    .setColor('#62b778') // Green color for sweeps
+    .setTitle(title)
+    .setFields(fields)
+    .setURL(opensea.collectionURL());
+
+  // Add thumbnail from highest value NFT
+  const sortedEvents = [...sweep.events].sort((a, b) => {
+    const priceA = BigInt(a.payment?.quantity ?? '0');
+    const priceB = BigInt(b.payment?.quantity ?? '0');
+    if (priceA > priceB) {
+      return -1;
+    }
+    if (priceA < priceB) {
+      return 1;
+    }
+    return 0;
+  });
+
+  const highestValueNft = sortedEvents[0]?.nft ?? sortedEvents[0]?.asset;
+  if (highestValueNft) {
+    const image = imageForNFT(highestValueNft);
+    if (image) {
+      sweepEmbed.setThumbnail(image);
+    }
+  }
+
+  return sweepEmbed;
+};
+
 const messagesForEvents = async (
   events: AggregatorEvent[]
 ): Promise<MessageCreateOptions[]> => {
@@ -250,6 +320,89 @@ const getChannels = async (
   return channels;
 };
 
+const processSweepMessages = async (
+  readySweeps: Array<{ tx: string; events: OpenSeaAssetEvent[] }>,
+  discordChannels: Record<string, TextBasedChannel>,
+  isSendableChannel: (ch: TextBasedChannel) => ch is TextBasedChannel & {
+    send: (options: MessageCreateOptions) => Promise<unknown>;
+  }
+) => {
+  for (const readySweep of readySweeps) {
+    const sweep: SweepEvent = {
+      kind: 'sweep',
+      txHash: readySweep.tx,
+      events: readySweep.events,
+    };
+    const sweepEmbed = await buildSweepEmbed(sweep);
+    const message: MessageCreateOptions = { embeds: [sweepEmbed] };
+
+    // Send sweep to all configured channels (sweeps are notable events)
+    const allChannels = Object.values(discordChannels);
+
+    for (const channel of allChannels) {
+      if (!isSendableChannel(channel)) {
+        continue;
+      }
+      await channel.send(message);
+      logger.info(
+        `${logStart} Sent sweep message: ${sweep.events.length} items`
+      );
+    }
+
+    // Mark sweep as processed
+    sweepManager.markSweepProcessed(sweep);
+
+    // Wait between sweep messages
+    const INTER_MESSAGE_DELAY_MS = 3000;
+    await timeout(INTER_MESSAGE_DELAY_MS);
+  }
+};
+
+const processIndividualMessages = async (
+  processableEvents: OpenSeaAssetEvent[],
+  channelEvents: ChannelEvents,
+  discordChannels: Record<string, TextBasedChannel>,
+  isSendableChannel: (ch: TextBasedChannel) => ch is TextBasedChannel & {
+    send: (options: MessageCreateOptions) => Promise<unknown>;
+  }
+) => {
+  const messages = await messagesForEvents(
+    processableEvents as AggregatorEvent[]
+  );
+
+  for (const [index, message] of messages.entries()) {
+    const event = processableEvents[index];
+    const { event_type, order_type } = event;
+    const channels = channelsForEventType(
+      event_type as EventType,
+      order_type ?? '',
+      channelEvents,
+      discordChannels
+    );
+    if (channels.length === 0) {
+      continue;
+    }
+
+    logger.info(`${logStart} Sending individual message`);
+
+    for (const channel of channels) {
+      if (!isSendableChannel(channel)) {
+        continue;
+      }
+      await channel.send(message);
+    }
+
+    // Mark individual event as processed
+    sweepManager.markProcessed(event);
+
+    // Wait between messages
+    if (messages[index + 1]) {
+      const INTER_MESSAGE_DELAY_MS = 3000;
+      await timeout(INTER_MESSAGE_DELAY_MS);
+    }
+  }
+};
+
 export async function messageEvents(events: AggregatorEvent[]) {
   if (!DISCORD_EVENTS) {
     return;
@@ -258,11 +411,14 @@ export async function messageEvents(events: AggregatorEvent[]) {
   const client = new Client({ intents: [] });
   const channelEvents = channelsWithEvents();
 
+  // Convert to OpenSeaAssetEvent for better typing
+  const openSeaEvents = events as OpenSeaAssetEvent[];
+
   // only handle event types specified by DISCORD_EVENTS
-  const filteredEvents = events.filter((event) =>
+  const filteredEvents = openSeaEvents.filter((event) =>
     [...channelEvents.map((c) => c[1])]
       .flat()
-      .includes((event as { event_type?: string }).event_type as EventType)
+      .includes(event.event_type as EventType)
   );
 
   logger.info(`${logStart} Relevant events: ${filteredEvents.length}`);
@@ -271,50 +427,46 @@ export async function messageEvents(events: AggregatorEvent[]) {
     return;
   }
 
+  // Add events to sweep aggregator
+  sweepManager.addEvents(filteredEvents);
+
+  // Get ready sweeps
+  const readySweeps = sweepManager.getReadySweeps();
+
+  // Filter out events that are part of pending sweeps or already processed
+  const { processableEvents, skippedDupes, skippedPending } =
+    sweepManager.filterProcessableEvents(filteredEvents);
+
+  logger.debug(
+    `${logStart} Processing: sweeps=${readySweeps.length} singles=${processableEvents.length} ` +
+      `skippedDupes=${skippedDupes} skippedPending=${skippedPending}`
+  );
+
+  const isSendableChannel = (
+    ch: TextBasedChannel
+  ): ch is TextBasedChannel & {
+    send: (options: MessageCreateOptions) => Promise<unknown>;
+  } => {
+    const maybe = ch as unknown as {
+      send?: (options: MessageCreateOptions) => Promise<unknown>;
+    };
+    return typeof maybe.send === 'function';
+  };
+
   try {
     await login(client);
     const discordChannels = await getChannels(client, channelEvents);
-    const messages = await messagesForEvents(filteredEvents);
 
-    for (const [index, message] of messages.entries()) {
-      const { event_type, order_type } = filteredEvents[index] as unknown as {
-        event_type: EventType;
-        order_type: string;
-      };
-      const channels = channelsForEventType(
-        event_type,
-        order_type,
-        channelEvents,
-        discordChannels
-      );
-      if (channels.length === 0) {
-        continue;
-      }
-      logger.info(`${logStart} Sending message`);
-      const isSendableChannel = (
-        ch: TextBasedChannel
-      ): ch is TextBasedChannel & {
-        send: (options: MessageCreateOptions) => Promise<unknown>;
-      } => {
-        const maybe = ch as unknown as {
-          send?: (options: MessageCreateOptions) => Promise<unknown>;
-        };
-        return typeof maybe.send === 'function';
-      };
+    // Process sweep messages first
+    await processSweepMessages(readySweeps, discordChannels, isSendableChannel);
 
-      for (const channel of channels) {
-        if (!isSendableChannel(channel)) {
-          continue;
-        }
-        await channel.send(message);
-
-        // Wait 3s between messages
-        if (messages[index + 1]) {
-          const INTER_MESSAGE_DELAY_MS = 3000;
-          await timeout(INTER_MESSAGE_DELAY_MS);
-        }
-      }
-    }
+    // Process individual events
+    await processIndividualMessages(
+      processableEvents,
+      channelEvents,
+      discordChannels,
+      isSendableChannel
+    );
   } catch (error) {
     logger.error(error);
   }
