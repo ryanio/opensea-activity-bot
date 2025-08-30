@@ -55,7 +55,7 @@ type TweetEvent = AggregatorEvent | SweepEvent;
 type TweetQueueItem = { event: TweetEvent };
 
 type TwitterPayment = {
-  quantity: string | number;
+  quantity: string;
   decimals: number;
   symbol: string;
 };
@@ -311,12 +311,40 @@ const textForTweet = async (event: AggregatorEvent) => {
 
 const MAX_MEDIA_IMAGES = 4;
 
+// Helper function to extract numeric price from payment.quantity for sorting
+const getPurchasePrice = (event: AggregatorEvent): bigint => {
+  const payment = (event as TwitterEvent).payment;
+  if (!payment?.quantity) {
+    return 0n;
+  }
+
+  // Convert string quantity to BigInt for proper precision
+  try {
+    return BigInt(payment.quantity);
+  } catch {
+    return 0n;
+  }
+};
+
 const uploadImagesForGroup = async (
   client: MinimalTwitterClient,
   group: AggregatorEvent[]
 ): Promise<string[]> => {
+  // Sort events by purchase price in descending order before selecting images
+  const sortedGroup = [...group].sort((a, b) => {
+    const priceA = getPurchasePrice(a);
+    const priceB = getPurchasePrice(b);
+    if (priceA > priceB) {
+      return -1;
+    }
+    if (priceA < priceB) {
+      return 1;
+    }
+    return 0;
+  });
+
   const images: string[] = [];
-  for (const e of group) {
+  for (const e of sortedGroup) {
     const url = imageForNFT(e.nft ?? e.asset);
     if (url) {
       images.push(url);

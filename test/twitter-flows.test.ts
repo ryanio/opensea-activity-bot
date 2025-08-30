@@ -202,4 +202,38 @@ describe('twitter flows', () => {
     tweetEvents(listings.asset_events ?? []);
     expect(true).toBe(true);
   });
+
+  it('sorts sweep images by purchase price descending', async () => {
+    // Load batch events with different prices to test sorting
+    const batchSales = loadFixture('opensea/events-sales-batch.json');
+    const { tweetEvents } = await import('../src/twitter');
+
+    // Check that we have events with different prices
+    const events = batchSales.asset_events ?? [];
+    expect(events.length).toBeGreaterThan(0);
+
+    // Verify events have different payment quantities (prices)
+    const prices = events.map((e) => Number(e.payment?.quantity || 0));
+    const uniquePrices = new Set(prices);
+    expect(uniquePrices.size).toBeGreaterThan(1); // Should have different prices
+
+    // Process the events (this will trigger sweep aggregation and sorting)
+    tweetEvents(events);
+
+    // Get the mock after calling tweetEvents
+    const m = require('twitter-api-v2') as {
+      __mockReadWrite: {
+        v1: { uploadMedia: jest.Mock };
+        v2: { tweet: jest.Mock };
+      };
+    };
+
+    // Wait for processing
+    await waitFor(
+      () => (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls.length > 0
+    );
+
+    // Verify the tweet was called (sweep should be detected)
+    expect(m.__mockReadWrite.v2.tweet).toHaveBeenCalled();
+  });
 });

@@ -91,7 +91,7 @@ const buildOrderEmbed = async (
   event: AggregatorEvent
 ): Promise<{ title: string; fields: Field[] }> => {
   const { payment, order_type, expiration_date, maker, criteria } = event as {
-    payment: { quantity: string | number; decimals: number; symbol: string };
+    payment: { quantity: string; decimals: number; symbol: string };
     order_type: string;
     expiration_date: number;
     maker: string;
@@ -138,7 +138,7 @@ const buildSaleEmbed = async (
   event: AggregatorEvent
 ): Promise<{ title: string; fields: Field[] }> => {
   const { payment, buyer } = event as {
-    payment: { quantity: string | number; decimals: number; symbol: string };
+    payment: { quantity: string; decimals: number; symbol: string };
     buyer: string;
   };
   const fields: Field[] = [];
