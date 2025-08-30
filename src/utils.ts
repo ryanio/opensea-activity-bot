@@ -31,7 +31,6 @@ export const minOfferETH = FixedNumber.fromString(
   process.env.MIN_OFFER_ETH ?? '0'
 );
 export const shortTokenAddr = shortAddr(process.env.TOKEN_ADDRESS ?? '');
-export const logStart = `[${shortTokenAddr}]`;
 export const chain = process.env.CHAIN ?? 'ethereum';
 
 /**
@@ -112,11 +111,6 @@ export const imageForNFT = (nft?: NFTLike): string | undefined => {
 };
 
 /**
- * Returns a transaction hash for an event, if present.
- */
-// Aggregator moved to aggregator.ts
-
-/**
  * Fetch an image and return a buffer and mimeType.
  * Converts SVGs to PNG for broader compatibility.
  */
@@ -134,7 +128,7 @@ export const base64Image = async (
       buffer = (await sharp(buffer).png().toBuffer()) as Buffer;
       mimeType = 'image/png';
     } catch (_e) {
-      logger.debug(`${logStart}Utils - SVG to PNG conversion failed`);
+      logger.debug('utils: SVG to PNG conversion failed');
     }
   }
 

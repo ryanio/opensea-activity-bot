@@ -9,15 +9,9 @@ import type { AggregatorEvent } from './aggregator';
 import { logger } from './logger';
 import { EventType, opensea } from './opensea';
 import { BotEvent } from './types';
-import {
-  formatAmount,
-  imageForNFT,
-  logStart,
-  timeout,
-  username,
-} from './utils';
+import { formatAmount, imageForNFT, timeout, username } from './utils';
 
-const logStartDiscord = `${logStart} [Discord]`;
+const logStart = '[Discord]';
 
 const { DISCORD_EVENTS, DISCORD_TOKEN } = process.env;
 
@@ -242,12 +236,12 @@ const getChannels = async (
   channelEvents: ChannelEvents
 ): Promise<Record<string, TextBasedChannel>> => {
   const channels: Record<string, TextBasedChannel> = {};
-  logger.info(`${logStartDiscord} Selected channels:`);
+  logger.info(`${logStart} Selected channels:`);
   for (const [channelId, events] of channelEvents) {
     const channel = await client.channels.fetch(channelId);
     channels[channelId] = channel as TextBasedChannel;
     logger.info(
-      `${logStartDiscord} * #${
+      `${logStart} * #${
         (channel as unknown as { name?: string; channelId?: string }).name ??
         (channel as unknown as { name?: string; channelId?: string }).channelId
       }: ${events.join(', ')}`
@@ -271,7 +265,7 @@ export async function messageEvents(events: AggregatorEvent[]) {
       .includes((event as { event_type?: string }).event_type as EventType)
   );
 
-  logger.info(`${logStartDiscord} Relevant events: ${filteredEvents.length}`);
+  logger.info(`${logStart} Relevant events: ${filteredEvents.length}`);
 
   if (filteredEvents.length === 0) {
     return;
@@ -296,7 +290,7 @@ export async function messageEvents(events: AggregatorEvent[]) {
       if (channels.length === 0) {
         continue;
       }
-      logger.info(`${logStartDiscord} Sending message`);
+      logger.info(`${logStart} Sending message`);
       const isSendableChannel = (
         ch: TextBasedChannel
       ): ch is TextBasedChannel & {

@@ -1,4 +1,5 @@
 import { inspect } from 'node:util';
+import { shortTokenAddr } from './utils';
 
 type Level = 'debug' | 'info' | 'warn' | 'error';
 
@@ -48,7 +49,7 @@ const write = (level: Level, parts: unknown[]) => {
   }
   const ts = new Date().toISOString();
   const msg = parts.map(serialize).join(' ');
-  const line = `${ts} [${level.toUpperCase()}] [Activity] ${msg}\n`;
+  const line = `${ts} [${level.toUpperCase()}] [Activity] [${shortTokenAddr}] ${msg}\n`;
   if (level === 'error' || level === 'warn') {
     process.stderr.write(line);
   } else {

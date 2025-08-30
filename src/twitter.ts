@@ -5,15 +5,9 @@ import { LRUCache } from './lru-cache';
 import { EventType, opensea } from './opensea';
 import { AsyncQueue } from './queue';
 import { BotEvent, botEventSet } from './types';
-import {
-  base64Image,
-  formatAmount,
-  imageForNFT,
-  logStart,
-  username,
-} from './utils';
+import { base64Image, formatAmount, imageForNFT, username } from './utils';
 
-const logStartTwitter = `${logStart} [Twitter]`;
+const logStart = '[Twitter]';
 
 // Read env dynamically in functions to respect runtime changes (tests)
 
@@ -123,7 +117,7 @@ const tweetQueue = new AsyncQueue<TweetQueueItem>({
     } catch (error) {
       const key = keyForQueueItem(item);
       logger.warn(
-        `${logStartTwitter} Tweet failed for item (key: ${key}). Will classify for retry/drop:`,
+        `${logStart} Tweet failed for item (key: ${key}). Will classify for retry/drop:`,
         error
       );
       throw error; // let queue classify and decide
@@ -335,7 +329,7 @@ const uploadImagesForGroup = async (
       mediaIds.push(id);
     } catch (uploadError) {
       logger.warn(
-        `${logStartTwitter} Sweep media upload failed; continuing:`,
+        `${logStart} Sweep media upload failed; continuing:`,
         uploadError
       );
     }
@@ -366,7 +360,7 @@ const tweetSweep = async (
     const key = eventKeyFor(e);
     tweetedEventsCache.put(key, true);
   }
-  logger.info(`${logStartTwitter} Sweep tweeted: ${count} items`);
+  logger.info(`${logStart} Sweep tweeted: ${count} items`);
 };
 
 const tweetSingle = async (
@@ -381,7 +375,7 @@ const tweetSingle = async (
       mediaId = await client.v1.uploadMedia(buffer, { mimeType });
     } catch (uploadError) {
       logger.warn(
-        `${logStartTwitter} Media upload failed, tweeting without media:`,
+        `${logStart} Media upload failed, tweeting without media:`,
         uploadError
       );
     }
@@ -392,7 +386,7 @@ const tweetSingle = async (
     : { text: status };
   await client.v2.tweet(tweetParams);
   const key = eventKeyFor(event);
-  logger.info(`${logStartTwitter} Tweeted (event key: ${key}): ${status}`);
+  logger.info(`${logStart} Tweeted (event key: ${key}): ${status}`);
   tweetedEventsCache.put(key, true);
 };
 
@@ -493,7 +487,7 @@ export const tweetEvents = (events: AggregatorEvent[]) => {
     matchesSelection(event, requestedSet)
   );
 
-  logger.info(`${logStartTwitter} Relevant events: ${filteredEvents.length}`);
+  logger.info(`${logStart} Relevant events: ${filteredEvents.length}`);
 
   if (filteredEvents.length === 0) {
     return;
@@ -504,7 +498,7 @@ export const tweetEvents = (events: AggregatorEvent[]) => {
   const pendingLarge = sweepAggregator.pendingLargeTxHashes();
   const pendingAll = sweepAggregator.pendingTxHashes();
   logger.debug(
-    `${logStartTwitter} Aggregator state: pendingTxs=${pendingAll.size} pendingLargeTxs=${pendingLarge.size}`
+    `${logStart} Aggregator state: pendingTxs=${pendingAll.size} pendingLargeTxs=${pendingLarge.size}`
   );
 
   // Flush any sweeps that have settled
@@ -515,7 +509,7 @@ export const tweetEvents = (events: AggregatorEvent[]) => {
   if (readySweeps.length > 0) {
     const counts = readySweeps.map((r) => r.events.length).join(',');
     logger.debug(
-      `${logStartTwitter} Enqueued ${readySweeps.length} sweep(s) [sizes=${counts}] queue=${tweetQueue.size()}`
+      `${logStart} Enqueued ${readySweeps.length} sweep(s) [sizes=${counts}] queue=${tweetQueue.size()}`
     );
   }
 
@@ -526,7 +520,7 @@ export const tweetEvents = (events: AggregatorEvent[]) => {
   for (const event of filteredEvents) {
     const key = eventKeyFor(event);
     if (tweetedEventsCache.get(key)) {
-      logger.debug(`${logStartTwitter} Skipping duplicate (event key: ${key})`);
+      logger.debug(`${logStart} Skipping duplicate (event key: ${key})`);
       skippedDupes += 1;
       continue;
     }
@@ -539,7 +533,7 @@ export const tweetEvents = (events: AggregatorEvent[]) => {
     queuedSingles += 1;
   }
   logger.debug(
-    `${logStartTwitter} Enqueue summary: singles=${queuedSingles} skippedDupes=${skippedDupes} skippedPendingSweep=${skippedPending} queue=${tweetQueue.size()}`
+    `${logStart} Enqueue summary: singles=${queuedSingles} skippedDupes=${skippedDupes} skippedPendingSweep=${skippedPending} queue=${tweetQueue.size()}`
   );
 
   // Fire and forget

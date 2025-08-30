@@ -3,13 +3,7 @@ import { FixedNumber } from 'ethers';
 import { channelsWithEvents } from './discord';
 import { logger } from './logger';
 import { BotEvent, botEventSet } from './types';
-import {
-  chain,
-  logStart,
-  minOfferETH,
-  openseaGet,
-  unixTimestamp,
-} from './utils';
+import { chain, minOfferETH, openseaGet, unixTimestamp } from './utils';
 
 const {
   OPENSEA_API_TOKEN,
@@ -21,9 +15,7 @@ const {
 
 let lastEventTimestamp = unixTimestamp(new Date());
 if (LAST_EVENT_TIMESTAMP) {
-  logger.info(
-    `${logStart} Using LAST_EVENT_TIMESTAMP: ${LAST_EVENT_TIMESTAMP}`
-  );
+  logger.info(`Using LAST_EVENT_TIMESTAMP: ${LAST_EVENT_TIMESTAMP}`);
   lastEventTimestamp = Number.parseInt(LAST_EVENT_TIMESTAMP, 10);
 }
 
@@ -119,7 +111,7 @@ const fetchCollectionSlug = async (address: string) => {
 export const fetchEvents = async (): Promise<Record<string, unknown>[]> => {
   await fetchCollectionSlug(TOKEN_ADDRESS ?? '');
 
-  logger.info(`${logStart} Fetching events`);
+  logger.info('Fetching events');
 
   const eventTypes = enabledEventTypes();
   const DEFAULT_QUERY_LIMIT = 50;
@@ -154,7 +146,7 @@ export const fetchEvents = async (): Promise<Record<string, unknown>[]> => {
   });
 
   const eventsPreFilter = events.length;
-  logger.info(`${logStart} Fetched events: ${eventsPreFilter}`);
+  logger.info(`Fetched events: ${eventsPreFilter}`);
 
   // Filter out low value offers
   events = events.filter((event) => {
@@ -175,7 +167,7 @@ export const fetchEvents = async (): Promise<Record<string, unknown>[]> => {
   const eventsFiltered = eventsPreFilter - eventsPostFilter;
   if (eventsFiltered > 0) {
     logger.info(
-      `${logStart} Offers under ${minOfferETH} ETH filtered out: ${eventsFiltered}`
+      `Offers under ${minOfferETH} ETH filtered out: ${eventsFiltered}`
     );
   }
 

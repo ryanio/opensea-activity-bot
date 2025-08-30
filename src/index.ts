@@ -2,7 +2,7 @@ import { messageEvents } from './discord';
 import { logger } from './logger';
 import { fetchEvents } from './opensea';
 import { tweetEvents } from './twitter';
-import { botInterval, logStart } from './utils';
+import { botInterval } from './utils';
 
 function main() {
   const run = async () => {
@@ -11,13 +11,13 @@ function main() {
       return;
     }
 
-    logger.debug(`${logStart} OpenSea API Events:`, events);
+    logger.debug('OpenSea API Events:', events);
 
     messageEvents(events);
     tweetEvents(events);
   };
 
-  logger.info(`${logStart}Starting bot. Interval: ${botInterval}s`);
+  logger.info(`Starting bot. Interval: ${botInterval}s`);
   run();
 
   const MS_PER_SECOND = 1000;
