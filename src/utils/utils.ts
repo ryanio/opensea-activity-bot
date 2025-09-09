@@ -72,10 +72,22 @@ export const fetchImageBuffer = async (
 
   if (mimeType === 'image/svg+xml' || imageURL.toLowerCase().endsWith('.svg')) {
     try {
-      buffer = (await sharp(buffer).png().toBuffer()) as Buffer;
+      // Fix font issues for unicode character rendering
+      const svgString = buffer.toString('utf8');
+
+      // Replace the monospace font stack with fonts that definitely support mathematical symbols
+      const fixedSvg = svgString.replace(
+        /font-family:[^;]+/g,
+        'font-family:"DejaVu Sans","Liberation Sans","Noto Sans","Arial Unicode MS",sans-serif'
+      );
+
+      buffer = (await sharp(Buffer.from(fixedSvg, 'utf8'))
+        .png()
+        .toBuffer()) as Buffer;
       mimeType = 'image/png';
-    } catch (_e) {
-      logger.debug('utils: SVG to PNG conversion failed');
+    } catch (e) {
+      logger.debug('utils: SVG to PNG conversion failed:', e);
+      // Keep original SVG buffer and mime type on failure
     }
   }
 

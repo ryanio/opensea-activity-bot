@@ -1,0 +1,20 @@
+{
+  "asset_events": [
+    {
+      "event_type": "sale",
+      "event_timestamp": 1756492379,
+      "payment": {
+        "quantity": "1000000000000000",
+        "decimals": 18,
+        "symbol": "ETH"
+      },
+      "buyer": "0x123",
+      "nft": {
+        "identifier": "6950",
+        "name": "GlyphBot #6950 - Unicode Weapon Test",
+        "image_url": "https://raw2.seadn.io/ethereum/0xb6c2c2d2999c1b532e089a7ad4cb7f8c91cf5075/dbd33ce112f6561573a44f8e7f1970/bcdbd33ce112f6561573a44f8e7f1970.svg",
+        "opensea_url": "https://opensea.io/assets/ethereum/0xb6c2c2d2999c1b532e089a7ad4cb7f8c91cf5075/6950"
+      }
+    }
+  ]
+}
