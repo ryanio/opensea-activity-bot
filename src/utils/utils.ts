@@ -75,10 +75,11 @@ export const fetchImageBuffer = async (
       // Fix font issues for unicode character rendering
       const svgString = buffer.toString('utf8');
 
-      // Replace the monospace font stack with fonts that definitely support mathematical symbols
+      // Replace with browser-realistic monospace fallback that supports unicode
+      // Browsers would fall back: SF Mono -> Menlo -> Consolas -> DejaVu Sans Mono -> monospace
       const fixedSvg = svgString.replace(
         /font-family:[^;]+/g,
-        'font-family:"DejaVu Sans","Liberation Sans","Noto Sans","Arial Unicode MS",sans-serif'
+        'font-family:"SF Mono","Menlo","Consolas","DejaVu Sans Mono","Liberation Mono",monospace'
       );
 
       buffer = (await sharp(Buffer.from(fixedSvg, 'utf8'))

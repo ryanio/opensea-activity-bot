@@ -52,6 +52,36 @@ describe('Unicode SVG Character Encoding', () => {
     expect(fetch).toHaveBeenCalledWith(svgUrl);
   });
 
+  it('should use browser-realistic monospace font stack for better unicode support', async () => {
+    // Create SVG with problematic monospace font that needs fixing
+    const svgWithProblematicFont = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+      <style>text{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:24px}</style>
+      <text x="50" y="50">⟈</text>
+    </svg>`;
+
+    (fetch as jest.Mock).mockResolvedValueOnce({
+      arrayBuffer: () =>
+        Promise.resolve(
+          new TextEncoder().encode(svgWithProblematicFont).buffer
+        ),
+      headers: {
+        get: () => 'image/svg+xml',
+      },
+    });
+
+    const result = await fetchImageBuffer('https://example.com/weapon.svg');
+
+    expect(result.mimeType).toBe('image/png');
+    expect(result.buffer).toBeInstanceOf(Buffer);
+    expect(result.buffer.length).toBeGreaterThan(0);
+
+    // Verify the original SVG had the problematic font
+    expect(svgWithProblematicFont).toContain(
+      'ui-monospace,Menlo,Consolas,monospace'
+    );
+    expect(svgWithProblematicFont).toContain('⟈');
+  });
+
   it('should handle non-SVG images without modification', async () => {
     // PNG file header signature
     const PNG_SIGNATURE_BYTE_1 = 0x89;
