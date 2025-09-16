@@ -11,6 +11,7 @@ import {
 } from './types';
 import { logger } from './utils/logger';
 import { LRUCache } from './utils/lru-cache';
+import { eventKeyFor } from './utils/sweep';
 import { chain, minOfferETH, shortAddr, unixTimestamp } from './utils/utils';
 
 const {
@@ -26,6 +27,12 @@ if (LAST_EVENT_TIMESTAMP) {
   logger.info(`Using LAST_EVENT_TIMESTAMP: ${LAST_EVENT_TIMESTAMP}`);
   lastEventTimestamp = Number.parseInt(LAST_EVENT_TIMESTAMP, 10);
 }
+
+// Global event cache to prevent reprocessing the same events
+const FETCHED_EVENTS_CACHE_CAPACITY = 1000;
+const fetchedEventsCache = new LRUCache<string, boolean>(
+  FETCHED_EVENTS_CACHE_CAPACITY
+);
 
 export const opensea = {
   api: 'https://api.opensea.io/api/v2/',
@@ -204,7 +211,8 @@ export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
   if (events.length > 0) {
     const lastEvent = events.at(-1);
     if (lastEvent) {
-      lastEventTimestamp = lastEvent.event_timestamp;
+      // Increment by 1 to ensure we don't fetch events with the same timestamp again
+      lastEventTimestamp = lastEvent.event_timestamp + 1;
     }
   }
 
@@ -240,6 +248,24 @@ export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
     logger.info(
       `Offers under ${minOfferETH} ETH filtered out: ${eventsFiltered}`
     );
+  }
+
+  // Filter out events that have already been fetched/processed
+  const eventsPreDedup = events.length;
+  events = events.filter((event) => {
+    const eventKey = eventKeyFor(event);
+    if (fetchedEventsCache.get(eventKey)) {
+      return false; // Already seen this event
+    }
+    // Mark as seen
+    fetchedEventsCache.put(eventKey, true);
+    return true;
+  });
+
+  const eventsPostDedup = events.length;
+  const eventsDeduplicated = eventsPreDedup - eventsPostDedup;
+  if (eventsDeduplicated > 0) {
+    logger.info(`Events deduplicated: ${eventsDeduplicated}`);
   }
 
   return events;
