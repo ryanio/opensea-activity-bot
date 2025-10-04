@@ -1,14 +1,13 @@
 import { URLSearchParams } from 'node:url';
 import { FixedNumber } from 'ethers';
 import { channelsWithEvents } from './platforms/discord';
-import {
-  BotEvent,
-  botEventSet,
-  type OpenSeaAccount,
-  type OpenSeaAssetEvent,
-  type OpenSeaContractResponse,
-  type OpenSeaEventsResponse,
+import type {
+  OpenSeaAccount,
+  OpenSeaAssetEvent,
+  OpenSeaContractResponse,
+  OpenSeaEventsResponse,
 } from './types';
+import { parseEvents, wantsOpenSeaEventTypes } from './utils/events';
 import { logger } from './utils/logger';
 import { LRUCache } from './utils/lru-cache';
 import { eventKeyFor } from './utils/sweep';
@@ -116,42 +115,23 @@ export const EventType = {
 } as const;
 export type EventType = (typeof EventType)[keyof typeof EventType];
 
-const enabledEventTypes = (): string[] => {
-  const eventTypes = new Set<string>();
-  // Include any Discord-declared event types verbatim (Discord supports 'order')
+const addDiscordDeclaredEventTypes = (set: Set<string>) => {
   for (const [_channelId, discordEventTypes] of channelsWithEvents()) {
     for (const eventType of discordEventTypes) {
-      eventTypes.add(eventType);
+      set.add(eventType);
     }
   }
+};
 
-  // Parse and validate TWITTER_EVENTS: only allow listing|offer|sale|transfer
-  const rawTwitter = (TWITTER_EVENTS ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-  if (rawTwitter.length > 0) {
-    const invalid = rawTwitter.filter((t) => !botEventSet.has(t));
-    if (invalid.length > 0) {
-      throw new Error(
-        `Invalid TWITTER_EVENTS value(s): ${invalid.join(
-          ', '
-        )}. Allowed: ${Object.values(BotEvent).join(', ')}`
-      );
-    }
-    // Map listing/offer into OpenSea 'order' event_type
-    if (
-      rawTwitter.includes(BotEvent.listing) ||
-      rawTwitter.includes(BotEvent.offer)
-    ) {
-      eventTypes.add('order');
-    }
-    if (rawTwitter.includes(BotEvent.sale)) {
-      eventTypes.add('sale');
-    }
-    if (rawTwitter.includes(BotEvent.transfer)) {
-      eventTypes.add('transfer');
-    }
+const enabledEventTypes = (): string[] => {
+  const eventTypes = new Set<string>();
+  addDiscordDeclaredEventTypes(eventTypes);
+
+  // Parse TWITTER_EVENTS and map to OpenSea event_type(s)
+  const tw = parseEvents(TWITTER_EVENTS);
+  const wantedFromTwitter = wantsOpenSeaEventTypes(tw);
+  for (const t of wantedFromTwitter) {
+    eventTypes.add(t);
   }
 
   if (eventTypes.size === 0) {

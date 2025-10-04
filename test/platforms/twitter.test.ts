@@ -11,10 +11,10 @@ process.env.TWITTER_ACCESS_TOKEN = 'z';
 process.env.TWITTER_ACCESS_TOKEN_SECRET = 'w';
 
 // Stub utils (must be defined before importing code that uses it)
-jest.mock('../src/utils/utils', () => {
+jest.mock('../../src/utils/utils', () => {
   const actual = jest.requireActual(
-    '../src/utils/utils'
-  ) as typeof import('../src/utils/utils');
+    '../../src/utils/utils'
+  ) as typeof import('../../src/utils/utils');
   const BYTE_ONE = 1;
   const BYTE_TWO = 2;
   const BYTE_THREE = 3;
@@ -28,11 +28,11 @@ jest.mock('../src/utils/utils', () => {
   return {
     ...actual,
     fetchImageBuffer,
-  } satisfies typeof import('../src/utils/utils');
+  } satisfies typeof import('../../src/utils/utils');
 });
 
 // Stub opensea module to avoid cross-import init
-jest.mock('../src/opensea', () => ({
+jest.mock('../../src/opensea', () => ({
   opensea: {
     api: 'https://api.opensea.io/api/v2/',
     collectionURL: () => 'https://opensea.io/collection/glyphbots',
@@ -67,7 +67,7 @@ jest.mock('twitter-api-v2', () => {
 });
 
 const loadFixture = (name: string) => {
-  const p = path.join(__dirname, 'fixtures', name);
+  const p = path.join(__dirname, '..', 'fixtures', name);
   const raw = fs.readFileSync(p, 'utf-8');
   return JSON.parse(raw);
 };
@@ -100,7 +100,7 @@ describe('twitter flows', () => {
 
   it('tweets a sweep for grouped sales', async () => {
     const { asset_events } = loadFixture('opensea/events-sales-group.json');
-    const { tweetEvents } = await import('../src/platforms/twitter');
+    const { tweetEvents } = await import('../../src/platforms/twitter');
     tweetEvents(asset_events);
     const m = require('twitter-api-v2') as {
       __mockReadWrite: {
@@ -126,7 +126,7 @@ describe('twitter flows', () => {
 
   it('only tweets one sweep per tx across repeated runs', async () => {
     const { asset_events } = loadFixture('opensea/events-sales-group.json');
-    const { tweetEvents } = await import('../src/platforms/twitter');
+    const { tweetEvents } = await import('../../src/platforms/twitter');
     // Simulate polling loop invoking with same batch repeatedly
     tweetEvents(asset_events);
     tweetEvents(asset_events);
@@ -151,7 +151,7 @@ describe('twitter flows', () => {
 
   it('converts SVG to PNG when tweeting single image', async () => {
     const { asset_events } = loadFixture('svg-image.json');
-    const { tweetEvents } = await import('../src/platforms/twitter');
+    const { tweetEvents } = await import('../../src/platforms/twitter');
     tweetEvents(asset_events);
     const m = require('twitter-api-v2') as {
       __mockReadWrite: {
@@ -176,7 +176,7 @@ describe('twitter flows', () => {
 
   it('tweets a single sale event with correct text', async () => {
     const { asset_events } = loadFixture('opensea/events-sales.json');
-    const { tweetEvents } = await import('../src/platforms/twitter');
+    const { tweetEvents } = await import('../../src/platforms/twitter');
     tweetEvents(asset_events);
     const m = require('twitter-api-v2') as {
       __mockReadWrite: {
@@ -198,7 +198,7 @@ describe('twitter flows', () => {
 
   it('tweets a listing event with correct text', async () => {
     const listings = loadFixture('opensea/get-listings.json');
-    const { tweetEvents } = await import('../src/platforms/twitter');
+    const { tweetEvents } = await import('../../src/platforms/twitter');
     tweetEvents(listings.asset_events ?? []);
     expect(true).toBe(true);
   });
@@ -206,7 +206,7 @@ describe('twitter flows', () => {
   it('sorts sweep images by purchase price descending', async () => {
     // Load batch events with different prices to test sorting
     const batchSales = loadFixture('opensea/events-sales-batch.json');
-    const { tweetEvents } = await import('../src/platforms/twitter');
+    const { tweetEvents } = await import('../../src/platforms/twitter');
 
     // Check that we have events with different prices
     const events = batchSales.asset_events ?? [];
@@ -235,5 +235,61 @@ describe('twitter flows', () => {
 
     // Verify the tweet was called (sweep should be detected)
     expect(m.__mockReadWrite.v2.tweet).toHaveBeenCalled();
+  });
+});
+
+// Add basic tests for matchesSelection mint/burn classification
+import {
+  matchesSelection,
+  parseRequestedEvents,
+} from '../../src/platforms/twitter';
+import type { OpenSeaAssetEvent } from '../../src/types';
+
+describe('twitter selection for mint/burn', () => {
+  const base = {
+    event_type: 'transfer',
+    event_timestamp: 1,
+    chain: 'ethereum',
+    quantity: 1,
+  } as unknown as OpenSeaAssetEvent;
+
+  test('selects mint when requested', () => {
+    const ev: OpenSeaAssetEvent = {
+      ...base,
+      from_address: '0x0000000000000000000000000000000000000000',
+      to_address: '0x1234567890123456789012345678901234567890',
+    };
+    const set = parseRequestedEvents('mint');
+    expect(matchesSelection(ev, set)).toBe(true);
+  });
+
+  test('selects burn when requested', () => {
+    const ev: OpenSeaAssetEvent = {
+      ...base,
+      from_address: '0x1234567890123456789012345678901234567890',
+      to_address: '0x000000000000000000000000000000000000dead',
+    };
+    const set = parseRequestedEvents('burn');
+    expect(matchesSelection(ev, set)).toBe(true);
+  });
+
+  test('mint included when transfer requested', () => {
+    const ev: OpenSeaAssetEvent = {
+      ...base,
+      from_address: '0x0000000000000000000000000000000000000000',
+      to_address: '0x1234567890123456789012345678901234567890',
+    };
+    const set = parseRequestedEvents('transfer');
+    expect(matchesSelection(ev, set)).toBe(true);
+  });
+
+  test('burn included when transfer requested', () => {
+    const ev: OpenSeaAssetEvent = {
+      ...base,
+      from_address: '0x1234567890123456789012345678901234567890',
+      to_address: '0x0000000000000000000000000000000000000001',
+    };
+    const set = parseRequestedEvents('transfer');
+    expect(matchesSelection(ev, set)).toBe(true);
   });
 });

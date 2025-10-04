@@ -1,12 +1,8 @@
 import { TwitterApi } from 'twitter-api-v2';
 import { EventType, opensea, username } from '../opensea';
-import {
-  BotEvent,
-  botEventSet,
-  type OpenSeaAssetEvent,
-  type OpenSeaPayment,
-} from '../types';
+import type { BotEvent, OpenSeaAssetEvent, OpenSeaPayment } from '../types';
 import { txHashFor } from '../utils/aggregator';
+import { isEventWanted, parseEvents } from '../utils/events';
 import { logger } from '../utils/logger';
 import { LRUCache } from '../utils/lru-cache';
 import { AsyncQueue } from '../utils/queue';
@@ -19,11 +15,14 @@ import {
   SweepManager,
   sortEventsByPrice,
 } from '../utils/sweep';
-import { fetchImageBuffer, formatAmount, imageForNFT } from '../utils/utils';
+import {
+  classifyTransfer,
+  fetchImageBuffer,
+  formatAmount,
+  imageForNFT,
+} from '../utils/utils';
 
 const logStart = '[Twitter]';
-
-// Read env dynamically in functions to respect runtime changes (tests)
 
 // In-memory dedupe for tweeted events
 const TWEETED_EVENTS_CACHE_CAPACITY = 2000;
@@ -159,9 +158,10 @@ const formatNftPrefix = (
   if (!nft) {
     return '';
   }
-  const specialContract =
-    process.env.TOKEN_ADDRESS?.toLowerCase() ===
+  const GLYPHBOTS_CONTRACT_ADDRESS =
     '0xb6c2c2d2999c1b532e089a7ad4cb7f8c91cf5075';
+  const specialContract =
+    process.env.TOKEN_ADDRESS?.toLowerCase() === GLYPHBOTS_CONTRACT_ADDRESS;
   if (specialContract && nft.name && nft.identifier !== undefined) {
     const nameParts = String(nft.name).split(' - ');
     const suffix = nameParts.length > 1 ? nameParts[1].trim() : undefined;
@@ -208,20 +208,79 @@ const formatSaleText = async (payment: OpenSeaPayment, buyer: string) => {
   return `purchased for ${amount} by ${name}`;
 };
 
-const formatTransferText = async (from_address: string, to_address: string) => {
-  const fromName = await username(from_address);
-  const toName = await username(to_address);
+const formatTransferText = async (event: OpenSeaAssetEvent) => {
+  const kind = classifyTransfer(event);
+  const from = event.from_address ?? '';
+  const to = event.to_address ?? '';
+  if (kind === 'mint') {
+    const toName = await username(to);
+    return `minted by ${toName}`;
+  }
+  if (kind === 'burn') {
+    const fromName = await username(from);
+    return `burned by ${fromName}`;
+  }
+  const fromName = await username(from);
+  const toName = await username(to);
   return `transferred from ${fromName} to ${toName}`;
 };
 
-const textForTweet = async (event: OpenSeaAssetEvent) => {
+const textForOrder = async (params: {
+  nft: { name?: string; identifier?: string | number } | undefined;
+  payment: OpenSeaPayment;
+  maker: string;
+  order_type: string;
+  expiration_date: number;
+}): Promise<string> => {
+  const { nft, payment, maker, order_type, expiration_date } = params;
+  let text = '';
+  if (nft) {
+    text += formatNftPrefix(nft);
+  }
+  text += await formatOrderText(payment, maker, order_type, expiration_date);
+  return text;
+};
+
+const textForSale = async (params: {
+  nft: { name?: string; identifier?: string | number } | undefined;
+  payment: OpenSeaPayment;
+  buyer: string;
+}): Promise<string> => {
+  const { nft, payment, buyer } = params;
+  let text = '';
+  if (nft) {
+    text += formatNftPrefix(nft);
+  }
+  text += await formatSaleText(payment, buyer);
+  return text;
+};
+
+const textForTransfer = async (
+  nft:
+    | { name?: string; identifier?: string | number; opensea_url?: string }
+    | undefined,
+  ev: OpenSeaAssetEvent
+): Promise<string> => {
+  const kind = classifyTransfer(ev);
+  if (kind === 'mint' || kind === 'burn') {
+    const name = nft?.name ?? `#${String(nft?.identifier ?? '')}`;
+    const phrase = await formatTransferText(ev);
+    return `${name} ${phrase}`;
+  }
+  let text = '';
+  if (nft) {
+    text += formatNftPrefix(nft);
+  }
+  text += await formatTransferText(ev);
+  return text;
+};
+
+export const textForTweet = async (event: OpenSeaAssetEvent) => {
   const ev = event;
   const {
     asset,
     event_type,
     payment,
-    from_address,
-    to_address,
     order_type,
     maker,
     buyer,
@@ -232,9 +291,6 @@ const textForTweet = async (event: OpenSeaAssetEvent) => {
   if (process.env.TWITTER_PREPEND_TWEET) {
     text += `${process.env.TWITTER_PREPEND_TWEET} `;
   }
-  if (nft) {
-    text += formatNftPrefix(nft);
-  }
   if (
     event_type === 'order' &&
     payment &&
@@ -242,11 +298,17 @@ const textForTweet = async (event: OpenSeaAssetEvent) => {
     order_type &&
     typeof expiration_date === 'number'
   ) {
-    text += await formatOrderText(payment, maker, order_type, expiration_date);
+    text += await textForOrder({
+      nft,
+      payment,
+      maker,
+      order_type,
+      expiration_date,
+    });
   } else if (event_type === EventType.sale && payment && buyer) {
-    text += await formatSaleText(payment, buyer);
-  } else if (event_type === EventType.transfer && from_address && to_address) {
-    text += await formatTransferText(from_address, to_address);
+    text += await textForSale({ nft, payment, buyer });
+  } else if (event_type === EventType.transfer) {
+    text += await textForTransfer(nft, ev);
   }
   if (nft?.identifier) {
     text += ` ${nft.opensea_url}`;
@@ -403,58 +465,15 @@ const ensureTwitterClient = () => {
 };
 
 // ---- Selection helpers (top-level to keep tweetEvents complexity low) ----
-export const parseRequestedEvents = (
-  raw: string | undefined
-): Set<BotEvent> => {
-  const parts = (raw ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-  const invalid = parts.filter((t) => !botEventSet.has(t));
-  if (invalid.length > 0) {
-    throw new Error(
-      `Invalid TWITTER_EVENTS value(s): ${invalid.join(', ')}. Allowed: ${Object.values(
-        BotEvent
-      ).join(', ')}`
-    );
-  }
-  return new Set(parts as BotEvent[]);
-};
+export const parseRequestedEvents = (raw: string | undefined): Set<BotEvent> =>
+  parseEvents(raw);
 
-const isOrderListing = (orderType: string): boolean =>
-  orderType === BotEvent.listing;
-const isOrderOffer = (orderType: string): boolean =>
-  orderType.includes(BotEvent.offer);
+// Order/transfer matching logic is centralized in utils/events
 
 export const matchesSelection = (
   ev: OpenSeaAssetEvent,
   selectionSet: Set<BotEvent>
-): boolean => {
-  const type = ev.event_type;
-  if (type === 'order') {
-    const wantsListing = selectionSet.has(BotEvent.listing);
-    const wantsOffer = selectionSet.has(BotEvent.offer);
-    const wantsAnyOrder = wantsListing || wantsOffer;
-    if (!wantsAnyOrder) {
-      return false;
-    }
-    const orderType = ev.order_type ?? '';
-    if (isOrderListing(orderType)) {
-      return wantsListing;
-    }
-    if (isOrderOffer(orderType)) {
-      return wantsOffer;
-    }
-    return false;
-  }
-  if (type === EventType.sale) {
-    return selectionSet.has(BotEvent.sale);
-  }
-  if (type === EventType.transfer) {
-    return selectionSet.has(BotEvent.transfer);
-  }
-  return false;
-};
+): boolean => isEventWanted(ev, selectionSet);
 
 export const tweetEvents = (events: OpenSeaAssetEvent[]) => {
   if (!process.env.TWITTER_EVENTS) {

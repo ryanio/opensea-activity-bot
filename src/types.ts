@@ -5,6 +5,8 @@ export const BotEvent = {
   offer: 'offer',
   sale: 'sale',
   transfer: 'transfer',
+  mint: 'mint',
+  burn: 'burn',
 } as const;
 
 export type BotEvent = (typeof BotEvent)[keyof typeof BotEvent];
@@ -14,6 +16,8 @@ export const allBotEvents = [
   BotEvent.offer,
   BotEvent.sale,
   BotEvent.transfer,
+  BotEvent.mint,
+  BotEvent.burn,
 ] as const satisfies readonly BotEvent[];
 
 export const botEventSet: ReadonlySet<string> = new Set(allBotEvents);

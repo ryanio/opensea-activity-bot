@@ -1,6 +1,12 @@
 import { type BigNumberish, FixedNumber, formatUnits } from 'ethers';
 import sharp from 'sharp';
 import type { NFTLike } from './aggregator';
+import {
+  DEAD_ADDRESS,
+  GLYPHBOTS_CONTRACT_ADDRESS,
+  NULL_ADDRESS,
+  NULL_ONE_ADDRESS,
+} from './constants';
 import { logger } from './logger';
 
 export function timeout(ms: number) {
@@ -31,6 +37,27 @@ export const minOfferETH = FixedNumber.fromString(
 export const chain = process.env.CHAIN ?? 'ethereum';
 export const shortTokenAddr = shortAddr(process.env.TOKEN_ADDRESS ?? '');
 
+export type TransferKind = 'mint' | 'burn' | 'transfer';
+
+export const classifyTransfer = (event: {
+  event_type?: string;
+  from_address?: string;
+  to_address?: string;
+}): TransferKind => {
+  if (event?.event_type !== 'transfer') {
+    return 'transfer';
+  }
+  const from = (event.from_address ?? '').toLowerCase();
+  const to = (event.to_address ?? '').toLowerCase();
+  if (from === NULL_ADDRESS) {
+    return 'mint';
+  }
+  if (to === NULL_ADDRESS || to === DEAD_ADDRESS || to === NULL_ONE_ADDRESS) {
+    return 'burn';
+  }
+  return 'transfer';
+};
+
 /**
  * Formats amount, decimals, and symbols to final string output.
  */
@@ -42,9 +69,9 @@ export const formatAmount = (
   let value = formatUnits(amount, decimals);
   const split = value.split('.');
   const MAX_DECIMALS = 4;
-  if (split[1].length > MAX_DECIMALS) {
+  if ((split[1] ?? '').length > MAX_DECIMALS) {
     // Trim to 4 decimals max
-    value = `${split[0]}.${split[1].slice(0, MAX_DECIMALS + 1)}`;
+    value = `${split[0]}.${split[1].slice(0, MAX_DECIMALS)}`;
   } else if (split[1] === '0') {
     // If whole number remove '.0'
     value = split[0];
@@ -55,6 +82,23 @@ export const formatAmount = (
 const WIDTH_QUERY_PARAM = /w=(\d)*/;
 export const imageForNFT = (nft?: NFTLike): string | undefined => {
   return nft?.image_url?.replace(WIDTH_QUERY_PARAM, 'w=1000');
+};
+
+export const formatNftPrefix = (
+  nft: { name?: string; identifier?: string | number } | undefined
+): string => {
+  if (!nft) {
+    return '';
+  }
+  const specialContract =
+    process.env.TOKEN_ADDRESS?.toLowerCase() === GLYPHBOTS_CONTRACT_ADDRESS;
+  if (specialContract && nft.name && nft.identifier !== undefined) {
+    const nameParts = String(nft.name).split(' - ');
+    const suffix = nameParts.length > 1 ? nameParts[1].trim() : undefined;
+    const idStr = String(nft.identifier);
+    return suffix ? `${suffix} #${idStr} ` : `#${idStr} `;
+  }
+  return `#${String(nft.identifier)} `;
 };
 
 /**

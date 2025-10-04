@@ -1,5 +1,6 @@
 import {
   Client,
+  type ColorResolvable,
   EmbedBuilder,
   type MessageCreateOptions,
   type TextBasedChannel,
@@ -8,7 +9,8 @@ import { format } from 'timeago.js';
 import { EventType, opensea, username } from '../opensea';
 import { BotEvent, type OpenSeaAssetEvent } from '../types';
 import type { AggregatorEvent } from '../utils/aggregator';
-import { logger } from '../utils/logger';
+import { effectiveEventTypeFor } from '../utils/event-types';
+import { prefixedLogger } from '../utils/logger';
 import {
   calculateTotalSpent,
   getDefaultSweepConfig,
@@ -18,9 +20,7 @@ import {
 } from '../utils/sweep';
 import { formatAmount, imageForNFT, timeout } from '../utils/utils';
 
-const logStart = '[Discord]';
-
-const { DISCORD_EVENTS, DISCORD_TOKEN } = process.env;
+const log = prefixedLogger('Discord');
 
 // Initialize sweep manager for Discord
 const sweepConfig = getDefaultSweepConfig('DISCORD');
@@ -31,6 +31,7 @@ type ChannelEvents = [
   eventTypes: (EventType | BotEvent)[],
 ][];
 export const channelsWithEvents = (): ChannelEvents => {
+  const DISCORD_EVENTS = process.env.DISCORD_EVENTS;
   if (!DISCORD_EVENTS) {
     return [];
   }
@@ -53,20 +54,15 @@ export const channelsWithEvents = (): ChannelEvents => {
   return list;
 };
 
+// Use shared effective event type util
+const effectiveTypeForEvent = effectiveEventTypeFor;
+
 const channelsForEventType = (
-  eventType: EventType,
-  orderType: string,
+  event: OpenSeaAssetEvent,
   channelEvents: ChannelEvents,
   discordChannels: Record<string, TextBasedChannel>
 ) => {
-  let effectiveType = eventType;
-  if (effectiveType === EventType.order) {
-    if (orderType.includes(BotEvent.offer)) {
-      effectiveType = BotEvent.offer as unknown as EventType;
-    } else {
-      effectiveType = BotEvent.listing as unknown as EventType;
-    }
-  }
+  const effectiveType = effectiveTypeForEvent(event);
   const channels: TextBasedChannel[] = [];
   for (const [channelId, eventTypes] of channelEvents) {
     if (eventTypes.includes(effectiveType)) {
@@ -77,24 +73,10 @@ const channelsForEventType = (
   return channels;
 };
 
-const colorFor = (eventType: EventType, orderType: string) => {
-  if (eventType === EventType.order) {
-    if (orderType.includes('offer')) {
-      return '#d63864';
-    }
-    return '#66dcf0';
-  }
-  if (eventType === EventType.sale) {
-    return '#62b778';
-  }
-  if (eventType === EventType.cancel) {
-    return '#9537b0';
-  }
-  if (eventType === EventType.transfer) {
-    return '#5296d5';
-  }
-  return '#9537b0';
-};
+import { colorForEvent } from '../utils/event-types';
+
+const colorFor = (eventType: EventType | BotEvent, orderType: string) =>
+  colorForEvent(eventType, orderType);
 
 type Field = { name: string; value: string; inline?: true };
 
@@ -167,7 +149,27 @@ const buildTransferEmbed = async (
     from_address: string;
     to_address: string;
   };
+  const kind = ((): 'mint' | 'burn' | 'transfer' => {
+    const type = effectiveTypeForEvent(
+      event as unknown as OpenSeaAssetEvent
+    ) as unknown as string;
+    if (type === BotEvent.mint) {
+      return 'mint';
+    }
+    if (type === BotEvent.burn) {
+      return 'burn';
+    }
+    return 'transfer';
+  })();
   const fields: Field[] = [];
+  if (kind === 'mint') {
+    fields.push({ name: 'To', value: await username(to_address) });
+    return { title: 'Minted:', fields };
+  }
+  if (kind === 'burn') {
+    fields.push({ name: 'From', value: await username(from_address) });
+    return { title: 'Burned:', fields };
+  }
   fields.push({ name: 'From', value: await username(from_address) });
   fields.push({ name: 'To', value: await username(to_address) });
   return { title: 'Transferred:', fields };
@@ -199,7 +201,12 @@ const embed = async (event: AggregatorEvent) => {
   }
 
   const built = new EmbedBuilder()
-    .setColor(colorFor(event_type as EventType, order_type ?? ''))
+    .setColor(
+      colorFor(
+        event_type as EventType,
+        order_type ?? ''
+      ) as unknown as ColorResolvable
+    )
     .setTitle(title)
     .setFields(
       fields.map((f) => {
@@ -314,7 +321,7 @@ const login = (client: Client): Promise<void> => {
     client.on('ready', () => {
       resolve();
     });
-    client.login(DISCORD_TOKEN);
+    client.login(process.env.DISCORD_TOKEN);
   });
 };
 
@@ -323,12 +330,12 @@ const getChannels = async (
   channelEvents: ChannelEvents
 ): Promise<Record<string, TextBasedChannel>> => {
   const channels: Record<string, TextBasedChannel> = {};
-  logger.info(`${logStart} Selected channels:`);
+  log.info('Selected channels:');
   for (const [channelId, events] of channelEvents) {
     const channel = await client.channels.fetch(channelId);
     channels[channelId] = channel as TextBasedChannel;
-    logger.info(
-      `${logStart} * #${
+    log.info(
+      `* #${
         (channel as unknown as { name?: string; channelId?: string }).name ??
         (channel as unknown as { name?: string; channelId?: string }).channelId
       }: ${events.join(', ')}`
@@ -361,9 +368,7 @@ const processSweepMessages = async (
         continue;
       }
       await channel.send(message);
-      logger.info(
-        `${logStart} Sent sweep message: ${sweep.events.length} items`
-      );
+      log.info(`Sent sweep message: ${sweep.events.length} items`);
     }
 
     // Mark sweep as processed
@@ -389,10 +394,8 @@ const processIndividualMessages = async (
 
   for (const [index, message] of messages.entries()) {
     const event = processableEvents[index];
-    const { event_type, order_type } = event;
     const channels = channelsForEventType(
-      event_type as EventType,
-      order_type ?? '',
+      event,
       channelEvents,
       discordChannels
     );
@@ -400,7 +403,7 @@ const processIndividualMessages = async (
       continue;
     }
 
-    logger.info(`${logStart} Sending individual message`);
+    log.info('Sending individual message');
 
     for (const channel of channels) {
       if (!isSendableChannel(channel)) {
@@ -421,7 +424,7 @@ const processIndividualMessages = async (
 };
 
 export async function messageEvents(events: AggregatorEvent[]) {
-  if (!DISCORD_EVENTS) {
+  if (!process.env.DISCORD_EVENTS) {
     return;
   }
 
@@ -431,14 +434,15 @@ export async function messageEvents(events: AggregatorEvent[]) {
   // Convert to OpenSeaAssetEvent for better typing
   const openSeaEvents = events as OpenSeaAssetEvent[];
 
-  // only handle event types specified by DISCORD_EVENTS
+  // Only handle event types specified by DISCORD_EVENTS, using effective type mapping
+  const wantedTypes = new Set(
+    [...channelEvents.map((c) => c[1])].flat() as (EventType | BotEvent)[]
+  );
   const filteredEvents = openSeaEvents.filter((event) =>
-    [...channelEvents.map((c) => c[1])]
-      .flat()
-      .includes(event.event_type as EventType)
+    wantedTypes.has(effectiveTypeForEvent(event))
   );
 
-  logger.info(`${logStart} Relevant events: ${filteredEvents.length}`);
+  log.info(`Relevant events: ${filteredEvents.length}`);
 
   if (filteredEvents.length === 0) {
     return;
@@ -454,8 +458,8 @@ export async function messageEvents(events: AggregatorEvent[]) {
   const { processableEvents, skippedDupes, skippedPending } =
     sweepManager.filterProcessableEvents(filteredEvents);
 
-  logger.debug(
-    `${logStart} Processing: sweeps=${readySweeps.length} singles=${processableEvents.length} ` +
+  log.debug(
+    `Processing: sweeps=${readySweeps.length} singles=${processableEvents.length} ` +
       `skippedDupes=${skippedDupes} skippedPending=${skippedPending}`
   );
 
@@ -485,7 +489,7 @@ export async function messageEvents(events: AggregatorEvent[]) {
       isSendableChannel
     );
   } catch (error) {
-    logger.error(error);
+    log.error(error);
   }
 
   client.destroy();

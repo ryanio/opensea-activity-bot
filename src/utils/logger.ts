@@ -63,3 +63,13 @@ export const logger = {
   warn: (...parts: unknown[]) => write('warn', parts),
   error: (...parts: unknown[]) => write('error', parts),
 };
+
+export const prefixedLogger = (prefix: string) => {
+  const add = (parts: unknown[]) => [`[${prefix}]`, ...parts];
+  return {
+    debug: (...parts: unknown[]) => logger.debug(...add(parts)),
+    info: (...parts: unknown[]) => logger.info(...add(parts)),
+    warn: (...parts: unknown[]) => logger.warn(...add(parts)),
+    error: (...parts: unknown[]) => logger.error(...add(parts)),
+  } as const;
+};

@@ -26,6 +26,8 @@ Valid string values for event types to react on are:
 - `offer`
 - `sale`
 - `transfer`
+- `mint` (classified from transfer when from `NULL_ADDRESS`)
+- `burn` (classified from transfer when to `NULL_ADDRESS`/`DEAD_ADDRESS`/`NULL_ONE_ADDRESS`)
 
 #### Project-specific
 

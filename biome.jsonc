@@ -3,5 +3,21 @@
   "extends": ["ultracite"],
   "javascript": {
     "globals": ["jest", "describe", "it", "expect", "beforeEach"]
-  }
+  },
+  "files": {
+    "ignoreUnknown": false,
+    "includes": ["src/**/*", "test/**/*"]
+  },
+  "overrides": [
+    {
+      "includes": ["test/**/*"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noMagicNumbers": "off"
+          }
+        }
+      }
+    }
+  ]
 }
