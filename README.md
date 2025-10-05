@@ -2,100 +2,392 @@
 
 ![Example Discord messages](./example-discord.png)
 
-A bot that shares new OpenSea events for a collection to Discord and Twitter.
+A TypeScript bot that automatically shares new OpenSea NFT collection events to Discord and Twitter. Perfect for NFT communities wanting to stay updated on collection activity.
 
-Designed to handle multiple output configurations, like a Discord activity feed and a Twitter sales feed.
+## Features
+
+- 🚀 **Real-time monitoring** of OpenSea events (sales, listings, offers, transfers, mints, burns)
+- 🎯 **Multi-platform support** for Discord and Twitter
+- ⚙️ **Flexible configuration** with multiple channel/event type combinations
+- 🔄 **Deduplication** to prevent duplicate posts
+- 📊 **Rich embeds** with NFT images and metadata
+- 🛡️ **Type-safe** TypeScript implementation
+- 🧪 **Comprehensive testing** with Jest
+- 📝 **Structured logging** with configurable levels
+
+## Table of Contents
+
+- [Features](#features)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Environment Variables](#environment-variables)
+- [Usage](#usage)
+- [Development](#development)
+- [Testing](#testing)
+- [Deployment](#deployment)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+
+## Prerequisites
+
+- Node.js 18+ 
+- Yarn package manager
+- OpenSea API key ([get one here](https://opensea.io/account))
+- Discord bot token (for Discord integration)
+- Twitter API credentials (for Twitter integration)
+
+## Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/ryanio/opensea-activity-bot.git
+cd opensea-activity-bot
+
+# Install dependencies
+yarn install
+
+# Build the project
+yarn build
+```
+
+## Configuration
+
+Create a `.env` file in the root directory with your configuration:
+
+```env
+# Required
+TOKEN_ADDRESS=0x...
+OPENSEA_API_TOKEN=your_opensea_api_key
+
+# Discord (optional)
+DISCORD_TOKEN=your_discord_bot_token
+DISCORD_EVENTS=channel_id=event_types
+
+# Twitter (optional)  
+TWITTER_CONSUMER_KEY=your_consumer_key
+TWITTER_CONSUMER_SECRET=your_consumer_secret
+TWITTER_ACCESS_TOKEN=your_access_token
+TWITTER_ACCESS_TOKEN_SECRET=your_access_token_secret
+TWITTER_EVENTS=sale,transfer
+
+# Optional settings
+CHAIN=ethereum
+OPENSEA_BOT_INTERVAL=60
+QUERY_LIMIT=50
+LOG_LEVEL=info
+```
 
 Originally developed for [@dutchtide](https://twitter.com/dutchtide)'s [𝕄𝕚𝕕𝕟𝕚𝕘𝕙𝕥 夏季 𝔹𝕣𝕖𝕖𝕫𝕖](https://opensea.io/collection/midnightbreeze) collection.
 
-An OpenSea API key is needed - create one in your account.
+> 💡 **Tip**: To run multiple instances of this bot, check out [bot-runner](https://github.com/ryanio/bot-runner). Also see [discord-nft-embed-bot](https://github.com/ryanio/discord-nft-embed-bot) for additional Discord functionality.
 
-To run multiple instances of this bot at once check out [bot-runner](https://github.com/ryanio/bot-runner). Also check out [discord-nft-embed-bot](https://github.com/ryanio/discord-nft-embed-bot).
+## Environment Variables
 
-## Setup
+### Required Variables
 
-### Env
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `TOKEN_ADDRESS` | Contract address of the NFT collection | `0x1234...abcd` |
+| `OPENSEA_API_TOKEN` | Your OpenSea API key | Get from [OpenSea Account](https://opensea.io/account) |
 
-Please define the env variables outlined in this section for the repository to work as intended.
+### Discord Integration
 
-**Valid event types**
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `DISCORD_TOKEN` | Discord bot token | Get from [Discord Developer Portal](https://discord.com/developers/applications) |
+| `DISCORD_EVENTS` | Channel and event type mapping | `662377002338091020=listing,sale` |
 
-Valid string values for event types to react on are:
+**Discord Setup:**
+1. [Create a Discord application](https://discord.com/developers/applications)
+2. Create a bot with permissions: `Send Messages` and `Embed Links`
+3. [Add bot to your server](https://discordjs.guide/preparations/adding-your-bot-to-servers.html#bot-invite-links)
+4. Copy the bot token to `DISCORD_TOKEN`
 
-- `listing`
-- `offer`
-- `sale`
-- `transfer`
-- `mint` (classified from transfer when from `NULL_ADDRESS`)
-- `burn` (classified from transfer when to `NULL_ADDRESS`/`DEAD_ADDRESS`/`NULL_ONE_ADDRESS`)
+**DISCORD_EVENTS Format:**
+- Single channel: `CHANNEL_ID=event1,event2`
+- Multiple channels: `CHANNEL_ID1=event1&CHANNEL_ID2=event2,event3`
 
-#### Project-specific
+### Twitter Integration
 
-- `CHAIN`
-  - Value from [OpenSea Supported Chains](https://docs.opensea.io/reference/supported-chains). Defaults to `ethereum`.
-- `TOKEN_ADDRESS`
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `TWITTER_CONSUMER_KEY` | Twitter API consumer key | Get from [Twitter Developer Platform](https://developer.twitter.com/) |
+| `TWITTER_CONSUMER_SECRET` | Twitter API consumer secret | |
+| `TWITTER_ACCESS_TOKEN` | Twitter API access token | |
+| `TWITTER_ACCESS_TOKEN_SECRET` | Twitter API access token secret | |
+| `TWITTER_EVENTS` | Event types to tweet | `sale,transfer` |
 
-#### APIs
+**Twitter Setup:**
+1. Create an application in the [Twitter Developer Platform](https://developer.twitter.com/)
+2. Enable write permissions
+3. Generate OAuth1 tokens
+4. The bot uses `twitter-api-v2` with v2 API for tweets and v1.1 for media uploads
 
-- `OPENSEA_API_TOKEN`
+### Optional Configuration
 
-#### To share on Discord
+| Variable | Description | Default | Example |
+|----------|-------------|---------|---------|
+| `CHAIN` | Blockchain network | `ethereum` | `ethereum`, `polygon`, `arbitrum` |
+| `OPENSEA_BOT_INTERVAL` | Polling interval (seconds) | `60` | `30` |
+| `QUERY_LIMIT` | Max events per query | `50` | `100` |
+| `MIN_OFFER_ETH` | Minimum offer amount (ETH) | `0` | `0.1` |
+| `TWITTER_PREPEND_TWEET` | Text to prepend to tweets | - | `#NFT ` |
+| `TWITTER_APPEND_TWEET` | Text to append to tweets | - | ` #OpenSea` |
+| `LOG_LEVEL` | Log verbosity | `info` | `debug`, `info`, `warn`, `error` |
 
-- `DISCORD_EVENTS`
-  - The Discord channel ID with a comma separated list of event types for the bot to send through discord
-    - e.g. `662377002338091020=order,sale`
-  - For multiple channels separate with an ampersand (&)
-    - e.g. `662377002338091020=order&924064011820077076=sale,transfer`
-- `DISCORD_TOKEN`
-  - To get your `DISCORD_TOKEN`, [create a Discord app](https://discord.com/developers/applications). Create a bot with the permissions: `Send Messages` and `Embed Links`. Then [add your bot to your server](https://discordjs.guide/preparations/adding-your-bot-to-servers.html#bot-invite-links).
-  - The `DISCORD_TOKEN` looks like this: `OTE5MzY5ODIyNzEyNzc5NzUz.YBuz2g.x1rGh4zx_XlSNj43oreukvlwsfw`
+### Supported Event Types
 
-If your discord bot is not able to post messages ensure it is added to the channels you've specified and it has the permissions to `Send Messages` and `Embed Links`.
+| Event Type | Description |
+|------------|-------------|
+| `listing` | New NFT listings |
+| `offer` | New offers/bids |
+| `sale` | NFT sales |
+| `transfer` | NFT transfers |
+| `mint` | New mints (auto-detected from transfers) |
+| `burn` | NFT burns (auto-detected from transfers) |
 
-#### To tweet
+> **Note**: `mint` and `burn` events are automatically classified from `transfer` events based on the from/to addresses.
 
-- `TWITTER_EVENTS`
-  - Comma separated list of event types for the bot to tweet
-  - e.g. `sale,transfer`
+## Usage
 
-Create an application in the [Twitter Developer Platform](https://developer.twitter.com/) with write permissions. Provide OAuth1 tokens:
+### Basic Usage
 
-- `TWITTER_CONSUMER_KEY`
-- `TWITTER_CONSUMER_SECRET`
-- `TWITTER_ACCESS_TOKEN`
-- `TWITTER_ACCESS_TOKEN_SECRET`
+```bash
+# Start the bot
+yarn start
 
-The bot uses `twitter-api-v2` and tweets via the v2 API with media uploaded through v1.1 using OAuth1. See library docs for details: [node-twitter-api-v2 docs](https://github.com/PLhery/node-twitter-api-v2/tree/master/doc).
+# Development mode (with hot reload)
+yarn start:dev
+```
 
-#### Optional
+### Example Configuration
 
-- `OPENSEA_BOT_INTERVAL`
-  - Number of seconds interval for the bot to run (default: 60)
-- `QUERY_LIMIT`
-  - Limit for the OpenSea Events query (default: 50)
-- `MIN_OFFER_ETH`
-  - Offers or bids less than this amount will be ignored (default: 0)
-- `TWITTER_PREPEND_TWEET`
-  - Message to add to start of tweet, such as a hashtag
-- `TWITTER_APPEND_TWEET`
-  - Message to add to end of tweet, such as a hashtag
+Here's a complete `.env` example for a Discord + Twitter setup:
 
-#### Logging
+```env
+# Collection settings
+TOKEN_ADDRESS=0x1234567890abcdef1234567890abcdef12345678
+CHAIN=ethereum
+OPENSEA_API_TOKEN=your_opensea_api_key_here
 
-- `LOG_LEVEL`
-  - Controls log verbosity: `debug`, `info`, `warn`, or `error` (default: `info`)
-  - Example: `LOG_LEVEL=debug yarn start` enables debug logs across the app
+# Discord settings
+DISCORD_TOKEN=your_discord_bot_token_here
+DISCORD_EVENTS=662377002338091020=listing,sale,offer&924064011820077076=transfer,mint
 
-### Run
+# Twitter settings
+TWITTER_CONSUMER_KEY=your_consumer_key
+TWITTER_CONSUMER_SECRET=your_consumer_secret
+TWITTER_ACCESS_TOKEN=your_access_token
+TWITTER_ACCESS_TOKEN_SECRET=your_access_token_secret
+TWITTER_EVENTS=sale,transfer
+TWITTER_PREPEND_TWEET=🔥 
+TWITTER_APPEND_TWEET= #NFT
 
-`yarn start`
+# Optional settings
+OPENSEA_BOT_INTERVAL=30
+QUERY_LIMIT=100
+MIN_OFFER_ETH=0.01
+LOG_LEVEL=info
+```
 
-#### Running on a server
+## Development
 
-I recommend to use DigitalOcean over Heroku for improved stability. Heroku servers can restart (cycle) which can lead to duplicate posts since the ephemeral disk is lost.
+### Prerequisites
 
-My preferred setup is a $5/month Basic Droplet with Ubuntu. Install Node v22 and yarn, clone this repo, cd into it, run `yarn`, install [pm2](https://pm2.keymetrics.io/) with `yarn global add pm2`, set env vars, run `pm2 start yarn -- start`. Monitor with `pm2 list` and `pm2 logs`. Add log rotation module to keep default max 10mb of logs with `pm2 install pm2-logrotate`. To respawn after reboot, set your env vars in `/etc/profile`, then run `pm2 startup` and `pm2 save`.
+- Node.js 18+
+- Yarn package manager
+- TypeScript knowledge
 
-Support this project by using the referral badge below:
+### Setup Development Environment
+
+```bash
+# Install dependencies
+yarn install
+
+# Run in development mode
+yarn start:dev
+
+# Build the project
+yarn build
+
+# Format code
+yarn format
+
+# Lint code
+yarn lint
+```
+
+### Project Structure
+
+```
+src/
+├── index.ts              # Main entry point
+├── opensea.ts            # OpenSea API integration
+├── types.ts              # TypeScript type definitions
+├── platforms/
+│   ├── discord.ts        # Discord bot implementation
+│   └── twitter.ts        # Twitter integration
+└── utils/
+    ├── aggregator.ts      # Event aggregation logic
+    ├── constants.ts       # Application constants
+    ├── event-types.ts     # Event type definitions
+    ├── events.ts          # Event processing
+    ├── logger.ts          # Logging utilities
+    ├── lru-cache.ts       # Caching implementation
+    ├── queue.ts           # Event queue management
+    ├── sweep.ts           # Cleanup utilities
+    └── utils.ts           # General utilities
+```
+
+## Testing
+
+```bash
+# Run all tests
+yarn test
+
+# Run tests with coverage
+yarn test:coverage
+
+# Run tests in CI mode
+yarn test:ci
+```
+
+The project uses Jest for testing with comprehensive coverage of:
+- OpenSea API integration
+- Discord message formatting
+- Twitter tweet generation
+- Event deduplication
+- Cache management
+- Utility functions
+
+## Deployment
+
+### Recommended: DigitalOcean
+
+I recommend DigitalOcean over Heroku for improved stability. Heroku servers can restart (cycle) which can lead to duplicate posts since the ephemeral disk is lost.
+
+**DigitalOcean Setup ($5/month Basic Droplet):**
+
+1. Create Ubuntu droplet
+2. Install Node.js 22 and Yarn
+3. Clone repository and install dependencies
+4. Install PM2 for process management
+5. Configure environment variables
+6. Start with PM2
+
+```bash
+# Install PM2 globally
+yarn global add pm2
+
+# Start the bot
+pm2 start yarn -- start
+
+# Monitor the bot
+pm2 list
+pm2 logs
+
+# Install log rotation
+pm2 install pm2-logrotate
+
+# Auto-start on reboot
+pm2 startup
+pm2 save
+```
+
+### Alternative: Docker
+
+```dockerfile
+FROM node:22-alpine
+WORKDIR /app
+COPY package.json yarn.lock ./
+RUN yarn install --frozen-lockfile
+COPY . .
+RUN yarn build
+CMD ["yarn", "start"]
+```
+
+### Environment Variables for Production
+
+Set your environment variables in your deployment platform:
+
+- **DigitalOcean**: Add to `/etc/profile` or use PM2 ecosystem file
+- **Docker**: Use `-e` flags or `.env` file
+- **Heroku**: Use `heroku config:set` commands
+
+## Troubleshooting
+
+### Common Issues
+
+**Bot not posting messages:**
+- Verify Discord bot has `Send Messages` and `Embed Links` permissions
+- Check that bot is added to the specified channels
+- Ensure `DISCORD_TOKEN` is correct
+
+**Twitter posts failing:**
+- Verify all Twitter API credentials are correct
+- Check that Twitter app has write permissions
+- Ensure OAuth1 tokens are properly generated
+
+**No events detected:**
+- Verify `TOKEN_ADDRESS` is correct for your collection
+- Check `OPENSEA_API_TOKEN` is valid
+- Ensure collection has recent activity
+- Try increasing `QUERY_LIMIT`
+
+**Duplicate posts:**
+- Check that only one instance is running
+- Verify cache is working (check logs for cache hits)
+- Consider using [`bot-runner`](https://github.com/ryanio/bot-runner) for multiple instances
+
+### Debug Mode
+
+Enable debug logging to troubleshoot issues:
+
+```bash
+LOG_LEVEL=debug yarn start
+```
+
+### Logs
+
+The bot provides structured logging with different levels:
+- `debug`: Detailed information for debugging
+- `info`: General information about bot activity
+- `warn`: Warning messages for potential issues
+- `error`: Error messages for failures
+
+## Contributing
+
+### Development Workflow
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes
+4. Run tests: `yarn test`
+5. Format code: `yarn format`
+6. Commit changes: `git commit -m 'Add amazing feature'`
+7. Push to branch: `git push origin feature/amazing-feature`
+8. Open a Pull Request
+
+### Code Standards
+
+- Follow TypeScript best practices
+- Write tests for new features
+- Use `yarn format` before committing
+- Follow the existing code structure
+- Add JSDoc comments for public APIs
+
+### Reporting Issues
+
+When reporting issues, please include:
+- Node.js version
+- Environment variables (without sensitive values)
+- Error logs
+- Steps to reproduce
+- Expected vs actual behavior
+
+---
+
+Support this project by using the DigitalOcean referral badge below:
 
 [![DigitalOcean Referral Badge](https://web-platforms.sfo2.digitaloceanspaces.com/WWW/Badge%203.svg)](https://www.digitalocean.com/?refcode=3f8c76216510&utm_campaign=Referral_Invite&utm_medium=Referral_Program&utm_source=badge)
