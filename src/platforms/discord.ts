@@ -10,11 +10,17 @@ import { EventType, opensea, username } from '../opensea';
 import { BotEvent, type OpenSeaAssetEvent } from '../types';
 import type { AggregatorEvent } from '../utils/aggregator';
 import { effectiveEventTypeFor } from '../utils/event-types';
+import {
+  openseaCollectionActivityUrl,
+  openseaProfileTransferActivityUrl,
+} from '../utils/links';
 import { prefixedLogger } from '../utils/logger';
 import {
   calculateTotalSpent,
   getDefaultSweepConfig,
   getTopExpensiveEvents,
+  groupKindForEvents,
+  primaryActorAddressForGroup,
   type SweepEvent,
   SweepManager,
 } from '../utils/sweep';
@@ -163,7 +169,25 @@ const buildTransferEmbed = async (
   })();
   const fields: Field[] = [];
   if (kind === 'mint') {
-    fields.push({ name: 'To', value: await username(to_address) });
+    // Include editions for ERC1155 mints if quantity > 1
+    const editions = Number(
+      (event as unknown as { quantity?: number })?.quantity ?? 0
+    );
+    const tokenStandard =
+      (
+        event as unknown as {
+          nft?: { token_standard?: string };
+          asset?: { token_standard?: string };
+        }
+      )?.nft?.token_standard ??
+      (event as unknown as { asset?: { token_standard?: string } })?.asset
+        ?.token_standard;
+    const isErc1155 = (tokenStandard ?? '').toLowerCase() === 'erc1155';
+
+    const toName = await username(to_address);
+    const toValue =
+      isErc1155 && editions > 1 ? `${toName} (${editions} editions)` : toName;
+    fields.push({ name: 'To', value: toValue });
     return { title: 'Minted:', fields };
   }
   if (kind === 'burn') {
@@ -230,30 +254,44 @@ const embed = async (event: AggregatorEvent) => {
 
 const buildSweepEmbed = async (sweep: SweepEvent): Promise<EmbedBuilder> => {
   const count = sweep.events.length;
+  const kind = groupKindForEvents(sweep.events);
   const totalSpent = calculateTotalSpent(sweep.events);
 
-  // Get buyer from first event (all events in sweep should have same buyer)
-  const firstEvent = sweep.events[0];
-  const buyerAddress = firstEvent?.buyer;
+  // Deduce primary actor
+  const actorAddress = primaryActorAddressForGroup(sweep.events, kind);
 
-  const title = `${count} items purchased`;
+  let title = '';
+  if (kind === 'burn') {
+    title = `${count} items burned`;
+  } else if (kind === 'mint') {
+    title = `${count} items minted`;
+  } else {
+    title = `${count} items purchased`;
+  }
   const fields: Field[] = [];
 
-  if (totalSpent) {
+  if (kind === 'purchase' && totalSpent) {
     fields.push({ name: 'Total Spent', value: totalSpent, inline: true });
   }
 
-  if (buyerAddress) {
-    const buyerName = await username(buyerAddress);
-    fields.push({ name: 'Buyer', value: buyerName, inline: true });
+  if (actorAddress) {
+    const label = kind === 'burn' ? 'By' : 'Buyer';
+    const actorName = await username(actorAddress);
+    fields.push({ name: label, value: actorName, inline: true });
   }
 
-  // Show transaction hash
-  if (sweep.txHash) {
-    const etherscanUrl = `https://etherscan.io/tx/${sweep.txHash}`;
+  if (actorAddress) {
+    const url = openseaProfileTransferActivityUrl(actorAddress);
     fields.push({
-      name: 'Transaction',
-      value: `[View on Etherscan](${etherscanUrl})`,
+      name: 'Activity',
+      value: `[View on OpenSea](${url})`,
+      inline: true,
+    });
+  } else {
+    const url = openseaCollectionActivityUrl(opensea.collectionURL());
+    fields.push({
+      name: 'Activity',
+      value: `[View on OpenSea](${url})`,
       inline: true,
     });
   }

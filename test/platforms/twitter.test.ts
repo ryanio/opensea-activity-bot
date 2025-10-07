@@ -124,6 +124,50 @@ describe('twitter flows', () => {
     ).toBeTruthy();
   });
 
+  it('tweets a grouped burn with profile activity link', async () => {
+    const burnBatch = {
+      asset_events: [
+        {
+          event_type: 'transfer',
+          event_timestamp: 1,
+          chain: 'ethereum',
+          quantity: 1,
+          nft: { identifier: '1', opensea_url: 'https://x' },
+          from_address: '0xbbbbbb0000000000000000000000000000000000',
+          to_address: '0x000000000000000000000000000000000000dead',
+          transaction: '0xabc',
+        },
+        {
+          event_type: 'transfer',
+          event_timestamp: 2,
+          chain: 'ethereum',
+          quantity: 1,
+          nft: { identifier: '2', opensea_url: 'https://x' },
+          from_address: '0xbbbbbb0000000000000000000000000000000000',
+          to_address: '0x0000000000000000000000000000000000000000',
+          transaction: '0xabc',
+        },
+      ],
+    };
+    const { tweetEvents } = await import('../../src/platforms/twitter');
+    tweetEvents(
+      burnBatch.asset_events as unknown as import('../../src/types').OpenSeaAssetEvent[]
+    );
+    const m = require('twitter-api-v2') as {
+      __mockReadWrite: { v2: { tweet: jest.Mock } };
+    };
+    await waitFor(
+      () => (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls.length > 0
+    );
+    const first = (
+      (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls[0][0] as {
+        text: string;
+      }
+    ).text;
+    expect(first).toContain('burned');
+    expect(first).toContain('activity?activityTypes=transfer');
+  });
+
   it('only tweets one sweep per tx across repeated runs', async () => {
     const { asset_events } = loadFixture('opensea/events-sales-group.json');
     const { tweetEvents } = await import('../../src/platforms/twitter');

@@ -12,14 +12,10 @@ import {
 } from '../src/utils/sweep';
 
 // Mock the utils module
-const mockFormatAmount = (
-  quantity: string,
-  decimals: number,
-  symbol: string
-) => {
+function mockFormatAmount(quantity: string, decimals: number, symbol: string) {
   const value = Number(quantity) / 10 ** decimals;
   return `${value} ${symbol}`;
-};
+}
 
 jest.mock('../src/utils/utils', () => ({
   formatAmount: jest.fn(mockFormatAmount),

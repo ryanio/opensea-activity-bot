@@ -38,6 +38,26 @@ describe('twitter text generation', () => {
     expect(text).toContain('Foo minted by addr:0xaaaa');
   });
 
+  test('erc1155 mint includes editions count when quantity > 1', async () => {
+    const mod = await import('../../src/platforms/twitter');
+    const e = {
+      event_type: EventType.transfer,
+      event_timestamp: 1,
+      chain: 'ethereum',
+      quantity: 3,
+      nft: {
+        name: 'Editions',
+        identifier: '10',
+        token_standard: 'erc1155',
+        opensea_url: 'https://x',
+      },
+      from_address: '0x0000000000000000000000000000000000000000',
+      to_address: '0xeeeeee0000000000000000000000000000000000',
+    } as unknown as OpenSeaAssetEvent;
+    const text = await mod.textForTweet(e);
+    expect(text).toContain('(3 editions)');
+  });
+
   test('burn text includes name and "burned by"', async () => {
     const mod = await import('../../src/platforms/twitter');
     const e = {

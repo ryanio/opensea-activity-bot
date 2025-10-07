@@ -3,6 +3,11 @@ import { EventType, opensea, username } from '../opensea';
 import type { BotEvent, OpenSeaAssetEvent, OpenSeaPayment } from '../types';
 import { txHashFor } from '../utils/aggregator';
 import { isEventWanted, parseEvents } from '../utils/events';
+import {
+  openseaCollectionActivityUrl,
+  openseaProfileCollectionUrl,
+  openseaProfileTransferActivityUrl,
+} from '../utils/links';
 import { logger } from '../utils/logger';
 import { LRUCache } from '../utils/lru-cache';
 import { AsyncQueue } from '../utils/queue';
@@ -10,7 +15,9 @@ import {
   calculateTotalSpent,
   eventKeyFor,
   getDefaultSweepConfig,
+  groupKindForEvents,
   isSweepEvent,
+  primaryActorAddressForGroup,
   type SweepEvent,
   SweepManager,
   sortEventsByPrice,
@@ -263,7 +270,16 @@ const textForTransfer = async (
 ): Promise<string> => {
   const kind = classifyTransfer(ev);
   if (kind === 'mint' || kind === 'burn') {
-    const name = nft?.name ?? `#${String(nft?.identifier ?? '')}`;
+    let name = nft?.name ?? `#${String(nft?.identifier ?? '')}`;
+    if (kind === 'mint') {
+      const tokenStandard = (nft as { token_standard?: string } | undefined)
+        ?.token_standard;
+      const isErc1155 = (tokenStandard ?? '').toLowerCase() === 'erc1155';
+      const editions = Number(ev.quantity ?? 0);
+      if (isErc1155 && editions > 1) {
+        name = `${name} (${editions} editions)`;
+      }
+    }
     const phrase = await formatTransferText(ev);
     return `${name} ${phrase}`;
   }
@@ -365,13 +381,9 @@ const tweetSweep = async (
   group: OpenSeaAssetEvent[]
 ) => {
   const count = group.length;
-  const media_ids = await uploadImagesForGroup(client, group);
-
-  // Get buyer from first event (all events in sweep should have same buyer)
-  const firstEvent = group[0];
-  const buyerAddress = firstEvent?.buyer;
-
-  // Calculate total spent
+  const mediaIds = await uploadImagesForGroup(client, group);
+  const kind = groupKindForEvents(group);
+  const buyerAddress = group[0]?.buyer;
   const totalSpent = calculateTotalSpent(group);
 
   let text = '';
@@ -379,29 +391,62 @@ const tweetSweep = async (
     text += `${process.env.TWITTER_PREPEND_TWEET} `;
   }
 
-  if (buyerAddress) {
-    const buyerName = await username(buyerAddress);
-    text += `${count} purchased by ${buyerName}`;
-    if (totalSpent) {
-      text += ` for ${totalSpent}`;
+  const appendBurn = async () => {
+    const burnerAddress = primaryActorAddressForGroup(group, 'burn');
+    if (burnerAddress) {
+      const burnerName = await username(burnerAddress);
+      text += `${count} burned by @${burnerName}`;
+      const activityUrl = openseaProfileTransferActivityUrl(burnerAddress);
+      text += ` ${activityUrl}`;
+    } else {
+      text += `${count} burned`;
     }
-    const profileUrl = `https://opensea.io/${buyerAddress}?collectionSlugs=glyphbots`;
-    text += ` ${profileUrl}`;
+  };
+
+  const appendMint = async () => {
+    const minterAddress = primaryActorAddressForGroup(group, 'mint');
+    if (minterAddress) {
+      const minterName = await username(minterAddress);
+      text += `${count} minted by ${minterName}`;
+      const profileUrl = openseaProfileCollectionUrl(minterAddress);
+      text += ` ${profileUrl}`;
+    } else {
+      text += `${count} minted`;
+    }
+  };
+
+  const appendPurchase = async () => {
+    if (buyerAddress) {
+      const buyerName = await username(buyerAddress);
+      text += `${count} purchased by ${buyerName}`;
+      if (totalSpent) {
+        text += ` for ${totalSpent}`;
+      }
+      const profileUrl = openseaProfileCollectionUrl(buyerAddress);
+      text += ` ${profileUrl}`;
+    } else {
+      text += `${count} purchased`;
+      if (totalSpent) {
+        text += ` for ${totalSpent}`;
+      }
+      const activityUrl = openseaCollectionActivityUrl(opensea.collectionURL());
+      text += ` ${activityUrl}`;
+    }
+  };
+
+  if (kind === 'burn') {
+    await appendBurn();
+  } else if (kind === 'mint') {
+    await appendMint();
   } else {
-    // Fallback to old format if buyer info unavailable
-    text += `${count} purchased`;
-    if (totalSpent) {
-      text += ` for ${totalSpent}`;
-    }
-    const activityUrl = `${opensea.collectionURL()}/activity`;
-    text += ` ${activityUrl}`;
+    await appendPurchase();
   }
 
   if (process.env.TWITTER_APPEND_TWEET) {
     text += ` ${process.env.TWITTER_APPEND_TWEET}`;
   }
   const params: { text: string; media?: { media_ids: string[] } } =
-    media_ids.length > 0 ? { text, media: { media_ids } } : { text };
+    mediaIds.length > 0 ? { text, media: { media_ids: mediaIds } } : { text };
   await client.v2.tweet(params);
   for (const e of group) {
     const key = eventKeyFor(e);

@@ -2,6 +2,7 @@ import type { OpenSeaAssetEvent } from '../types';
 import type { AggregatorEvent } from './aggregator';
 import { SweepAggregator, txHashFor } from './aggregator';
 import { LRUCache } from './lru-cache';
+import { classifyTransfer } from './utils';
 
 // Common sweep configuration with environment variable support
 export type SweepConfig = {
@@ -59,6 +60,19 @@ export const isSweepEvent = (
 export class SweepManager {
   private readonly aggregator: SweepAggregator;
   private readonly processedCache: LRUCache<string, boolean>;
+  // Actor-based grouping for burns and transfers by the same user
+  private readonly actorAgg: Map<
+    string,
+    {
+      events: AggregatorEvent[];
+      lastAddedMs: number;
+      dedupeKeys: Set<string>;
+      rawCount: number;
+    }
+  > = new Map();
+  private readonly settleMs: number;
+  private readonly minGroupSize: number;
+  private static readonly ACTOR_GROUP_STALE_MULTIPLIER = 5;
 
   constructor(config: SweepConfig) {
     this.aggregator = new SweepAggregator({
@@ -66,18 +80,77 @@ export class SweepManager {
       minGroupSize: config.minGroupSize,
     });
     this.processedCache = new LRUCache<string, boolean>(config.cacheCapacity);
+    this.settleMs = config.settleMs;
+    this.minGroupSize = config.minGroupSize;
   }
 
   // Add events to the aggregator
   addEvents(events: OpenSeaAssetEvent[]): void {
     this.aggregator.add(events as AggregatorEvent[]);
+
+    // Add to actor-based aggregator for burns and transfers
+    const now = Date.now();
+    for (const ev of events) {
+      if (ev.event_type !== 'transfer') {
+        continue; // actor grouping is only for transfer-derived kinds
+      }
+      const kind = classifyTransfer(ev);
+      // actor is minter for mints, burner for burns, sender for plain transfers
+      const actor =
+        kind === 'mint'
+          ? ev.to_address
+          : (ev.from_address as string | undefined);
+      if (!actor) {
+        continue;
+      }
+      const key = `${kind}:${actor.toLowerCase()}`;
+      let agg = this.actorAgg.get(key);
+      if (!agg) {
+        agg = {
+          events: [],
+          lastAddedMs: 0,
+          dedupeKeys: new Set(),
+          rawCount: 0,
+        };
+        this.actorAgg.set(key, agg);
+      }
+      // Always increment rawCount for gating decisions
+      agg.rawCount += 1;
+      // Dedupe by eventKey across batches
+      const ekey = eventKeyFor(ev);
+      if (agg.dedupeKeys.has(ekey)) {
+        agg.lastAddedMs = now; // still refresh settle window
+        continue;
+      }
+      agg.events.push(ev);
+      agg.dedupeKeys.add(ekey);
+      agg.lastAddedMs = now;
+    }
   }
 
   // Get ready sweeps
   getReadySweeps(): Array<{ tx: string; events: OpenSeaAssetEvent[] }> {
-    return this.aggregator
-      .flushReady()
-      .map(({ tx, events }) => ({ tx, events: events as OpenSeaAssetEvent[] }));
+    const ready: Array<{ tx: string; events: OpenSeaAssetEvent[] }> = [];
+    // Include tx-based sweeps
+    for (const { tx, events } of this.aggregator.flushReady()) {
+      ready.push({ tx, events: events as OpenSeaAssetEvent[] });
+    }
+
+    // Include actor-based groups
+    const now = Date.now();
+    this.pruneStaleActorGroups(now);
+    for (const [key, agg] of this.actorAgg.entries()) {
+      if (
+        agg.rawCount >= this.minGroupSize &&
+        now - agg.lastAddedMs >= this.settleMs
+      ) {
+        // Use an actor pseudo-tx key for queueing/dedupe
+        const pseudoTx = `actor:${key}`;
+        ready.push({ tx: pseudoTx, events: agg.events as OpenSeaAssetEvent[] });
+        this.actorAgg.delete(key);
+      }
+    }
+    return ready;
   }
 
   // Check if an event was already processed
@@ -106,7 +179,16 @@ export class SweepManager {
 
   // Get pending large transaction hashes
   getPendingLargeTxHashes(): Set<string> {
-    return this.aggregator.pendingLargeTxHashes();
+    const set = this.aggregator.pendingLargeTxHashes();
+    // Also include actor groups that have reached minGroupSize (pending)
+    const now = Date.now();
+    this.pruneStaleActorGroups(now);
+    for (const [key, agg] of this.actorAgg.entries()) {
+      if (agg.rawCount >= this.minGroupSize) {
+        set.add(`actor:${key}`);
+      }
+    }
+    return set;
   }
 
   // Filter out events that are part of pending sweeps or already processed
@@ -120,24 +202,98 @@ export class SweepManager {
     let skippedDupes = 0;
     let skippedPending = 0;
 
+    const isPendingActorGroup = (event: OpenSeaAssetEvent): boolean => {
+      if (event.event_type !== 'transfer') {
+        return false;
+      }
+      const kind = classifyTransfer(event);
+      if (kind === 'mint') {
+        return false;
+      }
+      const actor = (event.from_address ?? '').toLowerCase();
+      if (!actor) {
+        return false;
+      }
+      const actorKey = `actor:${kind}:${actor}`;
+      return pendingLarge.has(actorKey);
+    };
+
     for (const event of events) {
       if (this.isProcessed(event)) {
         skippedDupes += 1;
         continue;
       }
-
       const tx = txHashFor(event);
       if (tx && pendingLarge.has(tx)) {
-        skippedPending += 1; // awaiting or covered by sweep
+        skippedPending += 1;
         continue;
       }
-
+      if (isPendingActorGroup(event)) {
+        skippedPending += 1;
+        continue;
+      }
       processableEvents.push(event);
     }
 
     return { processableEvents, skippedDupes, skippedPending };
   }
+
+  private pruneStaleActorGroups(now: number): void {
+    const ttl = this.settleMs * SweepManager.ACTOR_GROUP_STALE_MULTIPLIER;
+    for (const [key, agg] of this.actorAgg.entries()) {
+      if (now - agg.lastAddedMs >= ttl && agg.rawCount < this.minGroupSize) {
+        this.actorAgg.delete(key);
+      }
+    }
+  }
 }
+
+// ---- Generic group helpers (not sale-specific) ----
+
+export type GroupKind = 'purchase' | 'burn' | 'mint' | 'mixed';
+
+export const groupKindForEvents = (events: OpenSeaAssetEvent[]): GroupKind => {
+  if (events.length === 0) {
+    return 'mixed';
+  }
+  const allSales = events.every((e) => e.event_type === 'sale');
+  if (allSales) {
+    return 'purchase';
+  }
+  const allMintTransfers = events.every(
+    (e) => e.event_type === 'transfer' && classifyTransfer(e) === 'mint'
+  );
+  if (allMintTransfers) {
+    return 'mint';
+  }
+  const allBurnTransfers = events.every(
+    (e) => e.event_type === 'transfer' && classifyTransfer(e) === 'burn'
+  );
+  if (allBurnTransfers) {
+    return 'burn';
+  }
+  return 'mixed';
+};
+
+export const primaryActorAddressForGroup = (
+  events: OpenSeaAssetEvent[],
+  kind: GroupKind
+): string | undefined => {
+  const first = events[0];
+  if (!first) {
+    return;
+  }
+  if (kind === 'purchase') {
+    return first.buyer;
+  }
+  if (kind === 'mint') {
+    return first.to_address;
+  }
+  if (kind === 'burn') {
+    return first.from_address;
+  }
+  return;
+};
 
 // Helper function to extract numeric price from payment.quantity for sorting
 export const getPurchasePrice = (event: OpenSeaAssetEvent): bigint => {

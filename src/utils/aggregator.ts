@@ -40,6 +40,7 @@ type AggregatedTx = {
   events: AggregatorEvent[];
   lastAddedMs: number;
   dedupeKeys: Set<string>;
+  rawCount: number; // counts all events added (including duplicates)
 };
 
 export class SweepAggregator {
@@ -66,9 +67,16 @@ export class SweepAggregator {
       }
       let agg = this.txToAgg.get(tx);
       if (!agg) {
-        agg = { events: [], lastAddedMs: 0, dedupeKeys: new Set() };
+        agg = {
+          events: [],
+          lastAddedMs: 0,
+          dedupeKeys: new Set(),
+          rawCount: 0,
+        };
         this.txToAgg.set(tx, agg);
       }
+      // Always increment rawCount for gating decisions
+      agg.rawCount += 1;
       const key = this.keyForEvent(e);
       if (agg.dedupeKeys.has(key)) {
         continue;
@@ -84,7 +92,7 @@ export class SweepAggregator {
     const ready: Array<{ tx: string; events: AggregatorEvent[] }> = [];
     for (const [tx, agg] of this.txToAgg.entries()) {
       if (
-        agg.events.length >= this.options.minGroupSize &&
+        agg.rawCount >= this.options.minGroupSize &&
         now - agg.lastAddedMs >= this.options.settleMs
       ) {
         ready.push({ tx, events: agg.events });
@@ -101,7 +109,7 @@ export class SweepAggregator {
   pendingLargeTxHashes(): Set<string> {
     const set = new Set<string>();
     for (const [tx, agg] of this.txToAgg.entries()) {
-      if (agg.events.length >= this.options.minGroupSize) {
+      if (agg.rawCount >= this.options.minGroupSize) {
         set.add(tx);
       }
     }
