@@ -73,6 +73,37 @@ describe('twitter text generation', () => {
     expect(text).toContain('Bar burned by addr:0xbbbb');
   });
 
+  test('burn text uses formatted name for glyphbots', async () => {
+    // Set the TOKEN_ADDRESS to glyphbots contract
+    const originalTokenAddress = process.env.TOKEN_ADDRESS;
+    process.env.TOKEN_ADDRESS = '0xb6c2c2d2999c1b532e089a7ad4cb7f8c91cf5075';
+
+    // Re-import module to pick up new env var
+    jest.resetModules();
+    const mod = await import('../../src/platforms/twitter');
+    const e = {
+      event_type: EventType.transfer,
+      event_timestamp: 1,
+      chain: 'ethereum',
+      quantity: 1,
+      nft: {
+        name: 'GlyphBot #9573 - Twisty the Wise',
+        identifier: '9573',
+        opensea_url:
+          'https://opensea.io/assets/ethereum/0xb6c2c2d2999c1b532e089a7ad4cb7f8c91cf5075/9573',
+      },
+      from_address: '0xbbbbbb0000000000000000000000000000000000',
+      to_address: '0x000000000000000000000000000000000000dead',
+    } as unknown as OpenSeaAssetEvent;
+    const text = await mod.textForTweet(e);
+    // Should use formatted name "Twisty the Wise #9573" instead of full name
+    expect(text).toContain('Twisty the Wise #9573 burned by addr:0xbbbb');
+    expect(text).not.toContain('GlyphBot #9573 - Twisty the Wise');
+
+    // Restore original TOKEN_ADDRESS
+    process.env.TOKEN_ADDRESS = originalTokenAddress;
+  });
+
   test('transfer text includes from/to usernames', async () => {
     const mod = await import('../../src/platforms/twitter');
     const e = {

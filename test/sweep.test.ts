@@ -126,8 +126,7 @@ describe('sweep-utils', () => {
       const config = getDefaultSweepConfig('TWITTER');
       expect(config).toEqual({
         settleMs: 15_000,
-        minGroupSize: 5,
-        cacheCapacity: 2000,
+        minGroupSize: 2,
       });
     });
 
@@ -135,8 +134,7 @@ describe('sweep-utils', () => {
       const config = getDefaultSweepConfig('DISCORD');
       expect(config).toEqual({
         settleMs: 15_000,
-        minGroupSize: 5,
-        cacheCapacity: 2000,
+        minGroupSize: 2,
       });
     });
 
@@ -146,14 +144,12 @@ describe('sweep-utils', () => {
         ...originalEnv,
         TWITTER_SWEEP_SETTLE_MS: '30000',
         TWITTER_SWEEP_MIN_GROUP_SIZE: '10',
-        TWITTER_PROCESSED_CACHE_CAPACITY: '5000',
       };
 
       const config = getDefaultSweepConfig('TWITTER');
       expect(config).toEqual({
         settleMs: 30_000,
         minGroupSize: 10,
-        cacheCapacity: 5000,
       });
 
       process.env = originalEnv;
@@ -320,7 +316,6 @@ describe('sweep-utils', () => {
       const config = {
         settleMs: 1000,
         minGroupSize: 2,
-        cacheCapacity: 100,
       };
       sweepManager = new SweepManager(config);
     });

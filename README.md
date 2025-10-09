@@ -136,6 +136,19 @@ Originally developed for [@dutchtide](https://twitter.com/dutchtide)'s [𝕄𝕚
 | `TWITTER_APPEND_TWEET` | Text to append to tweets | - | ` #OpenSea` |
 | `LOG_LEVEL` | Log verbosity | `info` | `debug`, `info`, `warn`, `error` |
 
+#### Sweep Aggregation Configuration
+
+The bot automatically groups multiple events from the same transaction (sweeps) for cleaner posts. These settings control the aggregation behavior:
+
+| Variable | Description | Default | Example |
+|----------|-------------|---------|---------|
+| `TWITTER_SWEEP_MIN_GROUP_SIZE` | Min events to group as sweep for Twitter | `2` | `5` |
+| `TWITTER_SWEEP_SETTLE_MS` | Time to wait for more events (ms) for Twitter | `15000` | `30000` |
+| `DISCORD_SWEEP_MIN_GROUP_SIZE` | Min events to group as sweep for Discord | `2` | `5` |
+| `DISCORD_SWEEP_SETTLE_MS` | Time to wait for more events (ms) for Discord | `15000` | `30000` |
+
+> **Note**: Sweep aggregation helps consolidate multiple NFT purchases/mints/burns from the same transaction into a single post. For example, if someone buys 10 NFTs in one transaction, it will be posted as "10 purchased by @user for 5 ETH" instead of 10 separate posts.
+
 ### Supported Event Types
 
 | Event Type | Description |

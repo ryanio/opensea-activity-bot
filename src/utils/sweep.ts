@@ -1,6 +1,7 @@
 import type { OpenSeaAssetEvent } from '../types';
 import type { AggregatorEvent } from './aggregator';
 import { SweepAggregator, txHashFor } from './aggregator';
+import { DEFAULT_SETTLE_MS, MIN_GROUP_SIZE } from './constants';
 import { LRUCache } from './lru-cache';
 import { classifyTransfer } from './utils';
 
@@ -8,29 +9,18 @@ import { classifyTransfer } from './utils';
 export type SweepConfig = {
   settleMs: number;
   minGroupSize: number;
-  cacheCapacity: number;
 };
 
 export const getDefaultSweepConfig = (
   prefix: 'TWITTER' | 'DISCORD'
-): SweepConfig => {
-  const DEFAULT_SETTLE_MS = 15_000;
-  const DEFAULT_MIN_GROUP_SIZE = 5;
-  const DEFAULT_CACHE_CAPACITY = 2000;
-
-  return {
-    settleMs: Number(
-      process.env[`${prefix}_SWEEP_SETTLE_MS`] ?? DEFAULT_SETTLE_MS
-    ),
-    minGroupSize: Number(
-      process.env[`${prefix}_SWEEP_MIN_GROUP_SIZE`] ?? DEFAULT_MIN_GROUP_SIZE
-    ),
-    cacheCapacity: Number(
-      process.env[`${prefix}_PROCESSED_CACHE_CAPACITY`] ??
-        DEFAULT_CACHE_CAPACITY
-    ),
-  };
-};
+): SweepConfig => ({
+  settleMs: Number(
+    process.env[`${prefix}_SWEEP_SETTLE_MS`] ?? DEFAULT_SETTLE_MS
+  ),
+  minGroupSize: Number(
+    process.env[`${prefix}_SWEEP_MIN_GROUP_SIZE`] ?? MIN_GROUP_SIZE
+  ),
+});
 
 // Common event key generation
 export const eventKeyFor = (event: OpenSeaAssetEvent): string => {
@@ -73,13 +63,16 @@ export class SweepManager {
   private readonly settleMs: number;
   private readonly minGroupSize: number;
   private static readonly ACTOR_GROUP_STALE_MULTIPLIER = 5;
+  private static readonly PROCESSED_CACHE_CAPACITY = 2000;
 
   constructor(config: SweepConfig) {
     this.aggregator = new SweepAggregator({
       settleMs: config.settleMs,
       minGroupSize: config.minGroupSize,
     });
-    this.processedCache = new LRUCache<string, boolean>(config.cacheCapacity);
+    this.processedCache = new LRUCache<string, boolean>(
+      SweepManager.PROCESSED_CACHE_CAPACITY
+    );
     this.settleMs = config.settleMs;
     this.minGroupSize = config.minGroupSize;
   }

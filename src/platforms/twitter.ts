@@ -155,11 +155,7 @@ const keyForQueueItem = (item: TweetQueueItem): string => {
   return eventKeyFor(item.event as OpenSeaAssetEvent);
 };
 
-// eventKeyFor is now imported from sweep-utils
-
-// txHashFor provided by utils
-
-const formatNftPrefix = (
+const formatNftName = (
   nft: { name?: string; identifier?: string | number } | undefined
 ): string => {
   if (!nft) {
@@ -175,7 +171,8 @@ const formatNftPrefix = (
     const idStr = String(nft.identifier);
     return suffix ? `${suffix} #${idStr} ` : `#${idStr} `;
   }
-  return `#${String(nft.identifier)} `;
+  // For regular NFTs, return the name if available, otherwise the identifier
+  return nft.name ? `${nft.name} ` : `#${String(nft.identifier)} `;
 };
 
 const formatOrderText = async (
@@ -242,7 +239,7 @@ const textForOrder = async (params: {
   const { nft, payment, maker, order_type, expiration_date } = params;
   let text = '';
   if (nft) {
-    text += formatNftPrefix(nft);
+    text += formatNftName(nft);
   }
   text += await formatOrderText(payment, maker, order_type, expiration_date);
   return text;
@@ -256,7 +253,7 @@ const textForSale = async (params: {
   const { nft, payment, buyer } = params;
   let text = '';
   if (nft) {
-    text += formatNftPrefix(nft);
+    text += formatNftName(nft);
   }
   text += await formatSaleText(payment, buyer);
   return text;
@@ -270,7 +267,8 @@ const textForTransfer = async (
 ): Promise<string> => {
   const kind = classifyTransfer(ev);
   if (kind === 'mint' || kind === 'burn') {
-    let name = nft?.name ?? `#${String(nft?.identifier ?? '')}`;
+    // Use formatNftName to get the properly formatted name for special collections like glyphbots
+    let name = formatNftName(nft).trim();
     if (kind === 'mint') {
       const tokenStandard = (nft as { token_standard?: string } | undefined)
         ?.token_standard;
@@ -285,7 +283,7 @@ const textForTransfer = async (
   }
   let text = '';
   if (nft) {
-    text += formatNftPrefix(nft);
+    text += formatNftName(nft);
   }
   text += await formatTransferText(ev);
   return text;
