@@ -530,6 +530,11 @@ export const tweetEvents = (events: OpenSeaAssetEvent[]) => {
   ensureTwitterClient();
 
   const requestedSet = parseRequestedEvents(process.env.TWITTER_EVENTS);
+
+  logger.info(
+    `${logStart} Twitter events configured: ${Array.from(requestedSet).join(', ')}`
+  );
+
   const filteredEvents = events.filter((event) =>
     matchesSelection(event, requestedSet)
   );
