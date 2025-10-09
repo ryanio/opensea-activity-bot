@@ -60,7 +60,7 @@ export const isSweepEvent = (
 export class SweepManager {
   private readonly aggregator: SweepAggregator;
   private readonly processedCache: LRUCache<string, boolean>;
-  // Actor-based grouping for burns and transfers by the same user
+  // Actor-based grouping for transfers by the same user
   private readonly actorAgg: Map<
     string,
     {
