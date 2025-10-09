@@ -280,6 +280,100 @@ describe('twitter flows', () => {
     // Verify the tweet was called (group should be detected)
     expect(m.__mockReadWrite.v2.tweet).toHaveBeenCalled();
   });
+
+  it('does not duplicate-tweet the same 5 burn events (tx vs actor overlap)', async () => {
+    // Override settle to 0 so groups flush immediately in this test
+    process.env.TWITTER_EVENT_GROUP_SETTLE_MS = '0';
+    process.env.TWITTER_EVENT_GROUP_MIN_GROUP_SIZE = '2';
+
+    const makeBurn = (tokenId: number) => ({
+      event_type: 'transfer',
+      event_timestamp: tokenId,
+      chain: 'ethereum',
+      quantity: 1,
+      nft: { identifier: String(tokenId), opensea_url: 'https://x' },
+      from_address: '0xbbbbbb0000000000000000000000000000000000',
+      to_address: '0x000000000000000000000000000000000000dead',
+      transaction: '0xabc',
+    });
+    const batch = Array.from({ length: 5 }, (_, i) => makeBurn(i + 1));
+
+    const { tweetEvents } = await import('../../src/platforms/twitter');
+    tweetEvents(
+      batch as unknown as import('../../src/types').OpenSeaAssetEvent[]
+    );
+
+    const m = require('twitter-api-v2') as {
+      __mockReadWrite: { v2: { tweet: jest.Mock } };
+    };
+    await waitFor(
+      () => (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls.length > 0
+    );
+    const calls = (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls;
+    // Should tweet exactly one group of 5 (actor group is suppressed for same-tx overlap)
+    expect(calls.length).toBe(1);
+    const text = (calls[0][0] as { text: string }).text;
+    expect(text).toContain('5 burned');
+  });
+
+  it('tweets a 10-burn actor group eventually despite duplicate polling', async () => {
+    // Use a small but non-zero settle so actor-based grouping can accumulate across two tx
+    process.env.TWITTER_EVENT_GROUP_SETTLE_MS = '40';
+    process.env.TWITTER_EVENT_GROUP_MIN_GROUP_SIZE = '2';
+    process.env.TWITTER_QUEUE_DELAY_MS = '0';
+
+    const makeBurn = (tx: string, ts: number, tokenId: number) => ({
+      event_type: 'transfer',
+      event_timestamp: ts,
+      chain: 'ethereum',
+      quantity: 1,
+      nft: { identifier: String(tokenId), opensea_url: 'https://x' },
+      from_address: '0xbbbbbb0000000000000000000000000000000000',
+      to_address: '0x000000000000000000000000000000000000dead',
+      transaction: tx,
+    });
+    const firstFive = Array.from({ length: 5 }, (_, i) =>
+      makeBurn('0xaaa', i + 1, i + 1)
+    );
+    const secondFive = Array.from({ length: 5 }, (_, i) =>
+      makeBurn('0xbbb', i + 6, i + 6)
+    );
+
+    const { tweetEvents } = await import('../../src/platforms/twitter');
+    // Simulate repeated polling of the same first 5 (duplicates should not reset settle window)
+    tweetEvents(
+      firstFive as unknown as import('../../src/types').OpenSeaAssetEvent[]
+    );
+    tweetEvents(
+      firstFive as unknown as import('../../src/types').OpenSeaAssetEvent[]
+    );
+    // Add the second set shortly after
+    await new Promise((r) => setTimeout(r, 10));
+    tweetEvents(
+      secondFive as unknown as import('../../src/types').OpenSeaAssetEvent[]
+    );
+
+    const m = require('twitter-api-v2') as {
+      __mockReadWrite: { v2: { tweet: jest.Mock } };
+    };
+    // Allow settle window to elapse, then trigger a flush by invoking again with duplicates
+    await new Promise((r) => setTimeout(r, 60));
+    tweetEvents(
+      firstFive as unknown as import('../../src/types').OpenSeaAssetEvent[]
+    );
+    // Wait for tweets to be emitted (actor group)
+    await waitFor(
+      () => (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls.length > 0,
+      2000,
+      25
+    );
+    const calls = (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls as [
+      { text: string },
+    ][];
+    const texts = calls.map((c) => (c[0] as { text: string }).text);
+    // Ensure there is at least one 10-burn tweet
+    expect(texts.some((t) => TEN_BURNED_REGEX.test(t))).toBe(true);
+  });
 });
 
 // Add basic tests for matchesSelection mint/burn classification
@@ -288,6 +382,9 @@ import {
   parseRequestedEvents,
 } from '../../src/platforms/twitter';
 import type { OpenSeaAssetEvent } from '../../src/types';
+
+// Hoisted for performance per linter guidance
+const TEN_BURNED_REGEX = /\b10 burned\b/;
 
 describe('twitter selection for mint/burn', () => {
   const base = {

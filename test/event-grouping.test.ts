@@ -324,14 +324,14 @@ describe('eventGrouping-utils', () => {
       groupManager.addEvents([mockEvent1, mockEvent2]);
 
       const pendingTxs = groupManager.getPendingTxHashes();
-      expect(pendingTxs.has('0xabc123')).toBe(true);
+      expect(pendingTxs.has('actor:purchase:0xbuyer1')).toBe(true);
     });
 
     it('should identify large pending transactions', () => {
       groupManager.addEvents([mockEvent1, mockEvent2]);
 
       const pendingLarge = groupManager.getPendingLargeTxHashes();
-      expect(pendingLarge.has('0xabc123')).toBe(true);
+      expect(pendingLarge.has('actor:purchase:0xbuyer1')).toBe(true);
     });
 
     it('should filter processable events', () => {
@@ -377,23 +377,21 @@ describe('eventGrouping-utils', () => {
 
       readyGroups = groupManager.getReadyGroups();
       expect(readyGroups).toHaveLength(1);
-      expect(readyGroups[0].tx).toBe('0xabc123');
+      expect(readyGroups[0].tx).toBe('actor:purchase:0xbuyer1');
       expect(readyGroups[0].events).toHaveLength(2);
     });
 
-    it('should deduplicate events in same transaction', () => {
-      // Add the same event twice
+    it('does not flush a group if duplicates reduce below min size', async () => {
+      // Add the same event twice (deduped to unique size 1)
       groupManager.addEvents([mockEvent1, mockEvent1]);
 
       const pendingTxs = groupManager.getPendingTxHashes();
       expect(pendingTxs.size).toBe(1);
 
-      // After settle time, should only have one event
       const SETTLE_BUFFER_MS = 1100;
-      setTimeout(() => {
-        const readyGroups = groupManager.getReadyGroups();
-        expect(readyGroups[0].events).toHaveLength(1);
-      }, SETTLE_BUFFER_MS);
+      await new Promise((resolve) => setTimeout(resolve, SETTLE_BUFFER_MS));
+      const readyGroups = groupManager.getReadyGroups();
+      expect(readyGroups.length).toBe(0);
     });
   });
 });

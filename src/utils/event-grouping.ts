@@ -1,6 +1,4 @@
 import type { OpenSeaAssetEvent } from '../types';
-import type { AggregatorEvent } from './aggregator';
-import { EventGroupAggregator, txHashFor } from './aggregator';
 import { DEFAULT_SETTLE_MS, MIN_GROUP_SIZE } from './constants';
 import { LRUCache } from './lru-cache';
 import { classifyTransfer } from './utils';
@@ -48,13 +46,12 @@ export const isGroupedEvent = (
 
 // Common event group aggregator management
 export class EventGroupManager {
-  private readonly aggregator: EventGroupAggregator;
   private readonly processedCache: LRUCache<string, boolean>;
-  // Actor-based grouping for transfers by the same user
+  // Actor-based grouping for purchases, mints, burns, and transfers
   private readonly actorAgg: Map<
     string,
     {
-      events: AggregatorEvent[];
+      events: OpenSeaAssetEvent[];
       lastAddedMs: number;
       dedupeKeys: Set<string>;
       rawCount: number;
@@ -66,10 +63,6 @@ export class EventGroupManager {
   private static readonly PROCESSED_CACHE_CAPACITY = 2000;
 
   constructor(config: EventGroupConfig) {
-    this.aggregator = new EventGroupAggregator({
-      settleMs: config.settleMs,
-      minGroupSize: config.minGroupSize,
-    });
     this.processedCache = new LRUCache<string, boolean>(
       EventGroupManager.PROCESSED_CACHE_CAPACITY
     );
@@ -79,24 +72,12 @@ export class EventGroupManager {
 
   // Add events to the aggregator
   addEvents(events: OpenSeaAssetEvent[]): void {
-    this.aggregator.add(events as AggregatorEvent[]);
-
-    // Add to actor-based aggregator for burns and transfers
     const now = Date.now();
     for (const ev of events) {
-      if (ev.event_type !== 'transfer') {
-        continue; // actor grouping is only for transfer-derived kinds
-      }
-      const kind = classifyTransfer(ev);
-      // actor is minter for mints, burner for burns, sender for plain transfers
-      const actor =
-        kind === 'mint'
-          ? ev.to_address
-          : (ev.from_address as string | undefined);
-      if (!actor) {
+      const key = this.actorKeyForEvent(ev);
+      if (!key) {
         continue;
       }
-      const key = `${kind}:${actor.toLowerCase()}`;
       let agg = this.actorAgg.get(key);
       if (!agg) {
         agg = {
@@ -112,7 +93,8 @@ export class EventGroupManager {
       // Dedupe by eventKey across batches
       const ekey = eventKeyFor(ev);
       if (agg.dedupeKeys.has(ekey)) {
-        agg.lastAddedMs = now; // still refresh settle window
+        // Do not refresh lastAddedMs on duplicates; otherwise repeated polling
+        // can starve the settle window and prevent group flush.
         continue;
       }
       agg.events.push(ev);
@@ -123,13 +105,14 @@ export class EventGroupManager {
 
   // Get ready event groups
   getReadyGroups(): Array<{ tx: string; events: OpenSeaAssetEvent[] }> {
-    const ready: Array<{ tx: string; events: OpenSeaAssetEvent[] }> = [];
-    // Include tx-based groups
-    for (const { tx, events } of this.aggregator.flushReady()) {
-      ready.push({ tx, events: events as OpenSeaAssetEvent[] });
-    }
+    return this.collectReadyActorGroups();
+  }
 
-    // Include actor-based groups
+  private collectReadyActorGroups(): Array<{
+    tx: string;
+    events: OpenSeaAssetEvent[];
+  }> {
+    const out: Array<{ tx: string; events: OpenSeaAssetEvent[] }> = [];
     const now = Date.now();
     this.pruneStaleActorGroups(now);
     for (const [key, agg] of this.actorAgg.entries()) {
@@ -137,13 +120,47 @@ export class EventGroupManager {
         agg.rawCount >= this.minGroupSize &&
         now - agg.lastAddedMs >= this.settleMs
       ) {
-        // Use an actor pseudo-tx key for queueing/dedupe
-        const pseudoTx = `actor:${key}`;
-        ready.push({ tx: pseudoTx, events: agg.events as OpenSeaAssetEvent[] });
+        // Remove events that have already been processed via prior groups
+        const unprocessed = (agg.events as OpenSeaAssetEvent[]).filter(
+          (e) => !this.isProcessed(e)
+        );
+        if (unprocessed.length >= this.minGroupSize) {
+          const pseudoTx = `actor:${key}`;
+          out.push({ tx: pseudoTx, events: unprocessed });
+        }
         this.actorAgg.delete(key);
       }
     }
-    return ready;
+    return out;
+  }
+
+  private actorKeyForEvent(event: OpenSeaAssetEvent): string | undefined {
+    if (event.event_type === 'sale') {
+      return this.actorKeyForSale(event);
+    }
+    if (event.event_type === 'transfer') {
+      return this.actorKeyForTransfer(event);
+    }
+    return;
+  }
+
+  private actorKeyForSale(event: OpenSeaAssetEvent): string | undefined {
+    const buyer = (event.buyer ?? '').toLowerCase();
+    return buyer ? `purchase:${buyer}` : undefined;
+  }
+
+  private actorKeyForTransfer(event: OpenSeaAssetEvent): string | undefined {
+    const kind = classifyTransfer(event);
+    if (kind === 'mint') {
+      const to = (event.to_address ?? '').toLowerCase();
+      return to ? `mint:${to}` : undefined;
+    }
+    if (kind === 'burn') {
+      const from = (event.from_address ?? '').toLowerCase();
+      return from ? `burn:${from}` : undefined;
+    }
+    const from = (event.from_address ?? '').toLowerCase();
+    return from ? `transfer:${from}` : undefined;
   }
 
   // Check if an event was already processed
@@ -165,15 +182,18 @@ export class EventGroupManager {
     }
   }
 
-  // Get pending transaction hashes
+  // Get pending transaction hashes (actor pseudo-tx keys)
   getPendingTxHashes(): Set<string> {
-    return this.aggregator.pendingTxHashes();
+    const set = new Set<string>();
+    for (const key of this.actorAgg.keys()) {
+      set.add(`actor:${key}`);
+    }
+    return set;
   }
 
-  // Get pending large transaction hashes
+  // Get pending large transaction hashes (actor pseudo-tx keys)
   getPendingLargeTxHashes(): Set<string> {
-    const set = this.aggregator.pendingLargeTxHashes();
-    // Also include actor groups that have reached minGroupSize (pending)
+    const set = new Set<string>();
     const now = Date.now();
     this.pruneStaleActorGroups(now);
     for (const [key, agg] of this.actorAgg.entries()) {
@@ -196,29 +216,17 @@ export class EventGroupManager {
     let skippedPending = 0;
 
     const isPendingActorGroup = (event: OpenSeaAssetEvent): boolean => {
-      if (event.event_type !== 'transfer') {
+      const key = this.actorKeyForEvent(event);
+      if (!key) {
         return false;
       }
-      const kind = classifyTransfer(event);
-      if (kind === 'mint') {
-        return false;
-      }
-      const actor = (event.from_address ?? '').toLowerCase();
-      if (!actor) {
-        return false;
-      }
-      const actorKey = `actor:${kind}:${actor}`;
+      const actorKey = `actor:${key}`;
       return pendingLarge.has(actorKey);
     };
 
     for (const event of events) {
       if (this.isProcessed(event)) {
         skippedDupes += 1;
-        continue;
-      }
-      const tx = txHashFor(event);
-      if (tx && pendingLarge.has(tx)) {
-        skippedPending += 1;
         continue;
       }
       if (isPendingActorGroup(event)) {
