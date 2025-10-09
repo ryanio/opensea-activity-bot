@@ -7,6 +7,6 @@ export const NULL_ADDRESS = '0x0000000000000000000000000000000000000000';
 export const DEAD_ADDRESS = '0x000000000000000000000000000000000000dead';
 export const NULL_ONE_ADDRESS = '0x0000000000000000000000000000000000000001';
 
-// Sweep aggregation defaults
+// Event grouping aggregation defaults
 export const MIN_GROUP_SIZE = 2;
 export const DEFAULT_SETTLE_MS = 15_000;

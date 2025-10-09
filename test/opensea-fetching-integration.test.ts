@@ -1,6 +1,6 @@
 import type { OpenSeaAssetEvent } from '../src/types';
+import { eventKeyFor } from '../src/utils/event-grouping';
 import { LRUCache } from '../src/utils/lru-cache';
-import { eventKeyFor } from '../src/utils/sweep';
 
 // Import JSON fixture
 const salesFixture = require('./fixtures/opensea/events-sales.json');

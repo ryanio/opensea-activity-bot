@@ -1,24 +1,24 @@
 import type { OpenSeaAssetEvent } from '../types';
 import type { AggregatorEvent } from './aggregator';
-import { SweepAggregator, txHashFor } from './aggregator';
+import { EventGroupAggregator, txHashFor } from './aggregator';
 import { DEFAULT_SETTLE_MS, MIN_GROUP_SIZE } from './constants';
 import { LRUCache } from './lru-cache';
 import { classifyTransfer } from './utils';
 
-// Common sweep configuration with environment variable support
-export type SweepConfig = {
+// Common event grouping configuration with environment variable support
+export type EventGroupConfig = {
   settleMs: number;
   minGroupSize: number;
 };
 
-export const getDefaultSweepConfig = (
+export const getDefaultEventGroupConfig = (
   prefix: 'TWITTER' | 'DISCORD'
-): SweepConfig => ({
+): EventGroupConfig => ({
   settleMs: Number(
-    process.env[`${prefix}_SWEEP_SETTLE_MS`] ?? DEFAULT_SETTLE_MS
+    process.env[`${prefix}_EVENT_GROUP_SETTLE_MS`] ?? DEFAULT_SETTLE_MS
   ),
   minGroupSize: Number(
-    process.env[`${prefix}_SWEEP_MIN_GROUP_SIZE`] ?? MIN_GROUP_SIZE
+    process.env[`${prefix}_EVENT_GROUP_MIN_GROUP_SIZE`] ?? MIN_GROUP_SIZE
   ),
 });
 
@@ -30,25 +30,25 @@ export const eventKeyFor = (event: OpenSeaAssetEvent): string => {
   return `${ts}|${tokenId}`;
 };
 
-// Sweep event type for shared use
-export type SweepEvent = {
-  kind: 'sweep';
+// Grouped event type for shared use
+export type GroupedEvent = {
+  kind: 'group';
   txHash: string;
   events: OpenSeaAssetEvent[];
 };
 
-export const isSweepEvent = (
-  event: OpenSeaAssetEvent | SweepEvent
-): event is SweepEvent => {
+export const isGroupedEvent = (
+  event: OpenSeaAssetEvent | GroupedEvent
+): event is GroupedEvent => {
   return (
-    (event as { kind?: string }).kind === 'sweep' &&
+    (event as { kind?: string }).kind === 'group' &&
     Array.isArray((event as { events?: unknown[] }).events)
   );
 };
 
-// Common sweep aggregator management
-export class SweepManager {
-  private readonly aggregator: SweepAggregator;
+// Common event group aggregator management
+export class EventGroupManager {
+  private readonly aggregator: EventGroupAggregator;
   private readonly processedCache: LRUCache<string, boolean>;
   // Actor-based grouping for transfers by the same user
   private readonly actorAgg: Map<
@@ -65,13 +65,13 @@ export class SweepManager {
   private static readonly ACTOR_GROUP_STALE_MULTIPLIER = 5;
   private static readonly PROCESSED_CACHE_CAPACITY = 2000;
 
-  constructor(config: SweepConfig) {
-    this.aggregator = new SweepAggregator({
+  constructor(config: EventGroupConfig) {
+    this.aggregator = new EventGroupAggregator({
       settleMs: config.settleMs,
       minGroupSize: config.minGroupSize,
     });
     this.processedCache = new LRUCache<string, boolean>(
-      SweepManager.PROCESSED_CACHE_CAPACITY
+      EventGroupManager.PROCESSED_CACHE_CAPACITY
     );
     this.settleMs = config.settleMs;
     this.minGroupSize = config.minGroupSize;
@@ -121,10 +121,10 @@ export class SweepManager {
     }
   }
 
-  // Get ready sweeps
-  getReadySweeps(): Array<{ tx: string; events: OpenSeaAssetEvent[] }> {
+  // Get ready event groups
+  getReadyGroups(): Array<{ tx: string; events: OpenSeaAssetEvent[] }> {
     const ready: Array<{ tx: string; events: OpenSeaAssetEvent[] }> = [];
-    // Include tx-based sweeps
+    // Include tx-based groups
     for (const { tx, events } of this.aggregator.flushReady()) {
       ready.push({ tx, events: events as OpenSeaAssetEvent[] });
     }
@@ -158,9 +158,9 @@ export class SweepManager {
     this.processedCache.put(key, true);
   }
 
-  // Mark sweep events as processed
-  markSweepProcessed(sweep: SweepEvent): void {
-    for (const event of sweep.events) {
+  // Mark grouped events as processed
+  markGroupProcessed(group: GroupedEvent): void {
+    for (const event of group.events) {
       this.markProcessed(event);
     }
   }
@@ -184,7 +184,7 @@ export class SweepManager {
     return set;
   }
 
-  // Filter out events that are part of pending sweeps or already processed
+  // Filter out events that are part of pending groups or already processed
   filterProcessableEvents(events: OpenSeaAssetEvent[]): {
     processableEvents: OpenSeaAssetEvent[];
     skippedDupes: number;
@@ -232,7 +232,7 @@ export class SweepManager {
   }
 
   private pruneStaleActorGroups(now: number): void {
-    const ttl = this.settleMs * SweepManager.ACTOR_GROUP_STALE_MULTIPLIER;
+    const ttl = this.settleMs * EventGroupManager.ACTOR_GROUP_STALE_MULTIPLIER;
     for (const [key, agg] of this.actorAgg.entries()) {
       if (now - agg.lastAddedMs >= ttl && agg.rawCount < this.minGroupSize) {
         this.actorAgg.delete(key);

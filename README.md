@@ -136,18 +136,18 @@ Originally developed for [@dutchtide](https://twitter.com/dutchtide)'s [𝕄𝕚
 | `TWITTER_APPEND_TWEET` | Text to append to tweets | - | ` #OpenSea` |
 | `LOG_LEVEL` | Log verbosity | `info` | `debug`, `info`, `warn`, `error` |
 
-#### Sweep Aggregation Configuration
+#### Event Grouping Configuration
 
-The bot automatically groups multiple events from the same transaction (sweeps) for cleaner posts. These settings control the aggregation behavior:
+The bot automatically groups multiple events from the same transaction or actor for cleaner posts. These settings control the grouping behavior:
 
 | Variable | Description | Default | Example |
 |----------|-------------|---------|---------|
-| `TWITTER_SWEEP_MIN_GROUP_SIZE` | Min events to group as sweep for Twitter | `2` | `5` |
-| `TWITTER_SWEEP_SETTLE_MS` | Time to wait for more events (ms) for Twitter | `15000` | `30000` |
-| `DISCORD_SWEEP_MIN_GROUP_SIZE` | Min events to group as sweep for Discord | `2` | `5` |
-| `DISCORD_SWEEP_SETTLE_MS` | Time to wait for more events (ms) for Discord | `15000` | `30000` |
+| `TWITTER_EVENT_GROUP_MIN_GROUP_SIZE` | Min events to group together for Twitter | `2` | `5` |
+| `TWITTER_EVENT_GROUP_SETTLE_MS` | Time to wait for more events (ms) for Twitter | `15000` | `30000` |
+| `DISCORD_EVENT_GROUP_MIN_GROUP_SIZE` | Min events to group together for Discord | `2` | `5` |
+| `DISCORD_EVENT_GROUP_SETTLE_MS` | Time to wait for more events (ms) for Discord | `15000` | `30000` |
 
-> **Note**: Sweep aggregation helps consolidate multiple NFT purchases/mints/burns from the same transaction into a single post. For example, if someone buys 10 NFTs in one transaction, it will be posted as "10 purchased by @user for 5 ETH" instead of 10 separate posts.
+> **Note**: Event grouping helps consolidate multiple NFT purchases/mints/burns from the same transaction or actor into a single post. For example, if someone buys 10 NFTs in one transaction, it will be posted as "10 purchased by @user for 5 ETH" instead of 10 separate posts.
 
 ### Supported Event Types
 
@@ -235,21 +235,22 @@ yarn lint
 
 ```
 src/
-├── index.ts              # Main entry point
-├── opensea.ts            # OpenSea API integration
-├── types.ts              # TypeScript type definitions
+├── index.ts               # Main entry point
+├── opensea.ts             # OpenSea API integration
+├── types.ts               # TypeScript type definitions
 ├── platforms/
-│   ├── discord.ts        # Discord bot implementation
-│   └── twitter.ts        # Twitter integration
+│   ├── discord.ts         # Discord bot implementation
+│   └── twitter.ts         # Twitter integration
 └── utils/
     ├── aggregator.ts      # Event aggregation logic
     ├── constants.ts       # Application constants
+    ├── event-grouping.ts  # Event grouping utilities
     ├── event-types.ts     # Event type definitions
     ├── events.ts          # Event processing
+    ├── links.ts           # URL generation utilities
     ├── logger.ts          # Logging utilities
     ├── lru-cache.ts       # Caching implementation
     ├── queue.ts           # Event queue management
-    ├── sweep.ts           # Cleanup utilities
     └── utils.ts           # General utilities
 ```
 

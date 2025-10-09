@@ -31,7 +31,7 @@ export const txHashFor = (event: AggregatorEvent): string | undefined => {
   );
 };
 
-type SweepAggregatorOptions = {
+type EventGroupAggregatorOptions = {
   settleMs: number;
   minGroupSize: number;
 };
@@ -43,11 +43,11 @@ type AggregatedTx = {
   rawCount: number; // counts all events added (including duplicates)
 };
 
-export class SweepAggregator {
-  private readonly options: SweepAggregatorOptions;
+export class EventGroupAggregator {
+  private readonly options: EventGroupAggregatorOptions;
   private readonly txToAgg: Map<string, AggregatedTx> = new Map();
 
-  constructor(options: SweepAggregatorOptions) {
+  constructor(options: EventGroupAggregatorOptions) {
     this.options = options;
   }
 

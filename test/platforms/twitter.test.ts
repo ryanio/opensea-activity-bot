@@ -94,11 +94,11 @@ describe('twitter flows', () => {
     jest.resetModules();
     jest.clearAllMocks();
     process.env.TWITTER_QUEUE_DELAY_MS = '0';
-    process.env.TWITTER_SWEEP_SETTLE_MS = '0';
-    process.env.TWITTER_SWEEP_MIN_GROUP_SIZE = '2';
+    process.env.TWITTER_EVENT_GROUP_SETTLE_MS = '0';
+    process.env.TWITTER_EVENT_GROUP_MIN_GROUP_SIZE = '2';
   });
 
-  it('tweets a sweep for grouped sales', async () => {
+  it('tweets a group for grouped sales', async () => {
     const { asset_events } = loadFixture('opensea/events-sales-group.json');
     const { tweetEvents } = await import('../../src/platforms/twitter');
     tweetEvents(asset_events);
@@ -168,7 +168,7 @@ describe('twitter flows', () => {
     expect(first).toContain('activity?activityTypes=transfer');
   });
 
-  it('only tweets one sweep per tx across repeated runs', async () => {
+  it('only tweets one group per tx across repeated runs', async () => {
     const { asset_events } = loadFixture('opensea/events-sales-group.json');
     const { tweetEvents } = await import('../../src/platforms/twitter');
     // Simulate polling loop invoking with same batch repeatedly
@@ -247,7 +247,7 @@ describe('twitter flows', () => {
     expect(true).toBe(true);
   });
 
-  it('sorts sweep images by purchase price descending', async () => {
+  it('sorts group images by purchase price descending', async () => {
     // Load batch events with different prices to test sorting
     const batchSales = loadFixture('opensea/events-sales-batch.json');
     const { tweetEvents } = await import('../../src/platforms/twitter');
@@ -261,7 +261,7 @@ describe('twitter flows', () => {
     const uniquePrices = new Set(prices);
     expect(uniquePrices.size).toBeGreaterThan(1); // Should have different prices
 
-    // Process the events (this will trigger sweep aggregation and sorting)
+    // Process the events (this will trigger group aggregation and sorting)
     tweetEvents(events);
 
     // Get the mock after calling tweetEvents
@@ -277,7 +277,7 @@ describe('twitter flows', () => {
       () => (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls.length > 0
     );
 
-    // Verify the tweet was called (sweep should be detected)
+    // Verify the tweet was called (group should be detected)
     expect(m.__mockReadWrite.v2.tweet).toHaveBeenCalled();
   });
 });

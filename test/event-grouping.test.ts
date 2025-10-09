@@ -1,15 +1,15 @@
 import type { OpenSeaAssetEvent } from '../src/types';
 import {
   calculateTotalSpent,
+  EventGroupManager,
   eventKeyFor,
-  getDefaultSweepConfig,
+  type GroupedEvent,
+  getDefaultEventGroupConfig,
   getPurchasePrice,
   getTopExpensiveEvents,
-  isSweepEvent,
-  type SweepEvent,
-  SweepManager,
+  isGroupedEvent,
   sortEventsByPrice,
-} from '../src/utils/sweep';
+} from '../src/utils/event-grouping';
 
 // Mock the utils module
 function mockFormatAmount(quantity: string, decimals: number, symbol: string) {
@@ -21,7 +21,7 @@ jest.mock('../src/utils/utils', () => ({
   formatAmount: jest.fn(mockFormatAmount),
 }));
 
-describe('sweep-utils', () => {
+describe('eventGrouping-utils', () => {
   const mockEvent1: OpenSeaAssetEvent = {
     event_type: 'sale',
     event_timestamp: 1_234_567_890,
@@ -115,15 +115,15 @@ describe('sweep-utils', () => {
     buyer: '0xbuyer2',
   };
 
-  const mockSweepEvent: SweepEvent = {
-    kind: 'sweep',
+  const mockGroupedEvent: GroupedEvent = {
+    kind: 'group',
     txHash: '0xabc123',
     events: [mockEvent1, mockEvent2],
   };
 
-  describe('getDefaultSweepConfig', () => {
+  describe('getDefaultEventGroupConfig', () => {
     it('should return default config for TWITTER', () => {
-      const config = getDefaultSweepConfig('TWITTER');
+      const config = getDefaultEventGroupConfig('TWITTER');
       expect(config).toEqual({
         settleMs: 15_000,
         minGroupSize: 2,
@@ -131,7 +131,7 @@ describe('sweep-utils', () => {
     });
 
     it('should return default config for DISCORD', () => {
-      const config = getDefaultSweepConfig('DISCORD');
+      const config = getDefaultEventGroupConfig('DISCORD');
       expect(config).toEqual({
         settleMs: 15_000,
         minGroupSize: 2,
@@ -142,11 +142,11 @@ describe('sweep-utils', () => {
       const originalEnv = process.env;
       process.env = {
         ...originalEnv,
-        TWITTER_SWEEP_SETTLE_MS: '30000',
-        TWITTER_SWEEP_MIN_GROUP_SIZE: '10',
+        TWITTER_EVENT_GROUP_SETTLE_MS: '30000',
+        TWITTER_EVENT_GROUP_MIN_GROUP_SIZE: '10',
       };
 
-      const config = getDefaultSweepConfig('TWITTER');
+      const config = getDefaultEventGroupConfig('TWITTER');
       expect(config).toEqual({
         settleMs: 30_000,
         minGroupSize: 10,
@@ -169,10 +169,10 @@ describe('sweep-utils', () => {
     });
   });
 
-  describe('isSweepEvent', () => {
-    it('should identify sweep events correctly', () => {
-      expect(isSweepEvent(mockSweepEvent)).toBe(true);
-      expect(isSweepEvent(mockEvent1)).toBe(false);
+  describe('isGroupedEvent', () => {
+    it('should identify grouped events correctly', () => {
+      expect(isGroupedEvent(mockGroupedEvent)).toBe(true);
+      expect(isGroupedEvent(mockEvent1)).toBe(false);
     });
   });
 
@@ -309,37 +309,37 @@ describe('sweep-utils', () => {
     });
   });
 
-  describe('SweepManager', () => {
-    let sweepManager: SweepManager;
+  describe('EventGroupManager', () => {
+    let groupManager: EventGroupManager;
 
     beforeEach(() => {
       const config = {
         settleMs: 1000,
         minGroupSize: 2,
       };
-      sweepManager = new SweepManager(config);
+      groupManager = new EventGroupManager(config);
     });
 
     it('should add events and track them', () => {
-      sweepManager.addEvents([mockEvent1, mockEvent2]);
+      groupManager.addEvents([mockEvent1, mockEvent2]);
 
-      const pendingTxs = sweepManager.getPendingTxHashes();
+      const pendingTxs = groupManager.getPendingTxHashes();
       expect(pendingTxs.has('0xabc123')).toBe(true);
     });
 
     it('should identify large pending transactions', () => {
-      sweepManager.addEvents([mockEvent1, mockEvent2]);
+      groupManager.addEvents([mockEvent1, mockEvent2]);
 
-      const pendingLarge = sweepManager.getPendingLargeTxHashes();
+      const pendingLarge = groupManager.getPendingLargeTxHashes();
       expect(pendingLarge.has('0xabc123')).toBe(true);
     });
 
     it('should filter processable events', () => {
-      // Add events to create a pending sweep
-      sweepManager.addEvents([mockEvent1, mockEvent2]);
+      // Add events to create a pending group
+      groupManager.addEvents([mockEvent1, mockEvent2]);
 
       // Try to process the same events again
-      const result = sweepManager.filterProcessableEvents([
+      const result = groupManager.filterProcessableEvents([
         mockEvent1,
         mockEvent2,
         mockEvent3,
@@ -351,48 +351,48 @@ describe('sweep-utils', () => {
     });
 
     it('should mark events as processed', () => {
-      sweepManager.markProcessed(mockEvent1);
+      groupManager.markProcessed(mockEvent1);
 
-      expect(sweepManager.isProcessed(mockEvent1)).toBe(true);
-      expect(sweepManager.isProcessed(mockEvent2)).toBe(false);
+      expect(groupManager.isProcessed(mockEvent1)).toBe(true);
+      expect(groupManager.isProcessed(mockEvent2)).toBe(false);
     });
 
-    it('should mark sweep as processed', () => {
-      sweepManager.markSweepProcessed(mockSweepEvent);
+    it('should mark group as processed', () => {
+      groupManager.markGroupProcessed(mockGroupedEvent);
 
-      expect(sweepManager.isProcessed(mockEvent1)).toBe(true);
-      expect(sweepManager.isProcessed(mockEvent2)).toBe(true);
+      expect(groupManager.isProcessed(mockEvent1)).toBe(true);
+      expect(groupManager.isProcessed(mockEvent2)).toBe(true);
     });
 
-    it('should get ready sweeps after settle time', async () => {
-      sweepManager.addEvents([mockEvent1, mockEvent2]);
+    it('should get ready groups after settle time', async () => {
+      groupManager.addEvents([mockEvent1, mockEvent2]);
 
-      // Initially no ready sweeps
-      let readySweeps = sweepManager.getReadySweeps();
-      expect(readySweeps).toHaveLength(0);
+      // Initially no ready groups
+      let readyGroups = groupManager.getReadyGroups();
+      expect(readyGroups).toHaveLength(0);
 
       // Wait for settle time (config.settleMs is 1000, so wait 1100 to be safe)
       const SETTLE_BUFFER_MS = 1100;
       await new Promise((resolve) => setTimeout(resolve, SETTLE_BUFFER_MS));
 
-      readySweeps = sweepManager.getReadySweeps();
-      expect(readySweeps).toHaveLength(1);
-      expect(readySweeps[0].tx).toBe('0xabc123');
-      expect(readySweeps[0].events).toHaveLength(2);
+      readyGroups = groupManager.getReadyGroups();
+      expect(readyGroups).toHaveLength(1);
+      expect(readyGroups[0].tx).toBe('0xabc123');
+      expect(readyGroups[0].events).toHaveLength(2);
     });
 
     it('should deduplicate events in same transaction', () => {
       // Add the same event twice
-      sweepManager.addEvents([mockEvent1, mockEvent1]);
+      groupManager.addEvents([mockEvent1, mockEvent1]);
 
-      const pendingTxs = sweepManager.getPendingTxHashes();
+      const pendingTxs = groupManager.getPendingTxHashes();
       expect(pendingTxs.size).toBe(1);
 
       // After settle time, should only have one event
       const SETTLE_BUFFER_MS = 1100;
       setTimeout(() => {
-        const readySweeps = sweepManager.getReadySweeps();
-        expect(readySweeps[0].events).toHaveLength(1);
+        const readyGroups = groupManager.getReadyGroups();
+        expect(readyGroups[0].events).toHaveLength(1);
       }, SETTLE_BUFFER_MS);
     });
   });

@@ -1,4 +1,4 @@
-import { SweepAggregator } from '../src/utils/aggregator';
+import { EventGroupAggregator } from '../src/utils/aggregator';
 
 const mk = (tx: string, id: number) => ({
   transaction_hash: tx,
@@ -6,9 +6,9 @@ const mk = (tx: string, id: number) => ({
   nft: { identifier: id },
 });
 
-describe('SweepAggregator', () => {
+describe('EventGroupAggregator', () => {
   it('groups by tx and flushes after settleMs with min size', async () => {
-    const agg = new SweepAggregator({ settleMs: 10, minGroupSize: 3 });
+    const agg = new EventGroupAggregator({ settleMs: 10, minGroupSize: 3 });
     agg.add([mk('0xabc', 1), mk('0xabc', 2)]);
     let ready = agg.flushReady();
     expect(ready.length).toBe(0);

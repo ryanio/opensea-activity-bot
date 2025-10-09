@@ -2,6 +2,17 @@ import { TwitterApi } from 'twitter-api-v2';
 import { EventType, opensea, username } from '../opensea';
 import type { BotEvent, OpenSeaAssetEvent, OpenSeaPayment } from '../types';
 import { txHashFor } from '../utils/aggregator';
+import {
+  calculateTotalSpent,
+  EventGroupManager,
+  eventKeyFor,
+  type GroupedEvent,
+  getDefaultEventGroupConfig,
+  groupKindForEvents,
+  isGroupedEvent,
+  primaryActorAddressForGroup,
+  sortEventsByPrice,
+} from '../utils/event-grouping';
 import { isEventWanted, parseEvents } from '../utils/events';
 import {
   openseaCollectionActivityUrl,
@@ -11,17 +22,6 @@ import {
 import { logger } from '../utils/logger';
 import { LRUCache } from '../utils/lru-cache';
 import { AsyncQueue } from '../utils/queue';
-import {
-  calculateTotalSpent,
-  eventKeyFor,
-  getDefaultSweepConfig,
-  groupKindForEvents,
-  isSweepEvent,
-  primaryActorAddressForGroup,
-  type SweepEvent,
-  SweepManager,
-  sortEventsByPrice,
-} from '../utils/sweep';
 import {
   classifyTransfer,
   fetchImageBuffer,
@@ -70,12 +70,12 @@ type MinimalTwitterClient = {
 };
 
 let twitterClient: MinimalTwitterClient | undefined;
-type TweetEvent = OpenSeaAssetEvent | SweepEvent;
+type TweetEvent = OpenSeaAssetEvent | GroupedEvent;
 type TweetQueueItem = { event: TweetEvent };
 
-// Initialize sweep manager for Twitter
-const sweepConfig = getDefaultSweepConfig('TWITTER');
-const sweepManager = new SweepManager(sweepConfig);
+// Initialize event group manager for Twitter
+const groupConfig = getDefaultEventGroupConfig('TWITTER');
+const groupManager = new EventGroupManager(groupConfig);
 
 // Generic async queue for tweeting
 const tweetQueue = new AsyncQueue<TweetQueueItem>({
@@ -86,15 +86,15 @@ const tweetQueue = new AsyncQueue<TweetQueueItem>({
   keyFor: (i) => keyForQueueItem(i),
   isAlreadyProcessed: (key) => tweetedEventsCache.get(key) === true,
   onProcessed: (item) => {
-    // Mark the queue key as processed to prevent reprocessing the same sweep/solo
+    // Mark the queue key as processed to prevent reprocessing the same group/solo
     const queueKey = keyForQueueItem(item);
     tweetedEventsCache.put(queueKey, true);
 
     const event = item?.event;
-    if (isSweepEvent(event)) {
-      sweepManager.markSweepProcessed(event);
+    if (isGroupedEvent(event)) {
+      groupManager.markGroupProcessed(event);
     } else if (event) {
-      sweepManager.markProcessed(event as OpenSeaAssetEvent);
+      groupManager.markProcessed(event as OpenSeaAssetEvent);
     }
   },
   process: async (item) => {
@@ -148,9 +148,9 @@ const tweetQueue = new AsyncQueue<TweetQueueItem>({
 
 const keyForQueueItem = (item: TweetQueueItem): string => {
   const ev = item.event;
-  if (isSweepEvent(ev)) {
+  if (isGroupedEvent(ev)) {
     const tx = ev.txHash ?? txHashFor(ev.events?.[0]) ?? 'unknown';
-    return `sweep:${tx}`;
+    return `group:${tx}`;
   }
   return eventKeyFor(item.event as OpenSeaAssetEvent);
 };
@@ -337,7 +337,7 @@ export const textForTweet = async (event: OpenSeaAssetEvent) => {
 
 const MAX_MEDIA_IMAGES = 4;
 
-// getPurchasePrice is now imported from sweep-utils
+// getPurchasePrice is now imported from event-grouping
 
 const uploadImagesForGroup = async (
   client: MinimalTwitterClient,
@@ -364,7 +364,7 @@ const uploadImagesForGroup = async (
       mediaIds.push(id);
     } catch (uploadError) {
       logger.warn(
-        `${logStart} Sweep media upload failed; continuing:`,
+        `${logStart} Group media upload failed; continuing:`,
         uploadError
       );
     }
@@ -372,9 +372,9 @@ const uploadImagesForGroup = async (
   return mediaIds;
 };
 
-// calculateTotalSpent is now imported from sweep-utils
+// calculateTotalSpent is now imported from event-grouping
 
-const tweetSweep = async (
+const tweetGroup = async (
   client: MinimalTwitterClient,
   group: OpenSeaAssetEvent[]
 ) => {
@@ -450,7 +450,7 @@ const tweetSweep = async (
     const key = eventKeyFor(e);
     tweetedEventsCache.put(key, true);
   }
-  logger.info(`${logStart} 🧹 Tweeted sweep: ${count} items`);
+  logger.info(`${logStart} 🧹 Tweeted group: ${count} items`);
 };
 
 const tweetSingle = async (
@@ -487,8 +487,8 @@ const tweetSingle = async (
 };
 
 const tweetEvent = async (client: MinimalTwitterClient, event: TweetEvent) => {
-  if (isSweepEvent(event)) {
-    await tweetSweep(client, event.events);
+  if (isGroupedEvent(event)) {
+    await tweetGroup(client, event.events);
     return;
   }
   await tweetSingle(client, event as OpenSeaAssetEvent);
@@ -524,6 +524,83 @@ export const matchesSelection = (
   selectionSet: Set<BotEvent>
 ): boolean => isEventWanted(ev, selectionSet);
 
+const getTransferKind = (event: OpenSeaAssetEvent): string => {
+  const kind = classifyTransfer(event);
+  if (kind === 'burn') {
+    return 'burn';
+  }
+  if (kind === 'mint') {
+    return 'mint';
+  }
+  return 'transfer';
+};
+
+const logEventBreakdown = (filteredEvents: OpenSeaAssetEvent[]): void => {
+  const eventTypeBreakdown = new Map<string, number>();
+  for (const event of filteredEvents) {
+    const key =
+      event.event_type === 'transfer'
+        ? getTransferKind(event)
+        : event.event_type;
+    eventTypeBreakdown.set(key, (eventTypeBreakdown.get(key) ?? 0) + 1);
+  }
+  const breakdown = Array.from(eventTypeBreakdown.entries())
+    .map(([type, count]) => `${type}=${count}`)
+    .join(', ');
+  logger.debug(`${logStart} Event breakdown: ${breakdown}`);
+};
+
+const enqueueGroups = (
+  readyGroups: Array<{ tx: string; events: OpenSeaAssetEvent[] }>
+): void => {
+  for (const { tx, events: evts } of readyGroups) {
+    tweetQueue.enqueue({
+      event: { kind: 'group', txHash: tx, events: evts },
+    });
+  }
+  if (readyGroups.length > 0) {
+    const counts = readyGroups.map((r) => r.events.length).join(',');
+    logger.info(
+      `${logStart} Group tweeted: ${readyGroups.map((r) => r.events.length).join(', ')} items`
+    );
+    logger.debug(
+      `${logStart} Enqueued ${readyGroups.length} group(s) [sizes=${counts}] queue=${tweetQueue.size()}`
+    );
+  }
+};
+
+const enqueueIndividualEvents = (
+  processableEvents: OpenSeaAssetEvent[]
+): void => {
+  for (const event of processableEvents) {
+    tweetQueue.enqueue({ event });
+  }
+};
+
+const logProcessingSummary = (
+  skippedPending: number,
+  processableEvents: OpenSeaAssetEvent[],
+  skippedDupes: number
+): void => {
+  if (skippedPending > 0) {
+    const pluralSuffix = skippedPending === 1 ? '' : 's';
+    logger.info(
+      `${logStart} Holding ${skippedPending} event${pluralSuffix} in aggregator (pending group detection)`
+    );
+  }
+
+  if (processableEvents.length > 0) {
+    const pluralSuffix = processableEvents.length === 1 ? '' : 's';
+    logger.info(
+      `${logStart} Queued ${processableEvents.length} individual event${pluralSuffix} for tweeting`
+    );
+  }
+
+  logger.debug(
+    `${logStart} Enqueue summary: singles=${processableEvents.length} skippedDupes=${skippedDupes} skippedPendingGroup=${skippedPending} queue=${tweetQueue.size()}`
+  );
+};
+
 export const tweetEvents = (events: OpenSeaAssetEvent[]) => {
   if (!process.env.TWITTER_EVENTS) {
     return;
@@ -536,7 +613,7 @@ export const tweetEvents = (events: OpenSeaAssetEvent[]) => {
   const requestedSet = parseRequestedEvents(process.env.TWITTER_EVENTS);
 
   logger.debug(
-    `${logStart} Events configured: ${Array.from(requestedSet).join(', ')}`
+    `${logStart} Twitter events configured: ${Array.from(requestedSet).join(', ')}`
   );
 
   const filteredEvents = events.filter((event) =>
@@ -544,49 +621,35 @@ export const tweetEvents = (events: OpenSeaAssetEvent[]) => {
   );
 
   if (filteredEvents.length > 0) {
-    logger.info(
-      `${logStart} 📊 Found ${filteredEvents.length} relevant event${filteredEvents.length === 1 ? '' : 's'} for Twitter`
-    );
+    logger.info(`${logStart} Relevant events: ${filteredEvents.length}`);
+    logEventBreakdown(filteredEvents);
   }
 
   if (filteredEvents.length === 0) {
     return;
   }
 
-  // Add to sweep aggregator; this supports >50 event sweeps across batches
-  sweepManager.addEvents(filteredEvents);
-  const pendingLarge = sweepManager.getPendingLargeTxHashes();
-  const pendingAll = sweepManager.getPendingTxHashes();
+  // Add to event group aggregator; this supports >50 event groups across batches
+  groupManager.addEvents(filteredEvents);
+  const pendingLarge = groupManager.getPendingLargeTxHashes();
+  const pendingAll = groupManager.getPendingTxHashes();
   logger.debug(
     `${logStart} Aggregator state: pendingTxs=${pendingAll.size} pendingLargeTxs=${pendingLarge.size}`
   );
 
-  // Flush any sweeps that have settled
-  const readySweeps = sweepManager.getReadySweeps();
-  for (const { tx, events: evts } of readySweeps) {
-    tweetQueue.enqueue({
-      event: { kind: 'sweep', txHash: tx, events: evts },
-    });
-  }
-  if (readySweeps.length > 0) {
-    const counts = readySweeps.map((r) => r.events.length).join(',');
-    logger.debug(
-      `${logStart} Enqueued ${readySweeps.length} sweep(s) [sizes=${counts}] queue=${tweetQueue.size()}`
-    );
-  }
+  // Flush any groups that have settled
+  const readyGroups = groupManager.getReadyGroups();
+  enqueueGroups(readyGroups);
 
-  // Use sweep manager to filter processable events
+  // Use group manager to filter processable events
   const { processableEvents, skippedDupes, skippedPending } =
-    sweepManager.filterProcessableEvents(filteredEvents);
+    groupManager.filterProcessableEvents(filteredEvents);
 
   // Enqueue remaining individual events
-  for (const event of processableEvents) {
-    tweetQueue.enqueue({ event });
-  }
+  enqueueIndividualEvents(processableEvents);
 
-  logger.debug(
-    `${logStart} Enqueue summary: singles=${processableEvents.length} skippedDupes=${skippedDupes} skippedPendingSweep=${skippedPending} queue=${tweetQueue.size()}`
-  );
+  // Better diagnostics for what happened to the events
+  logProcessingSummary(skippedPending, processableEvents, skippedDupes);
 
   // Fire and forget
   tweetQueue.start();

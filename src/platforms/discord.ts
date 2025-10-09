@@ -9,28 +9,28 @@ import { format } from 'timeago.js';
 import { EventType, opensea, username } from '../opensea';
 import { BotEvent, type OpenSeaAssetEvent } from '../types';
 import type { AggregatorEvent } from '../utils/aggregator';
+import {
+  calculateTotalSpent,
+  EventGroupManager,
+  type GroupedEvent,
+  getDefaultEventGroupConfig,
+  getTopExpensiveEvents,
+  groupKindForEvents,
+  primaryActorAddressForGroup,
+} from '../utils/event-grouping';
 import { effectiveEventTypeFor } from '../utils/event-types';
 import {
   openseaCollectionActivityUrl,
   openseaProfileTransferActivityUrl,
 } from '../utils/links';
 import { prefixedLogger } from '../utils/logger';
-import {
-  calculateTotalSpent,
-  getDefaultSweepConfig,
-  getTopExpensiveEvents,
-  groupKindForEvents,
-  primaryActorAddressForGroup,
-  type SweepEvent,
-  SweepManager,
-} from '../utils/sweep';
 import { formatAmount, imageForNFT, timeout } from '../utils/utils';
 
 const log = prefixedLogger('Discord');
 
-// Initialize sweep manager for Discord
-const sweepConfig = getDefaultSweepConfig('DISCORD');
-const sweepManager = new SweepManager(sweepConfig);
+// Initialize event group manager for Discord
+const groupConfig = getDefaultEventGroupConfig('DISCORD');
+const groupManager = new EventGroupManager(groupConfig);
 
 type ChannelEvents = [
   channelId: string,
@@ -252,13 +252,13 @@ const embed = async (event: AggregatorEvent) => {
   return built;
 };
 
-const buildSweepEmbed = async (sweep: SweepEvent): Promise<EmbedBuilder> => {
-  const count = sweep.events.length;
-  const kind = groupKindForEvents(sweep.events);
-  const totalSpent = calculateTotalSpent(sweep.events);
+const buildGroupEmbed = async (group: GroupedEvent): Promise<EmbedBuilder> => {
+  const count = group.events.length;
+  const kind = groupKindForEvents(group.events);
+  const totalSpent = calculateTotalSpent(group.events);
 
   // Deduce primary actor
-  const actorAddress = primaryActorAddressForGroup(sweep.events, kind);
+  const actorAddress = primaryActorAddressForGroup(group.events, kind);
 
   let title = '';
   if (kind === 'burn') {
@@ -299,7 +299,7 @@ const buildSweepEmbed = async (sweep: SweepEvent): Promise<EmbedBuilder> => {
   // Add top 4 most expensive items
   const TOP_ITEMS_COUNT = 4;
   const topExpensiveItems = getTopExpensiveEvents(
-    sweep.events,
+    group.events,
     TOP_ITEMS_COUNT
   );
   if (topExpensiveItems.length > 0) {
@@ -324,8 +324,8 @@ const buildSweepEmbed = async (sweep: SweepEvent): Promise<EmbedBuilder> => {
     });
   }
 
-  const sweepEmbed = new EmbedBuilder()
-    .setColor('#62b778') // Green color for sweeps
+  const groupEmbed = new EmbedBuilder()
+    .setColor('#62b778') // Green color for event groups
     .setTitle(title)
     .setFields(fields)
     .setURL(opensea.collectionURL());
@@ -335,11 +335,11 @@ const buildSweepEmbed = async (sweep: SweepEvent): Promise<EmbedBuilder> => {
   if (highestValueItem?.nft) {
     const image = imageForNFT(highestValueItem.nft);
     if (image) {
-      sweepEmbed.setThumbnail(image);
+      groupEmbed.setThumbnail(image);
     }
   }
 
-  return sweepEmbed;
+  return groupEmbed;
 };
 
 const messagesForEvents = async (
@@ -382,23 +382,23 @@ const getChannels = async (
   return channels;
 };
 
-const processSweepMessages = async (
-  readySweeps: Array<{ tx: string; events: OpenSeaAssetEvent[] }>,
+const processGroupMessages = async (
+  readyGroups: Array<{ tx: string; events: OpenSeaAssetEvent[] }>,
   discordChannels: Record<string, TextBasedChannel>,
   isSendableChannel: (ch: TextBasedChannel) => ch is TextBasedChannel & {
     send: (options: MessageCreateOptions) => Promise<unknown>;
   }
 ) => {
-  for (const readySweep of readySweeps) {
-    const sweep: SweepEvent = {
-      kind: 'sweep',
-      txHash: readySweep.tx,
-      events: readySweep.events,
+  for (const readyGroup of readyGroups) {
+    const group: GroupedEvent = {
+      kind: 'group',
+      txHash: readyGroup.tx,
+      events: readyGroup.events,
     };
-    const sweepEmbed = await buildSweepEmbed(sweep);
-    const message: MessageCreateOptions = { embeds: [sweepEmbed] };
+    const groupEmbed = await buildGroupEmbed(group);
+    const message: MessageCreateOptions = { embeds: [groupEmbed] };
 
-    // Send sweep to all configured channels (sweeps are notable events)
+    // Send group to all configured channels (groups are notable events)
     const allChannels = Object.values(discordChannels);
 
     for (const channel of allChannels) {
@@ -406,13 +406,13 @@ const processSweepMessages = async (
         continue;
       }
       await channel.send(message);
-      log.info(`🧹 Sent sweep notification: ${sweep.events.length} items`);
+      log.info(`🧹 Sent group notification: ${group.events.length} items`);
     }
 
-    // Mark sweep as processed
-    sweepManager.markSweepProcessed(sweep);
+    // Mark group as processed
+    groupManager.markGroupProcessed(group);
 
-    // Wait between sweep messages
+    // Wait between group messages
     const INTER_MESSAGE_DELAY_MS = 3000;
     await timeout(INTER_MESSAGE_DELAY_MS);
   }
@@ -451,7 +451,7 @@ const processIndividualMessages = async (
     }
 
     // Mark individual event as processed
-    sweepManager.markProcessed(event);
+    groupManager.markProcessed(event);
 
     // Wait between messages
     if (messages[index + 1]) {
@@ -490,18 +490,18 @@ export async function messageEvents(events: AggregatorEvent[]) {
     return;
   }
 
-  // Add events to sweep aggregator
-  sweepManager.addEvents(filteredEvents);
+  // Add events to event group aggregator
+  groupManager.addEvents(filteredEvents);
 
-  // Get ready sweeps
-  const readySweeps = sweepManager.getReadySweeps();
+  // Get ready groups
+  const readyGroups = groupManager.getReadyGroups();
 
-  // Filter out events that are part of pending sweeps or already processed
+  // Filter out events that are part of pending groups or already processed
   const { processableEvents, skippedDupes, skippedPending } =
-    sweepManager.filterProcessableEvents(filteredEvents);
+    groupManager.filterProcessableEvents(filteredEvents);
 
   log.debug(
-    `Processing: sweeps=${readySweeps.length} singles=${processableEvents.length} ` +
+    `Processing: groups=${readyGroups.length} singles=${processableEvents.length} ` +
       `skippedDupes=${skippedDupes} skippedPending=${skippedPending}`
   );
 
@@ -520,8 +520,8 @@ export async function messageEvents(events: AggregatorEvent[]) {
     await login(client);
     const discordChannels = await getChannels(client, channelEvents);
 
-    // Process sweep messages first
-    await processSweepMessages(readySweeps, discordChannels, isSendableChannel);
+    // Process group messages first
+    await processGroupMessages(readyGroups, discordChannels, isSendableChannel);
 
     // Process individual events
     await processIndividualMessages(

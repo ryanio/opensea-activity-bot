@@ -2,8 +2,8 @@ import { fetchEvents } from './opensea';
 import { messageEvents } from './platforms/discord';
 import { tweetEvents } from './platforms/twitter';
 import type { OpenSeaAssetEvent } from './types';
+import { getDefaultEventGroupConfig } from './utils/event-grouping';
 import { logger } from './utils/logger';
-import { getDefaultSweepConfig } from './utils/sweep';
 import { botInterval, chain, minOfferETH, shortTokenAddr } from './utils/utils';
 
 const DEFAULT_QUERY_LIMIT = 50;
@@ -39,17 +39,20 @@ const logPlatformConfig = (
   logger.info('│');
 };
 
-const logSweepConfig = (twitterEnabled: boolean, discordEnabled: boolean) => {
+const logEventGroupConfig = (
+  twitterEnabled: boolean,
+  discordEnabled: boolean
+) => {
   if (!(twitterEnabled || discordEnabled)) {
     return;
   }
   logger.info(
-    '├─ 🧹 SWEEP AGGREGATION ──────────────────────────────────────────────┤'
+    '├─ 🧹 EVENT GROUPING ──────────────────────────────────────────────────┤'
   );
   logger.info('│');
   if (twitterEnabled) {
-    const config = getDefaultSweepConfig('TWITTER');
-    logger.info('│  🐦 Twitter Sweeps:');
+    const config = getDefaultEventGroupConfig('TWITTER');
+    logger.info('│  🐦 Twitter Event Groups:');
     logger.info(`│     ├─ Min Group Size: ${config.minGroupSize} items`);
     logger.info(
       `│     └─ Settle Time: ${config.settleMs / MILLISECONDS_PER_SECOND}s`
@@ -57,8 +60,8 @@ const logSweepConfig = (twitterEnabled: boolean, discordEnabled: boolean) => {
     logger.info('│');
   }
   if (discordEnabled) {
-    const config = getDefaultSweepConfig('DISCORD');
-    logger.info('│  💬 Discord Sweeps:');
+    const config = getDefaultEventGroupConfig('DISCORD');
+    logger.info('│  💬 Discord Event Groups:');
     logger.info(`│     ├─ Min Group Size: ${config.minGroupSize} items`);
     logger.info(
       `│     └─ Settle Time: ${config.settleMs / MILLISECONDS_PER_SECOND}s`
@@ -109,7 +112,7 @@ const logStartupConfiguration = () => {
   const discordEnabled = Boolean(process.env.DISCORD_EVENTS);
 
   logPlatformConfig(twitterEnabled, discordEnabled);
-  logSweepConfig(twitterEnabled, discordEnabled);
+  logEventGroupConfig(twitterEnabled, discordEnabled);
 
   logger.info(
     '└─────────────────────────────────────────────────────────────────────┘'

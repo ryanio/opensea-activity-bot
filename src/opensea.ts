@@ -7,10 +7,10 @@ import type {
   OpenSeaContractResponse,
   OpenSeaEventsResponse,
 } from './types';
+import { eventKeyFor } from './utils/event-grouping';
 import { parseEvents, wantsOpenSeaEventTypes } from './utils/events';
 import { logger } from './utils/logger';
 import { LRUCache } from './utils/lru-cache';
-import { eventKeyFor } from './utils/sweep';
 import { chain, minOfferETH, shortAddr, unixTimestamp } from './utils/utils';
 
 const {
@@ -32,6 +32,10 @@ const FETCHED_EVENTS_CACHE_CAPACITY = 1000;
 const fetchedEventsCache = new LRUCache<string, boolean>(
   FETCHED_EVENTS_CACHE_CAPACITY
 );
+
+// Pagination constants
+const SUBSTRING_LENGTH_FOR_CURSOR_LOG = 20;
+const MAX_PAGINATION_PAGES = 10;
 
 export const opensea = {
   api: 'https://api.opensea.io/api/v2/',
@@ -234,20 +238,10 @@ const buildEventsUrl = (): string => {
   return `${opensea.getEvents()}?${urlParams}`;
 };
 
-const logReceivedEvents = (count: number): void => {
-  if (count > 0) {
-    logger.info(`📥 Received ${count} event${count === 1 ? '' : 's'}`);
-  } else {
-    logger.debug('📭 No new events');
-  }
-};
-
 const processEventFilters = (
   events: OpenSeaAssetEvent[]
 ): OpenSeaAssetEvent[] => {
   let processed = filterPrivateListings(events);
-
-  logReceivedEvents(processed.length);
 
   const { filtered: afterOfferFilter, count: lowValueCount } =
     filterLowValueOffers(processed);
@@ -264,9 +258,7 @@ const processEventFilters = (
   processed = finalEvents;
 
   if (dupeCount > 0) {
-    logger.info(
-      `♻️  Deduplicated ${dupeCount} already-processed event${dupeCount === 1 ? '' : 's'}`
-    );
+    logger.info(`Events deduplicated: ${dupeCount}`);
   }
 
   if (processed.length > 0) {
@@ -281,17 +273,57 @@ const processEventFilters = (
 export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
   await fetchCollectionSlug(TOKEN_ADDRESS ?? '');
 
-  logger.info('🔄 Polling OpenSea API for new events...');
+  logger.info('Fetching events');
 
   const url = buildEventsUrl();
-  const result = await openseaGet<OpenSeaEventsResponse>(url);
+  let result = await openseaGet<OpenSeaEventsResponse>(url);
 
   if (!result?.asset_events) {
     logger.warn('⚠️  No asset_events found in API response');
     return [];
   }
 
-  const events = result.asset_events.reverse();
+  let allEvents = [...result.asset_events];
+  logger.info(`Fetched events: ${allEvents.length}`);
+
+  // Pagination: if there's a 'next' cursor and we got exactly the limit, fetch more pages
+  const DEFAULT_QUERY_LIMIT = 50;
+  const limit = Number(QUERY_LIMIT ?? DEFAULT_QUERY_LIMIT);
+  let pagesFollowed = 0;
+
+  while (
+    result?.next &&
+    allEvents.length >= limit &&
+    pagesFollowed < MAX_PAGINATION_PAGES
+  ) {
+    pagesFollowed += 1;
+    const nextUrl = `${opensea.getEvents()}?${result.next}`;
+    const cursorPreview = result.next.slice(0, SUBSTRING_LENGTH_FOR_CURSOR_LOG);
+    logger.debug(
+      `Fetching page ${pagesFollowed + 1} (cursor: ${cursorPreview}...)`
+    );
+
+    result = await openseaGet<OpenSeaEventsResponse>(nextUrl);
+
+    if (result?.asset_events && result.asset_events.length > 0) {
+      allEvents = [...allEvents, ...result.asset_events];
+      logger.info(
+        `Fetched events: ${result.asset_events.length} (total: ${allEvents.length})`
+      );
+    } else {
+      break;
+    }
+  }
+
+  if (pagesFollowed > 0) {
+    const totalPages = pagesFollowed + 1;
+    const pluralSuffix = pagesFollowed > 0 ? 's' : '';
+    logger.info(
+      `📄 Fetched ${totalPages} page${pluralSuffix} (${allEvents.length} total events)`
+    );
+  }
+
+  const events = allEvents.reverse();
   updateLastEventTimestamp(events);
 
   return processEventFilters(events);

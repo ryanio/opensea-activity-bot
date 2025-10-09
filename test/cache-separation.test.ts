@@ -1,6 +1,6 @@
 import type { OpenSeaAssetEvent } from '../src/types';
+import { eventKeyFor } from '../src/utils/event-grouping';
 import { LRUCache } from '../src/utils/lru-cache';
-import { eventKeyFor } from '../src/utils/sweep';
 
 // Import JSON fixture
 const salesFixture = require('./fixtures/opensea/events-sales.json');
@@ -72,9 +72,9 @@ describe('Cache Separation - Why Both Caches Are Needed', () => {
     expect(tweetedEventsCache.get(eventKey)).toBe(true);
   });
 
-  it('should demonstrate sweep aggregation deduplication', () => {
-    // Create multiple events that could be part of a sweep
-    const sweepEvents: OpenSeaAssetEvent[] = [
+  it('should demonstrate event group aggregation deduplication', () => {
+    // Create multiple events that could be part of a group
+    const groupEvents: OpenSeaAssetEvent[] = [
       {
         ...mockEvent,
         nft: mockEvent.nft
@@ -96,25 +96,25 @@ describe('Cache Separation - Why Both Caches Are Needed', () => {
     ];
 
     // All events are fetched and cached
-    for (const event of sweepEvents) {
+    for (const event of groupEvents) {
       const eventKey = eventKeyFor(event);
       fetchedEventsCache.put(eventKey, true);
     }
 
-    // Events are aggregated into a sweep
-    const sweepKey = 'sweep_tx_hash_123';
+    // Events are aggregated into a group
+    const groupKey = 'group_tx_hash_123';
 
-    // Individual events should not be tweeted if they're part of a sweep
-    // Mark the sweep as tweeted, but also mark individual events to prevent duplicate processing
-    tweetedEventsCache.put(sweepKey, true);
+    // Individual events should not be tweeted if they're part of a group
+    // Mark the group as tweeted, but also mark individual events to prevent duplicate processing
+    tweetedEventsCache.put(groupKey, true);
 
-    for (const event of sweepEvents) {
+    for (const event of groupEvents) {
       const eventKey = eventKeyFor(event);
       tweetedEventsCache.put(eventKey, true);
     }
 
     // Verify individual events won't be tweeted again
-    for (const event of sweepEvents) {
+    for (const event of groupEvents) {
       const eventKey = eventKeyFor(event);
       expect(tweetedEventsCache.get(eventKey)).toBe(true);
     }
