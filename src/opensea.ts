@@ -273,8 +273,6 @@ const processEventFilters = (
 export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
   await fetchCollectionSlug(TOKEN_ADDRESS ?? '');
 
-  logger.info('Fetching events');
-
   const url = buildEventsUrl();
   let result = await openseaGet<OpenSeaEventsResponse>(url);
 
