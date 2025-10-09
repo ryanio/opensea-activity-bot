@@ -450,7 +450,7 @@ const tweetSweep = async (
     const key = eventKeyFor(e);
     tweetedEventsCache.put(key, true);
   }
-  logger.info(`${logStart} Sweep tweeted: ${count} items`);
+  logger.info(`${logStart} 🧹 Tweeted sweep: ${count} items`);
 };
 
 const tweetSingle = async (
@@ -476,7 +476,13 @@ const tweetSingle = async (
     : { text: status };
   await client.v2.tweet(tweetParams);
   const key = eventKeyFor(event);
-  logger.info(`${logStart} Tweeted (event key: ${key}): ${status}`);
+  const MAX_LOG_LENGTH = 80;
+  const truncatedStatus = status.slice(0, MAX_LOG_LENGTH);
+  const needsTruncation = status.length > MAX_LOG_LENGTH;
+  logger.info(
+    `${logStart} 🐦 Tweeted: ${truncatedStatus}${needsTruncation ? '...' : ''}`
+  );
+  logger.debug(`${logStart} Event key: ${key}`);
   tweetedEventsCache.put(key, true);
 };
 
@@ -529,15 +535,19 @@ export const tweetEvents = (events: OpenSeaAssetEvent[]) => {
 
   const requestedSet = parseRequestedEvents(process.env.TWITTER_EVENTS);
 
-  logger.info(
-    `${logStart} Twitter events configured: ${Array.from(requestedSet).join(', ')}`
+  logger.debug(
+    `${logStart} Events configured: ${Array.from(requestedSet).join(', ')}`
   );
 
   const filteredEvents = events.filter((event) =>
     matchesSelection(event, requestedSet)
   );
 
-  logger.info(`${logStart} Relevant events: ${filteredEvents.length}`);
+  if (filteredEvents.length > 0) {
+    logger.info(
+      `${logStart} 📊 Found ${filteredEvents.length} relevant event${filteredEvents.length === 1 ? '' : 's'} for Twitter`
+    );
+  }
 
   if (filteredEvents.length === 0) {
     return;

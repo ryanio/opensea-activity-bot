@@ -147,68 +147,37 @@ const fetchCollectionSlug = async (address: string): Promise<string> => {
   if (collectionSlug) {
     return collectionSlug;
   }
-  logger.info(`Getting collection slug for ${address} on chain ${chain}…`);
+  logger.info(`🔍 Fetching collection metadata for ${address} on ${chain}...`);
   const url = opensea.getContract();
   const result = await openseaGet<OpenSeaContractResponse>(url);
   if (!result?.collection) {
+    logger.error(`❌ No collection found for ${address} on chain ${chain}`);
     throw new Error(`No collection found for ${address} on chain ${chain}`);
   }
-  logger.info(`Got collection slug: ${result.collection}`);
+  logger.info(`✅ Collection identified: ${result.collection}`);
   collectionSlug = result.collection;
   return result.collection;
 };
 
-export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
-  await fetchCollectionSlug(TOKEN_ADDRESS ?? '');
-
-  logger.info('Fetching events');
-
-  const eventTypes = enabledEventTypes();
-  const DEFAULT_QUERY_LIMIT = 50;
-  const params: Record<string, string> = {
-    limit: (QUERY_LIMIT ?? DEFAULT_QUERY_LIMIT).toString(),
-    after: lastEventTimestamp.toString(),
-  };
-  const urlParams = new URLSearchParams(params);
-  for (const eventType of eventTypes) {
-    urlParams.append('event_type', eventType);
-  }
-
-  const url = `${opensea.getEvents()}?${urlParams}`;
-  const result = await openseaGet<OpenSeaEventsResponse>(url);
-
-  if (!result?.asset_events) {
-    logger.warn('No asset_events found in response');
-    return [];
-  }
-
-  let events = result.asset_events;
-
-  // Reverse so that oldest events are messaged first
-  events = events.reverse();
-
-  // Update last seen event
-  if (events.length > 0) {
-    const lastEvent = events.at(-1);
-    if (lastEvent) {
-      // Increment by 1 to ensure we don't fetch events with the same timestamp again
-      lastEventTimestamp = lastEvent.event_timestamp + 1;
-    }
-  }
-
-  // Filter out private listings
-  events = events.filter((event) => {
+const filterPrivateListings = (
+  events: OpenSeaAssetEvent[]
+): OpenSeaAssetEvent[] => {
+  return events.filter((event) => {
     if (event.order_type === EventType.listing && event.is_private_listing) {
       return false;
     }
     return true;
   });
+};
 
-  const eventsPreFilter = events.length;
-  logger.info(`Fetched events: ${eventsPreFilter}`);
-
-  // Filter out low value offers
-  events = events.filter((event) => {
+const filterLowValueOffers = (
+  events: OpenSeaAssetEvent[]
+): {
+  filtered: OpenSeaAssetEvent[];
+  count: number;
+} => {
+  const preFilter = events.length;
+  const filtered = events.filter((event) => {
     if (
       event.order_type?.includes('offer') &&
       event.payment?.symbol === 'WETH'
@@ -221,32 +190,109 @@ export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
     }
     return true;
   });
+  return { filtered, count: preFilter - filtered.length };
+};
 
-  const eventsPostFilter = events.length;
-  const eventsFiltered = eventsPreFilter - eventsPostFilter;
-  if (eventsFiltered > 0) {
-    logger.info(
-      `Offers under ${minOfferETH} ETH filtered out: ${eventsFiltered}`
-    );
-  }
-
-  // Filter out events that have already been fetched/processed
-  const eventsPreDedup = events.length;
-  events = events.filter((event) => {
+const deduplicateEvents = (
+  events: OpenSeaAssetEvent[]
+): {
+  deduplicated: OpenSeaAssetEvent[];
+  count: number;
+} => {
+  const preDedup = events.length;
+  const deduplicated = events.filter((event) => {
     const eventKey = eventKeyFor(event);
     if (fetchedEventsCache.get(eventKey)) {
-      return false; // Already seen this event
+      return false;
     }
-    // Mark as seen
     fetchedEventsCache.put(eventKey, true);
     return true;
   });
+  return { deduplicated, count: preDedup - deduplicated.length };
+};
 
-  const eventsPostDedup = events.length;
-  const eventsDeduplicated = eventsPreDedup - eventsPostDedup;
-  if (eventsDeduplicated > 0) {
-    logger.info(`Events deduplicated: ${eventsDeduplicated}`);
+const updateLastEventTimestamp = (events: OpenSeaAssetEvent[]): void => {
+  if (events.length > 0) {
+    const lastEvent = events.at(-1);
+    if (lastEvent) {
+      lastEventTimestamp = lastEvent.event_timestamp + 1;
+    }
+  }
+};
+
+const buildEventsUrl = (): string => {
+  const eventTypes = enabledEventTypes();
+  const DEFAULT_QUERY_LIMIT = 50;
+  const params: Record<string, string> = {
+    limit: (QUERY_LIMIT ?? DEFAULT_QUERY_LIMIT).toString(),
+    after: lastEventTimestamp.toString(),
+  };
+  const urlParams = new URLSearchParams(params);
+  for (const eventType of eventTypes) {
+    urlParams.append('event_type', eventType);
+  }
+  return `${opensea.getEvents()}?${urlParams}`;
+};
+
+const logReceivedEvents = (count: number): void => {
+  if (count > 0) {
+    logger.info(`📥 Received ${count} event${count === 1 ? '' : 's'}`);
+  } else {
+    logger.debug('📭 No new events');
+  }
+};
+
+const processEventFilters = (
+  events: OpenSeaAssetEvent[]
+): OpenSeaAssetEvent[] => {
+  let processed = filterPrivateListings(events);
+
+  logReceivedEvents(processed.length);
+
+  const { filtered: afterOfferFilter, count: lowValueCount } =
+    filterLowValueOffers(processed);
+  processed = afterOfferFilter;
+
+  if (lowValueCount > 0) {
+    logger.info(
+      `🔽 Filtered ${lowValueCount} low-value offer${lowValueCount === 1 ? '' : 's'} (< ${minOfferETH} ETH)`
+    );
   }
 
-  return events;
+  const { deduplicated: finalEvents, count: dupeCount } =
+    deduplicateEvents(processed);
+  processed = finalEvents;
+
+  if (dupeCount > 0) {
+    logger.info(
+      `♻️  Deduplicated ${dupeCount} already-processed event${dupeCount === 1 ? '' : 's'}`
+    );
+  }
+
+  if (processed.length > 0) {
+    logger.info(
+      `✨ Processing ${processed.length} new event${processed.length === 1 ? '' : 's'}`
+    );
+  }
+
+  return processed;
+};
+
+export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
+  await fetchCollectionSlug(TOKEN_ADDRESS ?? '');
+
+  logger.info('🔄 Polling OpenSea API for new events...');
+
+  const url = buildEventsUrl();
+  const result = await openseaGet<OpenSeaEventsResponse>(url);
+
+  if (!result?.asset_events) {
+    logger.warn('⚠️  No asset_events found in API response');
+    return [];
+  }
+
+  const events = result.asset_events.reverse();
+  updateLastEventTimestamp(events);
+
+  return processEventFilters(events);
 };

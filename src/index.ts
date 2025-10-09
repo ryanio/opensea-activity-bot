@@ -13,57 +13,97 @@ const logPlatformConfig = (
   twitterEnabled: boolean,
   discordEnabled: boolean
 ) => {
-  logger.info('');
-  logger.info('🔌 Platforms:');
-  logger.info(`   Twitter: ${twitterEnabled ? '✓ enabled' : '✗ disabled'}`);
+  logger.info(
+    '├─ 🔌 PLATFORMS ──────────────────────────────────────────────────────┤'
+  );
+  logger.info('│');
+  logger.info(
+    `│  🐦 Twitter: ${twitterEnabled ? '✅ ENABLED' : '⭕ DISABLED'}`
+  );
   if (twitterEnabled) {
-    logger.info(`   └─ Events: ${process.env.TWITTER_EVENTS}`);
+    logger.info(`│     ├─ Events: ${process.env.TWITTER_EVENTS}`);
     if (process.env.TWITTER_PREPEND_TWEET) {
-      logger.info(`   └─ Prepend: "${process.env.TWITTER_PREPEND_TWEET}"`);
+      logger.info(`│     ├─ Prepend: "${process.env.TWITTER_PREPEND_TWEET}"`);
     }
     if (process.env.TWITTER_APPEND_TWEET) {
-      logger.info(`   └─ Append: "${process.env.TWITTER_APPEND_TWEET}"`);
+      logger.info(`│     └─ Append: "${process.env.TWITTER_APPEND_TWEET}"`);
     }
   }
-  logger.info(`   Discord: ${discordEnabled ? '✓ enabled' : '✗ disabled'}`);
+  logger.info('│');
+  logger.info(
+    `│  💬 Discord: ${discordEnabled ? '✅ ENABLED' : '⭕ DISABLED'}`
+  );
   if (discordEnabled) {
-    logger.info(`   └─ Events: ${process.env.DISCORD_EVENTS}`);
+    logger.info(`│     └─ Events: ${process.env.DISCORD_EVENTS}`);
   }
+  logger.info('│');
 };
 
 const logSweepConfig = (twitterEnabled: boolean, discordEnabled: boolean) => {
   if (!(twitterEnabled || discordEnabled)) {
     return;
   }
-  logger.info('');
-  logger.info('🧹 Sweep Aggregation:');
+  logger.info(
+    '├─ 🧹 SWEEP AGGREGATION ──────────────────────────────────────────────┤'
+  );
+  logger.info('│');
   if (twitterEnabled) {
     const config = getDefaultSweepConfig('TWITTER');
+    logger.info('│  🐦 Twitter Sweeps:');
+    logger.info(`│     ├─ Min Group Size: ${config.minGroupSize} items`);
     logger.info(
-      `   Twitter: minGroupSize=${config.minGroupSize}, settle=${config.settleMs / MILLISECONDS_PER_SECOND}s`
+      `│     └─ Settle Time: ${config.settleMs / MILLISECONDS_PER_SECOND}s`
     );
+    logger.info('│');
   }
   if (discordEnabled) {
     const config = getDefaultSweepConfig('DISCORD');
+    logger.info('│  💬 Discord Sweeps:');
+    logger.info(`│     ├─ Min Group Size: ${config.minGroupSize} items`);
     logger.info(
-      `   Discord: minGroupSize=${config.minGroupSize}, settle=${config.settleMs / MILLISECONDS_PER_SECOND}s`
+      `│     └─ Settle Time: ${config.settleMs / MILLISECONDS_PER_SECOND}s`
     );
+    logger.info('│');
   }
 };
 
 const logStartupConfiguration = () => {
-  logger.info('🚀 Starting OpenSea Activity Bot');
-  logger.info(
-    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-  );
+  const asciiArt = `
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                                                                           ║
+║    ██████╗ ██████╗ ███████╗███╗   ██╗███████╗███████╗ █████╗              ║
+║   ██╔═══██╗██╔══██╗██╔════╝████╗  ██║██╔════╝██╔════╝██╔══██╗             ║
+║   ██║   ██║██████╔╝█████╗  ██╔██╗ ██║███████╗█████╗  ███████║             ║
+║   ██║   ██║██╔═══╝ ██╔══╝  ██║╚██╗██║╚════██║██╔══╝  ██╔══██║             ║
+║   ╚██████╔╝██║     ███████╗██║ ╚████║███████║███████╗██║  ██║             ║
+║    ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═══╝╚══════╝╚══════╝╚═╝  ╚═╝             ║
+║                                                                           ║
+║                     Activity Bot - Real-time NFT Tracker                  ║
+║                                                                           ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+`;
 
-  logger.info(`📦 Collection: ${shortTokenAddr} (${chain})`);
-  logger.info(`⏱️ Poll Interval: ${botInterval}s`);
+  // Use logger.info without timestamp prefix for ASCII art
+  for (const line of asciiArt.split('\n')) {
+    if (line.trim()) {
+      logger.info(line);
+    }
+  }
+
+  logger.info('');
   logger.info(
-    `📊 Query Limit: ${process.env.QUERY_LIMIT ?? DEFAULT_QUERY_LIMIT}`
+    '┌─ 📋 CONFIGURATION ──────────────────────────────────────────────────┐'
   );
-  logger.info(`💰 Min Offer: ${minOfferETH} ETH`);
-  logger.info(`📝 Log Level: ${process.env.LOG_LEVEL ?? 'info'}`);
+  logger.info('│');
+  logger.info(`│  📦  Collection Contract: ${shortTokenAddr}`);
+  logger.info(`│  ⛓️   Network Chain: ${chain}`);
+  logger.info(`│  ⏱️   Poll Interval: ${botInterval}s`);
+  logger.info(
+    `│  📊  Query Limit: ${process.env.QUERY_LIMIT ?? DEFAULT_QUERY_LIMIT} events per fetch`
+  );
+  logger.info(`│  💰  Min Offer Filter: ${minOfferETH} ETH`);
+  logger.info(`│  📝  Log Level: ${process.env.LOG_LEVEL ?? 'info'}`);
+  logger.info('│');
 
   const twitterEnabled = Boolean(process.env.TWITTER_EVENTS);
   const discordEnabled = Boolean(process.env.DISCORD_EVENTS);
@@ -72,8 +112,10 @@ const logStartupConfiguration = () => {
   logSweepConfig(twitterEnabled, discordEnabled);
 
   logger.info(
-    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+    '└─────────────────────────────────────────────────────────────────────┘'
   );
+  logger.info('');
+  logger.info('🚀 Bot initialization starting...');
   logger.info('');
 };
 
@@ -97,8 +139,11 @@ function main() {
   const interval = setInterval(run.bind(this), botInterval * MS_PER_SECOND);
 
   process.on('SIGINT', () => {
-    logger.info('Caught interrupt signal. Stopping...');
+    logger.info('');
+    logger.info('⚠️  Interrupt signal received (SIGINT)');
+    logger.info('🛑 Shutting down gracefully...');
     clearInterval(interval);
+    logger.info('✅ Bot stopped successfully');
     process.exit();
   });
 }

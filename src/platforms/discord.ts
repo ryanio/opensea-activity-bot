@@ -368,16 +368,16 @@ const getChannels = async (
   channelEvents: ChannelEvents
 ): Promise<Record<string, TextBasedChannel>> => {
   const channels: Record<string, TextBasedChannel> = {};
-  log.info('Selected channels:');
+  log.info('✅ Discord bot connected successfully');
+  log.info('📡 Active channels:');
   for (const [channelId, events] of channelEvents) {
     const channel = await client.channels.fetch(channelId);
     channels[channelId] = channel as TextBasedChannel;
-    log.info(
-      `* #${
-        (channel as unknown as { name?: string; channelId?: string }).name ??
-        (channel as unknown as { name?: string; channelId?: string }).channelId
-      }: ${events.join(', ')}`
-    );
+    const channelName =
+      (channel as unknown as { name?: string; channelId?: string }).name ??
+      (channel as unknown as { name?: string; channelId?: string }).channelId;
+    log.info(`   • #${channelName}`);
+    log.info(`     └─ Events: ${events.join(', ')}`);
   }
   return channels;
 };
@@ -406,7 +406,7 @@ const processSweepMessages = async (
         continue;
       }
       await channel.send(message);
-      log.info(`Sent sweep message: ${sweep.events.length} items`);
+      log.info(`🧹 Sent sweep notification: ${sweep.events.length} items`);
     }
 
     // Mark sweep as processed
@@ -441,7 +441,7 @@ const processIndividualMessages = async (
       continue;
     }
 
-    log.info('Sending individual message');
+    log.info('💬 Sending event notification');
 
     for (const channel of channels) {
       if (!isSendableChannel(channel)) {
@@ -480,7 +480,11 @@ export async function messageEvents(events: AggregatorEvent[]) {
     wantedTypes.has(effectiveTypeForEvent(event))
   );
 
-  log.info(`Relevant events: ${filteredEvents.length}`);
+  if (filteredEvents.length > 0) {
+    log.info(
+      `📊 Found ${filteredEvents.length} relevant event${filteredEvents.length === 1 ? '' : 's'} for Discord`
+    );
+  }
 
   if (filteredEvents.length === 0) {
     return;
