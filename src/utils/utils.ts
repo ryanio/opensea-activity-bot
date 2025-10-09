@@ -35,7 +35,8 @@ export const minOfferETH = FixedNumber.fromString(
   process.env.MIN_OFFER_ETH ?? '0'
 );
 export const chain = process.env.CHAIN ?? 'ethereum';
-export const shortTokenAddr = shortAddr(process.env.TOKEN_ADDRESS ?? '');
+export const fullTokenAddr = process.env.TOKEN_ADDRESS ?? '';
+export const shortTokenAddr = shortAddr(fullTokenAddr);
 
 export type TransferKind = 'mint' | 'burn' | 'transfer';
 

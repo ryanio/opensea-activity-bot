@@ -4,7 +4,7 @@ import { tweetEvents } from './platforms/twitter';
 import type { OpenSeaAssetEvent } from './types';
 import { getDefaultEventGroupConfig } from './utils/event-grouping';
 import { logger } from './utils/logger';
-import { botInterval, chain, minOfferETH, shortTokenAddr } from './utils/utils';
+import { botInterval, chain, fullTokenAddr, minOfferETH } from './utils/utils';
 
 const DEFAULT_QUERY_LIMIT = 50;
 const MILLISECONDS_PER_SECOND = 1000;
@@ -14,7 +14,7 @@ const logPlatformConfig = (
   discordEnabled: boolean
 ) => {
   logger.info(
-    '├─ 🔌 PLATFORMS ───────────────────────────────────────────────────────┤'
+    '├─ 🔌 PLATFORMS ──────────────────────────────────────────────────────┤'
   );
   logger.info('│');
   logger.info(
@@ -47,7 +47,7 @@ const logEventGroupConfig = (
     return;
   }
   logger.info(
-    '├─ 🧹 EVENT GROUPING ──────────────────────────────────────────────┤'
+    '├─ 🧹 EVENT GROUPING ─────────────────────────────────────────────────┤'
   );
   logger.info('│');
   if (twitterEnabled) {
@@ -98,9 +98,9 @@ const logStartupConfiguration = () => {
     '┌─ 📋 CONFIGURATION ──────────────────────────────────────────────────┐'
   );
   logger.info('│');
-  logger.info(`│  📦  Collection Contract: ${shortTokenAddr}`);
-  logger.info(`│  ⛓️   Network Chain: ${chain}`);
-  logger.info(`│  ⏱️   Poll Interval: ${botInterval}s`);
+  logger.info(`│  📦  Collection Contract: ${fullTokenAddr}`);
+  logger.info(`│  ⛓️  Network Chain: ${chain}`);
+  logger.info(`│  ⏱️  Poll Interval: ${botInterval}s`);
   logger.info(
     `│  📊  Query Limit: ${process.env.QUERY_LIMIT ?? DEFAULT_QUERY_LIMIT} events per fetch`
   );
