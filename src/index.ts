@@ -13,9 +13,7 @@ const logPlatformConfig = (
   twitterEnabled: boolean,
   discordEnabled: boolean
 ) => {
-  logger.info(
-    '├─ 🔌 PLATFORMS ──────────────────────────────────────────────────────┤'
-  );
+  logger.info('├─ 🔌 PLATFORMS');
   logger.info('│');
   logger.info(
     `│  🐦 Twitter: ${twitterEnabled ? '✅ ENABLED' : '⭕ DISABLED'}`
@@ -46,9 +44,7 @@ const logEventGroupConfig = (
   if (!(twitterEnabled || discordEnabled)) {
     return;
   }
-  logger.info(
-    '├─ 🧹 EVENT GROUPING ─────────────────────────────────────────────────┤'
-  );
+  logger.info('├─ 🧹 EVENT GROUPING');
   logger.info('│');
   if (twitterEnabled) {
     const config = getDefaultEventGroupConfig('TWITTER');
@@ -81,7 +77,7 @@ const logStartupConfiguration = () => {
 ║   ╚██████╔╝██║     ███████╗██║ ╚████║███████║███████╗██║  ██║             ║
 ║    ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═══╝╚══════╝╚══════╝╚═╝  ╚═╝             ║
 ║                                                                           ║
-║                     Activity Bot - Real-time NFT Tracker                  ║
+║                Activity Bot - Real-time NFT Tracker                       ║
 ║                                                                           ║
 ╚═══════════════════════════════════════════════════════════════════════════╝
 `;
@@ -94,9 +90,7 @@ const logStartupConfiguration = () => {
   }
 
   logger.info('');
-  logger.info(
-    '┌─ 📋 CONFIGURATION ──────────────────────────────────────────────────┐'
-  );
+  logger.info('┌─ 📋 CONFIGURATION');
   logger.info('│');
   logger.info(`│  📦  Collection Contract: ${fullTokenAddr}`);
   logger.info(`│  ⛓️  Network Chain: ${chain}`);
@@ -114,9 +108,7 @@ const logStartupConfiguration = () => {
   logPlatformConfig(twitterEnabled, discordEnabled);
   logEventGroupConfig(twitterEnabled, discordEnabled);
 
-  logger.info(
-    '└─────────────────────────────────────────────────────────────────────┘'
-  );
+  logger.info('└─');
   logger.info('');
 };
 

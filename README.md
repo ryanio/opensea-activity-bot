@@ -9,11 +9,8 @@ A TypeScript bot that automatically shares new OpenSea NFT collection events to 
 - 🚀 **Real-time monitoring** of OpenSea events (sales, listings, offers, transfers, mints, burns)
 - 🎯 **Multi-platform support** for Discord and Twitter
 - ⚙️ **Flexible configuration** with multiple channel/event type combinations
-- 🔄 **Deduplication** to prevent duplicate posts
 - 📊 **Rich embeds** with NFT images and metadata
 - 🛡️ **Type-safe** TypeScript implementation
-- 🧪 **Comprehensive testing** with Jest
-- 📝 **Structured logging** with configurable levels
 
 ## Table of Contents
 
@@ -164,8 +161,6 @@ The bot automatically groups multiple events from the same transaction or actor 
 
 ## Usage
 
-### Basic Usage
-
 ```bash
 # Start the bot
 yarn start
@@ -174,43 +169,7 @@ yarn start
 yarn start:dev
 ```
 
-### Example Configuration
-
-Here's a complete `.env` example for a Discord + Twitter setup:
-
-```env
-# Collection settings
-TOKEN_ADDRESS=0x1234567890abcdef1234567890abcdef12345678
-CHAIN=ethereum
-OPENSEA_API_TOKEN=your_opensea_api_key_here
-
-# Discord settings
-DISCORD_TOKEN=your_discord_bot_token_here
-DISCORD_EVENTS=662377002338091020=listing,sale,offer&924064011820077076=transfer,mint
-
-# Twitter settings
-TWITTER_CONSUMER_KEY=your_consumer_key
-TWITTER_CONSUMER_SECRET=your_consumer_secret
-TWITTER_ACCESS_TOKEN=your_access_token
-TWITTER_ACCESS_TOKEN_SECRET=your_access_token_secret
-TWITTER_EVENTS=sale,transfer
-TWITTER_PREPEND_TWEET=🔥 
-TWITTER_APPEND_TWEET= #NFT
-
-# Optional settings
-OPENSEA_BOT_INTERVAL=30
-QUERY_LIMIT=100
-MIN_OFFER_ETH=0.01
-LOG_LEVEL=info
-```
-
 ## Development
-
-### Prerequisites
-
-- Node.js 18+
-- Yarn package manager
-- TypeScript knowledge
 
 ### Setup Development Environment
 
