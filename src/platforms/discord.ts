@@ -9,6 +9,7 @@ import { format } from 'timeago.js';
 import { EventType, opensea, username } from '../opensea';
 import { BotEvent, type OpenSeaAssetEvent } from '../types';
 import type { AggregatorEvent } from '../utils/aggregator';
+import { getMintDelayMs, MS_PER_SECOND } from '../utils/constants';
 import {
   calculateTotalSpent,
   EventGroupManager,
@@ -24,7 +25,12 @@ import {
   openseaProfileTransferActivityUrl,
 } from '../utils/links';
 import { prefixedLogger } from '../utils/logger';
-import { formatAmount, imageForNFT, timeout } from '../utils/utils';
+import {
+  classifyTransfer,
+  formatAmount,
+  imageForNFT,
+  timeout,
+} from '../utils/utils';
 
 const log = prefixedLogger('Discord');
 
@@ -99,7 +105,6 @@ const buildOrderEmbed = async (
   const fields: Field[] = [];
   let title = '';
   const { quantity, decimals, symbol } = payment;
-  const MS_PER_SECOND = 1000;
   const inTime = format(new Date(expiration_date * MS_PER_SECOND));
   if (order_type === 'auction') {
     title += 'Auction:';
@@ -516,16 +521,24 @@ export async function messageEvents(events: AggregatorEvent[]) {
     return typeof maybe.send === 'function';
   };
 
+  // Separate mint groups and events for delayed processing
+  const { mintGroups, nonMintGroups, mintEvents, nonMintEvents } =
+    separateMintEvents(readyGroups, processableEvents);
+
   try {
     await login(client);
     const discordChannels = await getChannels(client, channelEvents);
 
-    // Process group messages first
-    await processGroupMessages(readyGroups, discordChannels, isSendableChannel);
+    // Process non-mint group messages first
+    await processGroupMessages(
+      nonMintGroups,
+      discordChannels,
+      isSendableChannel
+    );
 
-    // Process individual events
+    // Process non-mint individual events
     await processIndividualMessages(
-      processableEvents,
+      nonMintEvents,
       channelEvents,
       discordChannels,
       isSendableChannel
@@ -535,4 +548,97 @@ export async function messageEvents(events: AggregatorEvent[]) {
   }
 
   client.destroy();
+
+  // Schedule delayed processing for mint events
+  if (mintGroups.length > 0 || mintEvents.length > 0) {
+    const mintDelayMs = getMintDelayMs();
+    const totalMintCount = mintGroups.length + mintEvents.length;
+    log.info(
+      `Delaying ${totalMintCount} mint event(s)/group(s) by ${mintDelayMs / MS_PER_SECOND}s for metadata population`
+    );
+
+    setTimeout(() => {
+      // Process delayed mint events in a new Discord client session
+      processMintEvents(mintGroups, mintEvents, channelEvents).catch((error) =>
+        log.error('Error processing delayed mint events:', error)
+      );
+    }, mintDelayMs);
+  }
 }
+
+const separateMintEvents = (
+  readyGroups: Array<{ tx: string; events: OpenSeaAssetEvent[] }>,
+  processableEvents: OpenSeaAssetEvent[]
+): {
+  mintGroups: Array<{ tx: string; events: OpenSeaAssetEvent[] }>;
+  nonMintGroups: Array<{ tx: string; events: OpenSeaAssetEvent[] }>;
+  mintEvents: OpenSeaAssetEvent[];
+  nonMintEvents: OpenSeaAssetEvent[];
+} => {
+  const mintDelayMs = getMintDelayMs();
+  const mintGroups: Array<{ tx: string; events: OpenSeaAssetEvent[] }> = [];
+  const nonMintGroups: Array<{ tx: string; events: OpenSeaAssetEvent[] }> = [];
+
+  for (const group of readyGroups) {
+    const groupKind = groupKindForEvents(group.events);
+    if (groupKind === 'mint' && mintDelayMs > 0) {
+      mintGroups.push(group);
+    } else {
+      nonMintGroups.push(group);
+    }
+  }
+
+  const mintEvents: OpenSeaAssetEvent[] = [];
+  const nonMintEvents: OpenSeaAssetEvent[] = [];
+
+  for (const event of processableEvents) {
+    const isMint =
+      event.event_type === 'transfer' && classifyTransfer(event) === 'mint';
+    if (isMint && mintDelayMs > 0) {
+      mintEvents.push(event);
+    } else {
+      nonMintEvents.push(event);
+    }
+  }
+
+  return { mintGroups, nonMintGroups, mintEvents, nonMintEvents };
+};
+
+const processMintEvents = async (
+  mintGroups: Array<{ tx: string; events: OpenSeaAssetEvent[] }>,
+  mintEvents: OpenSeaAssetEvent[],
+  channelEvents: ChannelEvents
+) => {
+  const client = new Client({ intents: [] });
+
+  const isSendableChannel = (
+    ch: TextBasedChannel
+  ): ch is TextBasedChannel & {
+    send: (options: MessageCreateOptions) => Promise<unknown>;
+  } => {
+    const maybe = ch as unknown as {
+      send?: (options: MessageCreateOptions) => Promise<unknown>;
+    };
+    return typeof maybe.send === 'function';
+  };
+
+  try {
+    await login(client);
+    const discordChannels = await getChannels(client, channelEvents);
+
+    // Process mint groups
+    await processGroupMessages(mintGroups, discordChannels, isSendableChannel);
+
+    // Process individual mint events
+    await processIndividualMessages(
+      mintEvents,
+      channelEvents,
+      discordChannels,
+      isSendableChannel
+    );
+  } catch (error) {
+    log.error('Error in processMintEvents:', error);
+  }
+
+  client.destroy();
+};

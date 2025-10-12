@@ -129,6 +129,7 @@ Originally developed for [@dutchtide](https://twitter.com/dutchtide)'s [𝕄𝕚
 | `OPENSEA_BOT_INTERVAL` | Polling interval (seconds) | `60` | `30` |
 | `QUERY_LIMIT` | Max events per query | `50` | `100` |
 | `MIN_OFFER_ETH` | Minimum offer amount (ETH) | `0` | `0.1` |
+| `MINT_DELAY_SECONDS` | Delay for mint events to allow metadata to populate | `60` | `90` |
 | `TWITTER_PREPEND_TWEET` | Text to prepend to tweets | - | `#NFT ` |
 | `TWITTER_APPEND_TWEET` | Text to append to tweets | - | ` #OpenSea` |
 | `LOG_LEVEL` | Log verbosity | `info` | `debug`, `info`, `warn`, `error` |

@@ -2,6 +2,7 @@ import { TwitterApi } from 'twitter-api-v2';
 import { EventType, opensea, username } from '../opensea';
 import type { BotEvent, OpenSeaAssetEvent, OpenSeaPayment } from '../types';
 import { txHashFor } from '../utils/aggregator';
+import { getMintDelayMs } from '../utils/constants';
 import {
   calculateTotalSpent,
   EventGroupManager,
@@ -553,10 +554,26 @@ const logEventBreakdown = (filteredEvents: OpenSeaAssetEvent[]): void => {
 const enqueueGroups = (
   readyGroups: Array<{ tx: string; events: OpenSeaAssetEvent[] }>
 ): void => {
+  const mintDelayMs = getMintDelayMs();
+  let delayedMintGroupCount = 0;
+
   for (const { tx, events: evts } of readyGroups) {
-    tweetQueue.enqueue({
-      event: { kind: 'group', txHash: tx, events: evts },
-    });
+    const groupKind = groupKindForEvents(evts);
+    const isMintGroup = groupKind === 'mint';
+
+    if (isMintGroup && mintDelayMs > 0) {
+      delayedMintGroupCount++;
+      setTimeout(() => {
+        tweetQueue.enqueue({
+          event: { kind: 'group', txHash: tx, events: evts },
+        });
+        tweetQueue.start();
+      }, mintDelayMs);
+    } else {
+      tweetQueue.enqueue({
+        event: { kind: 'group', txHash: tx, events: evts },
+      });
+    }
   }
   if (readyGroups.length > 0) {
     const counts = readyGroups.map((r) => r.events.length).join(',');
@@ -567,13 +584,38 @@ const enqueueGroups = (
       `${logStart} Enqueued ${readyGroups.length} group(s) [sizes=${counts}] queue=${tweetQueue.size()}`
     );
   }
+  if (delayedMintGroupCount > 0) {
+    logger.info(
+      `${logStart} Delayed ${delayedMintGroupCount} mint group(s) by ${mintDelayMs / MS_PER_SECOND}s for metadata population`
+    );
+  }
 };
 
 const enqueueIndividualEvents = (
   processableEvents: OpenSeaAssetEvent[]
 ): void => {
+  const mintDelayMs = getMintDelayMs();
+  let delayedMintCount = 0;
+
   for (const event of processableEvents) {
-    tweetQueue.enqueue({ event });
+    const isMint =
+      event.event_type === 'transfer' && classifyTransfer(event) === 'mint';
+
+    if (isMint && mintDelayMs > 0) {
+      delayedMintCount++;
+      setTimeout(() => {
+        tweetQueue.enqueue({ event });
+        tweetQueue.start();
+      }, mintDelayMs);
+    } else {
+      tweetQueue.enqueue({ event });
+    }
+  }
+
+  if (delayedMintCount > 0) {
+    logger.info(
+      `${logStart} Delayed ${delayedMintCount} mint event(s) by ${mintDelayMs / MS_PER_SECOND}s for metadata population`
+    );
   }
 };
 
