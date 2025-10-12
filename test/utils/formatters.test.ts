@@ -15,10 +15,20 @@ describe('formatAmount', () => {
 });
 
 describe('imageForNFT', () => {
-  test('replaces width param with 1000', () => {
+  test('replaces width param with 10000', () => {
     expect(
       imageForNFT({ image_url: 'https://img.example.com/foo?w=200&h=200' })
     ).toBe('https://img.example.com/foo?w=10000&h=200');
+  });
+  test('adds width param when no query params exist', () => {
+    expect(imageForNFT({ image_url: 'https://img.example.com/foo.png' })).toBe(
+      'https://img.example.com/foo.png?w=10000'
+    );
+  });
+  test('adds width param when other query params exist', () => {
+    expect(
+      imageForNFT({ image_url: 'https://img.example.com/foo?h=200' })
+    ).toBe('https://img.example.com/foo?h=200&w=10000');
   });
   test('returns undefined when missing', () => {
     expect(imageForNFT(undefined)).toBeUndefined();

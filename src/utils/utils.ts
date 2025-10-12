@@ -82,7 +82,19 @@ export const formatAmount = (
 
 const WIDTH_QUERY_PARAM = /w=(\d)*/;
 export const imageForNFT = (nft?: NFTLike): string | undefined => {
-  return nft?.image_url?.replace(WIDTH_QUERY_PARAM, 'w=10000');
+  const imageUrl = nft?.image_url;
+  if (!imageUrl) {
+    return;
+  }
+
+  // If URL already has w= parameter, replace it
+  if (imageUrl.includes('w=')) {
+    return imageUrl.replace(WIDTH_QUERY_PARAM, 'w=10000');
+  }
+
+  // Otherwise, add w=10000 as a query parameter
+  const separator = imageUrl.includes('?') ? '&' : '?';
+  return `${imageUrl}${separator}w=10000`;
 };
 
 // Helper to check if NFT is ERC1155 with multiple editions
