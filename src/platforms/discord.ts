@@ -9,15 +9,17 @@ import { format } from 'timeago.js';
 import { EventType, opensea, username } from '../opensea';
 import { BotEvent, type OpenSeaAssetEvent } from '../types';
 import type { AggregatorEvent } from '../utils/aggregator';
-import { getMintDelayMs, MS_PER_SECOND } from '../utils/constants';
+import { MS_PER_SECOND } from '../utils/constants';
 import {
   calculateTotalSpent,
   EventGroupManager,
   type GroupedEvent,
+  type GroupKind,
   getDefaultEventGroupConfig,
   getTopExpensiveEvents,
   groupKindForEvents,
   primaryActorAddressForGroup,
+  processEventsWithAggregator,
 } from '../utils/event-grouping';
 import { effectiveEventTypeFor } from '../utils/event-types';
 import {
@@ -28,6 +30,7 @@ import { prefixedLogger } from '../utils/logger';
 import {
   classifyTransfer,
   formatAmount,
+  formatEditionsText,
   imageForNFT,
   timeout,
 } from '../utils/utils';
@@ -37,6 +40,18 @@ const log = prefixedLogger('Discord');
 // Initialize event group manager for Discord
 const groupConfig = getDefaultEventGroupConfig('DISCORD');
 const groupManager = new EventGroupManager(groupConfig);
+
+// Type guard for sendable channels
+const isSendableChannel = (
+  ch: TextBasedChannel
+): ch is TextBasedChannel & {
+  send: (options: MessageCreateOptions) => Promise<unknown>;
+} => {
+  const maybe = ch as unknown as {
+    send?: (options: MessageCreateOptions) => Promise<unknown>;
+  };
+  return typeof maybe.send === 'function';
+};
 
 type ChannelEvents = [
   channelId: string,
@@ -160,24 +175,11 @@ const buildTransferEmbed = async (
     from_address: string;
     to_address: string;
   };
-  const kind = ((): 'mint' | 'burn' | 'transfer' => {
-    const type = effectiveTypeForEvent(
-      event as unknown as OpenSeaAssetEvent
-    ) as unknown as string;
-    if (type === BotEvent.mint) {
-      return 'mint';
-    }
-    if (type === BotEvent.burn) {
-      return 'burn';
-    }
-    return 'transfer';
-  })();
+  const kind = classifyTransfer(event as OpenSeaAssetEvent);
   const fields: Field[] = [];
   if (kind === 'mint') {
     // Include editions for ERC1155 mints if quantity > 1
-    const editions = Number(
-      (event as unknown as { quantity?: number })?.quantity ?? 0
-    );
+    const quantity = (event as unknown as { quantity?: number })?.quantity;
     const tokenStandard =
       (
         event as unknown as {
@@ -187,11 +189,9 @@ const buildTransferEmbed = async (
       )?.nft?.token_standard ??
       (event as unknown as { asset?: { token_standard?: string } })?.asset
         ?.token_standard;
-    const isErc1155 = (tokenStandard ?? '').toLowerCase() === 'erc1155';
 
     const toName = await username(to_address);
-    const toValue =
-      isErc1155 && editions > 1 ? `${toName} (${editions} editions)` : toName;
+    const toValue = formatEditionsText(toName, tokenStandard, quantity);
     fields.push({ name: 'To', value: toValue });
     return { title: 'Minted:', fields };
   }
@@ -257,6 +257,43 @@ const embed = async (event: AggregatorEvent) => {
   return built;
 };
 
+// Helper to get title and activity type for group kind
+const getGroupTitleAndActivityType = (
+  kind: GroupKind,
+  count: number
+): { title: string; activityType: string } => {
+  const titleMap: Record<GroupKind, string> = {
+    burn: `${count} items burned`,
+    mint: `${count} items minted`,
+    offer: `${count} offers`,
+    listing: `${count} listings`,
+    purchase: `${count} items purchased`,
+  };
+  const activityTypeMap: Record<GroupKind, string> = {
+    burn: 'transfer',
+    mint: 'mint',
+    offer: 'offer',
+    listing: 'listing',
+    purchase: 'sale',
+  };
+  return {
+    title: titleMap[kind],
+    activityType: activityTypeMap[kind],
+  };
+};
+
+// Helper to get actor label for group kind
+const getActorLabelForKind = (kind: GroupKind): string => {
+  const labelMap: Record<GroupKind, string> = {
+    burn: 'By',
+    mint: 'Minter',
+    offer: 'Offerer',
+    listing: 'Lister',
+    purchase: 'Buyer',
+  };
+  return labelMap[kind];
+};
+
 const buildGroupEmbed = async (group: GroupedEvent): Promise<EmbedBuilder> => {
   const count = group.events.length;
   const kind = groupKindForEvents(group.events);
@@ -265,14 +302,7 @@ const buildGroupEmbed = async (group: GroupedEvent): Promise<EmbedBuilder> => {
   // Deduce primary actor
   const actorAddress = primaryActorAddressForGroup(group.events, kind);
 
-  let title = '';
-  if (kind === 'burn') {
-    title = `${count} items burned`;
-  } else if (kind === 'mint') {
-    title = `${count} items minted`;
-  } else {
-    title = `${count} items purchased`;
-  }
+  const { title, activityType } = getGroupTitleAndActivityType(kind, count);
   const fields: Field[] = [];
 
   if (kind === 'purchase' && totalSpent) {
@@ -280,7 +310,7 @@ const buildGroupEmbed = async (group: GroupedEvent): Promise<EmbedBuilder> => {
   }
 
   if (actorAddress) {
-    const label = kind === 'burn' ? 'By' : 'Buyer';
+    const label = getActorLabelForKind(kind);
     const actorName = await username(actorAddress);
     fields.push({ name: label, value: actorName, inline: true });
   }
@@ -293,7 +323,10 @@ const buildGroupEmbed = async (group: GroupedEvent): Promise<EmbedBuilder> => {
       inline: true,
     });
   } else {
-    const url = openseaCollectionActivityUrl(opensea.collectionURL());
+    const url = openseaCollectionActivityUrl(
+      opensea.collectionURL(),
+      activityType
+    );
     fields.push({
       name: 'Activity',
       value: `[View on OpenSea](${url})`,
@@ -389,10 +422,7 @@ const getChannels = async (
 
 const processGroupMessages = async (
   readyGroups: Array<{ tx: string; events: OpenSeaAssetEvent[] }>,
-  discordChannels: Record<string, TextBasedChannel>,
-  isSendableChannel: (ch: TextBasedChannel) => ch is TextBasedChannel & {
-    send: (options: MessageCreateOptions) => Promise<unknown>;
-  }
+  discordChannels: Record<string, TextBasedChannel>
 ) => {
   for (const readyGroup of readyGroups) {
     const group: GroupedEvent = {
@@ -426,10 +456,7 @@ const processGroupMessages = async (
 const processIndividualMessages = async (
   processableEvents: OpenSeaAssetEvent[],
   channelEvents: ChannelEvents,
-  discordChannels: Record<string, TextBasedChannel>,
-  isSendableChannel: (ch: TextBasedChannel) => ch is TextBasedChannel & {
-    send: (options: MessageCreateOptions) => Promise<unknown>;
-  }
+  discordChannels: Record<string, TextBasedChannel>
 ) => {
   const messages = await messagesForEvents(
     processableEvents as AggregatorEvent[]
@@ -491,154 +518,36 @@ export async function messageEvents(events: AggregatorEvent[]) {
     );
   }
 
-  if (filteredEvents.length === 0) {
-    return;
-  }
-
-  // Add events to event group aggregator
-  groupManager.addEvents(filteredEvents);
-
-  // Get ready groups
-  const readyGroups = groupManager.getReadyGroups();
-
-  // Filter out events that are part of pending groups or already processed
-  const { processableEvents, skippedDupes, skippedPending } =
-    groupManager.filterProcessableEvents(filteredEvents);
+  // Use shared aggregator processing logic
+  const { readyGroups, processableEvents, skippedDupes, skippedPending } =
+    processEventsWithAggregator(groupManager, filteredEvents);
 
   log.debug(
     `Processing: groups=${readyGroups.length} singles=${processableEvents.length} ` +
       `skippedDupes=${skippedDupes} skippedPending=${skippedPending}`
   );
 
-  const isSendableChannel = (
-    ch: TextBasedChannel
-  ): ch is TextBasedChannel & {
-    send: (options: MessageCreateOptions) => Promise<unknown>;
-  } => {
-    const maybe = ch as unknown as {
-      send?: (options: MessageCreateOptions) => Promise<unknown>;
-    };
-    return typeof maybe.send === 'function';
-  };
-
-  // Separate mint groups and events for delayed processing
-  const { mintGroups, nonMintGroups, mintEvents, nonMintEvents } =
-    separateMintEvents(readyGroups, processableEvents);
+  // Return early if there's nothing to process
+  if (readyGroups.length === 0 && processableEvents.length === 0) {
+    return;
+  }
 
   try {
     await login(client);
     const discordChannels = await getChannels(client, channelEvents);
 
-    // Process non-mint group messages first
-    await processGroupMessages(
-      nonMintGroups,
-      discordChannels,
-      isSendableChannel
-    );
+    // Process all group messages
+    await processGroupMessages(readyGroups, discordChannels);
 
-    // Process non-mint individual events
+    // Process all individual events
     await processIndividualMessages(
-      nonMintEvents,
+      processableEvents,
       channelEvents,
-      discordChannels,
-      isSendableChannel
+      discordChannels
     );
   } catch (error) {
     log.error(error);
   }
 
   client.destroy();
-
-  // Schedule delayed processing for mint events
-  if (mintGroups.length > 0 || mintEvents.length > 0) {
-    const mintDelayMs = getMintDelayMs();
-    const totalMintCount = mintGroups.length + mintEvents.length;
-    log.info(
-      `Delaying ${totalMintCount} mint event(s)/group(s) by ${mintDelayMs / MS_PER_SECOND}s for metadata population`
-    );
-
-    setTimeout(() => {
-      // Process delayed mint events in a new Discord client session
-      processMintEvents(mintGroups, mintEvents, channelEvents).catch((error) =>
-        log.error('Error processing delayed mint events:', error)
-      );
-    }, mintDelayMs);
-  }
 }
-
-const separateMintEvents = (
-  readyGroups: Array<{ tx: string; events: OpenSeaAssetEvent[] }>,
-  processableEvents: OpenSeaAssetEvent[]
-): {
-  mintGroups: Array<{ tx: string; events: OpenSeaAssetEvent[] }>;
-  nonMintGroups: Array<{ tx: string; events: OpenSeaAssetEvent[] }>;
-  mintEvents: OpenSeaAssetEvent[];
-  nonMintEvents: OpenSeaAssetEvent[];
-} => {
-  const mintDelayMs = getMintDelayMs();
-  const mintGroups: Array<{ tx: string; events: OpenSeaAssetEvent[] }> = [];
-  const nonMintGroups: Array<{ tx: string; events: OpenSeaAssetEvent[] }> = [];
-
-  for (const group of readyGroups) {
-    const groupKind = groupKindForEvents(group.events);
-    if (groupKind === 'mint' && mintDelayMs > 0) {
-      mintGroups.push(group);
-    } else {
-      nonMintGroups.push(group);
-    }
-  }
-
-  const mintEvents: OpenSeaAssetEvent[] = [];
-  const nonMintEvents: OpenSeaAssetEvent[] = [];
-
-  for (const event of processableEvents) {
-    const isMint =
-      event.event_type === 'transfer' && classifyTransfer(event) === 'mint';
-    if (isMint && mintDelayMs > 0) {
-      mintEvents.push(event);
-    } else {
-      nonMintEvents.push(event);
-    }
-  }
-
-  return { mintGroups, nonMintGroups, mintEvents, nonMintEvents };
-};
-
-const processMintEvents = async (
-  mintGroups: Array<{ tx: string; events: OpenSeaAssetEvent[] }>,
-  mintEvents: OpenSeaAssetEvent[],
-  channelEvents: ChannelEvents
-) => {
-  const client = new Client({ intents: [] });
-
-  const isSendableChannel = (
-    ch: TextBasedChannel
-  ): ch is TextBasedChannel & {
-    send: (options: MessageCreateOptions) => Promise<unknown>;
-  } => {
-    const maybe = ch as unknown as {
-      send?: (options: MessageCreateOptions) => Promise<unknown>;
-    };
-    return typeof maybe.send === 'function';
-  };
-
-  try {
-    await login(client);
-    const discordChannels = await getChannels(client, channelEvents);
-
-    // Process mint groups
-    await processGroupMessages(mintGroups, discordChannels, isSendableChannel);
-
-    // Process individual mint events
-    await processIndividualMessages(
-      mintEvents,
-      channelEvents,
-      discordChannels,
-      isSendableChannel
-    );
-  } catch (error) {
-    log.error('Error in processMintEvents:', error);
-  }
-
-  client.destroy();
-};

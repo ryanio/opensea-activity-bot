@@ -2,7 +2,6 @@ import { TwitterApi } from 'twitter-api-v2';
 import { EventType, opensea, username } from '../opensea';
 import type { BotEvent, OpenSeaAssetEvent, OpenSeaPayment } from '../types';
 import { txHashFor } from '../utils/aggregator';
-import { getMintDelayMs } from '../utils/constants';
 import {
   calculateTotalSpent,
   EventGroupManager,
@@ -12,11 +11,13 @@ import {
   groupKindForEvents,
   isGroupedEvent,
   primaryActorAddressForGroup,
+  processEventsWithAggregator,
   sortEventsByPrice,
 } from '../utils/event-grouping';
 import { isEventWanted, parseEvents } from '../utils/events';
 import {
   openseaCollectionActivityUrl,
+  openseaProfileActivityUrl,
   openseaProfileCollectionUrl,
   openseaProfileTransferActivityUrl,
 } from '../utils/links';
@@ -27,6 +28,7 @@ import {
   classifyTransfer,
   fetchImageBuffer,
   formatAmount,
+  formatEditionsText,
   imageForNFT,
 } from '../utils/utils';
 
@@ -156,6 +158,17 @@ const keyForQueueItem = (item: TweetQueueItem): string => {
   return eventKeyFor(item.event as OpenSeaAssetEvent);
 };
 
+const wrapTweetText = (text: string): string => {
+  let wrapped = text;
+  if (process.env.TWITTER_PREPEND_TWEET) {
+    wrapped = `${process.env.TWITTER_PREPEND_TWEET} ${wrapped}`;
+  }
+  if (process.env.TWITTER_APPEND_TWEET) {
+    wrapped = `${wrapped} ${process.env.TWITTER_APPEND_TWEET}`;
+  }
+  return wrapped;
+};
+
 const formatNftName = (
   nft: { name?: string; identifier?: string | number } | undefined
 ): string => {
@@ -273,11 +286,7 @@ const textForTransfer = async (
     if (kind === 'mint') {
       const tokenStandard = (nft as { token_standard?: string } | undefined)
         ?.token_standard;
-      const isErc1155 = (tokenStandard ?? '').toLowerCase() === 'erc1155';
-      const editions = Number(ev.quantity ?? 0);
-      if (isErc1155 && editions > 1) {
-        name = `${name} (${editions} editions)`;
-      }
+      name = formatEditionsText(name, tokenStandard, ev.quantity);
     }
     const phrase = await formatTransferText(ev);
     return `${name} ${phrase}`;
@@ -303,9 +312,7 @@ export const textForTweet = async (event: OpenSeaAssetEvent) => {
   } = ev;
   const nft = ev.nft ?? asset;
   let text = '';
-  if (process.env.TWITTER_PREPEND_TWEET) {
-    text += `${process.env.TWITTER_PREPEND_TWEET} `;
-  }
+
   if (
     event_type === 'order' &&
     payment &&
@@ -328,10 +335,8 @@ export const textForTweet = async (event: OpenSeaAssetEvent) => {
   if (nft?.identifier) {
     text += ` ${nft.opensea_url}`;
   }
-  if (process.env.TWITTER_APPEND_TWEET) {
-    text += ` ${process.env.TWITTER_APPEND_TWEET}`;
-  }
-  return text;
+
+  return wrapTweetText(text);
 };
 
 // fetchImageBuffer moved to utils
@@ -386,9 +391,6 @@ const tweetGroup = async (
   const totalSpent = calculateTotalSpent(group);
 
   let text = '';
-  if (process.env.TWITTER_PREPEND_TWEET) {
-    text += `${process.env.TWITTER_PREPEND_TWEET} `;
-  }
 
   const appendBurn = async () => {
     const burnerAddress = primaryActorAddressForGroup(group, 'burn');
@@ -399,6 +401,11 @@ const tweetGroup = async (
       text += ` ${activityUrl}`;
     } else {
       text += `${count} burned`;
+      const activityUrl = openseaCollectionActivityUrl(
+        opensea.collectionURL(),
+        'transfer'
+      );
+      text += ` ${activityUrl}`;
     }
   };
 
@@ -411,6 +418,11 @@ const tweetGroup = async (
       text += ` ${profileUrl}`;
     } else {
       text += `${count} minted`;
+      const activityUrl = openseaCollectionActivityUrl(
+        opensea.collectionURL(),
+        'mint'
+      );
+      text += ` ${activityUrl}`;
     }
   };
 
@@ -428,7 +440,44 @@ const tweetGroup = async (
       if (totalSpent) {
         text += ` for ${totalSpent}`;
       }
-      const activityUrl = openseaCollectionActivityUrl(opensea.collectionURL());
+      const activityUrl = openseaCollectionActivityUrl(
+        opensea.collectionURL(),
+        'sale'
+      );
+      text += ` ${activityUrl}`;
+    }
+  };
+
+  const appendOffer = async () => {
+    const makerAddress = primaryActorAddressForGroup(group, 'offer');
+    if (makerAddress) {
+      const makerName = await username(makerAddress);
+      text += `${count} offers by ${makerName}`;
+      const activityUrl = openseaProfileActivityUrl(makerAddress, 'offer');
+      text += ` ${activityUrl}`;
+    } else {
+      text += `${count} offers`;
+      const activityUrl = openseaCollectionActivityUrl(
+        opensea.collectionURL(),
+        'offer'
+      );
+      text += ` ${activityUrl}`;
+    }
+  };
+
+  const appendListing = async () => {
+    const makerAddress = primaryActorAddressForGroup(group, 'listing');
+    if (makerAddress) {
+      const makerName = await username(makerAddress);
+      text += `${count} listings by ${makerName}`;
+      const activityUrl = openseaProfileActivityUrl(makerAddress, 'listing');
+      text += ` ${activityUrl}`;
+    } else {
+      text += `${count} listings`;
+      const activityUrl = openseaCollectionActivityUrl(
+        opensea.collectionURL(),
+        'listing'
+      );
       text += ` ${activityUrl}`;
     }
   };
@@ -437,13 +486,15 @@ const tweetGroup = async (
     await appendBurn();
   } else if (kind === 'mint') {
     await appendMint();
+  } else if (kind === 'offer') {
+    await appendOffer();
+  } else if (kind === 'listing') {
+    await appendListing();
   } else {
     await appendPurchase();
   }
 
-  if (process.env.TWITTER_APPEND_TWEET) {
-    text += ` ${process.env.TWITTER_APPEND_TWEET}`;
-  }
+  text = wrapTweetText(text);
   const params: { text: string; media?: { media_ids: string[] } } =
     mediaIds.length > 0 ? { text, media: { media_ids: mediaIds } } : { text };
   await client.v2.tweet(params);
@@ -554,27 +605,12 @@ const logEventBreakdown = (filteredEvents: OpenSeaAssetEvent[]): void => {
 const enqueueGroups = (
   readyGroups: Array<{ tx: string; events: OpenSeaAssetEvent[] }>
 ): void => {
-  const mintDelayMs = getMintDelayMs();
-  let delayedMintGroupCount = 0;
-
   for (const { tx, events: evts } of readyGroups) {
-    const groupKind = groupKindForEvents(evts);
-    const isMintGroup = groupKind === 'mint';
-
-    if (isMintGroup && mintDelayMs > 0) {
-      delayedMintGroupCount++;
-      setTimeout(() => {
-        tweetQueue.enqueue({
-          event: { kind: 'group', txHash: tx, events: evts },
-        });
-        tweetQueue.start();
-      }, mintDelayMs);
-    } else {
-      tweetQueue.enqueue({
-        event: { kind: 'group', txHash: tx, events: evts },
-      });
-    }
+    tweetQueue.enqueue({
+      event: { kind: 'group', txHash: tx, events: evts },
+    });
   }
+
   if (readyGroups.length > 0) {
     const counts = readyGroups.map((r) => r.events.length).join(',');
     logger.info(
@@ -584,38 +620,13 @@ const enqueueGroups = (
       `${logStart} Enqueued ${readyGroups.length} group(s) [sizes=${counts}] queue=${tweetQueue.size()}`
     );
   }
-  if (delayedMintGroupCount > 0) {
-    logger.info(
-      `${logStart} Delayed ${delayedMintGroupCount} mint group(s) by ${mintDelayMs / MS_PER_SECOND}s for metadata population`
-    );
-  }
 };
 
 const enqueueIndividualEvents = (
   processableEvents: OpenSeaAssetEvent[]
 ): void => {
-  const mintDelayMs = getMintDelayMs();
-  let delayedMintCount = 0;
-
   for (const event of processableEvents) {
-    const isMint =
-      event.event_type === 'transfer' && classifyTransfer(event) === 'mint';
-
-    if (isMint && mintDelayMs > 0) {
-      delayedMintCount++;
-      setTimeout(() => {
-        tweetQueue.enqueue({ event });
-        tweetQueue.start();
-      }, mintDelayMs);
-    } else {
-      tweetQueue.enqueue({ event });
-    }
-  }
-
-  if (delayedMintCount > 0) {
-    logger.info(
-      `${logStart} Delayed ${delayedMintCount} mint event(s) by ${mintDelayMs / MS_PER_SECOND}s for metadata population`
-    );
+    tweetQueue.enqueue({ event });
   }
 };
 
@@ -665,34 +676,34 @@ export const tweetEvents = (events: OpenSeaAssetEvent[]) => {
   if (filteredEvents.length > 0) {
     logger.info(`${logStart} Relevant events: ${filteredEvents.length}`);
     logEventBreakdown(filteredEvents);
+
+    const pendingLarge = groupManager.getPendingLargeTxHashes();
+    const pendingAll = groupManager.getPendingTxHashes();
+    logger.debug(
+      `${logStart} Aggregator state: pendingTxs=${pendingAll.size} pendingLargeTxs=${pendingLarge.size}`
+    );
   }
 
-  if (filteredEvents.length === 0) {
-    return;
-  }
-
-  // Add to event group aggregator; this supports >50 event groups across batches
-  groupManager.addEvents(filteredEvents);
-  const pendingLarge = groupManager.getPendingLargeTxHashes();
-  const pendingAll = groupManager.getPendingTxHashes();
-  logger.debug(
-    `${logStart} Aggregator state: pendingTxs=${pendingAll.size} pendingLargeTxs=${pendingLarge.size}`
-  );
+  // Use shared aggregator processing logic
+  const { readyGroups, processableEvents, skippedDupes, skippedPending } =
+    processEventsWithAggregator(groupManager, filteredEvents);
 
   // Flush any groups that have settled
-  const readyGroups = groupManager.getReadyGroups();
-  enqueueGroups(readyGroups);
+  if (readyGroups.length > 0) {
+    logger.info(
+      `${logStart} 🧹 Flushing ${readyGroups.length} settled group(s)`
+    );
+    enqueueGroups(readyGroups);
+  }
 
-  // Use group manager to filter processable events
-  const { processableEvents, skippedDupes, skippedPending } =
-    groupManager.filterProcessableEvents(filteredEvents);
+  // Process individual events only if there are any
+  if (processableEvents.length > 0 || skippedPending > 0 || skippedDupes > 0) {
+    enqueueIndividualEvents(processableEvents);
+    logProcessingSummary(skippedPending, processableEvents, skippedDupes);
+  }
 
-  // Enqueue remaining individual events
-  enqueueIndividualEvents(processableEvents);
-
-  // Better diagnostics for what happened to the events
-  logProcessingSummary(skippedPending, processableEvents, skippedDupes);
-
-  // Fire and forget
-  tweetQueue.start();
+  // Fire and forget (start the queue if there's anything to process)
+  if (tweetQueue.size() > 0) {
+    tweetQueue.start();
+  }
 };

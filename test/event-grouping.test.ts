@@ -7,9 +7,17 @@ import {
   getDefaultEventGroupConfig,
   getPurchasePrice,
   getTopExpensiveEvents,
+  groupKindForEvents,
   isGroupedEvent,
+  processEventsWithAggregator,
   sortEventsByPrice,
 } from '../src/utils/event-grouping';
+import {
+  createBurnEvent,
+  createListingEvent,
+  createMintEvent,
+  createOfferEvent,
+} from './helpers';
 
 // Mock the utils module
 function mockFormatAmount(quantity: string, decimals: number, symbol: string) {
@@ -17,8 +25,24 @@ function mockFormatAmount(quantity: string, decimals: number, symbol: string) {
   return `${value} ${symbol}`;
 }
 
+function mockClassifyTransfer(
+  event: OpenSeaAssetEvent
+): 'mint' | 'burn' | 'transfer' {
+  const NULL_ADDRESS = '0x0000000000000000000000000000000000000000';
+  const DEAD_ADDRESS = '0x000000000000000000000000000000000000dead';
+
+  if (event.from_address === NULL_ADDRESS) {
+    return 'mint';
+  }
+  if (event.to_address === NULL_ADDRESS || event.to_address === DEAD_ADDRESS) {
+    return 'burn';
+  }
+  return 'transfer';
+}
+
 jest.mock('../src/utils/utils', () => ({
   formatAmount: jest.fn(mockFormatAmount),
+  classifyTransfer: jest.fn(mockClassifyTransfer),
 }));
 
 describe('eventGrouping-utils', () => {
@@ -125,7 +149,7 @@ describe('eventGrouping-utils', () => {
     it('should return default config for TWITTER', () => {
       const config = getDefaultEventGroupConfig('TWITTER');
       expect(config).toEqual({
-        settleMs: 15_000,
+        settleMs: 60_000,
         minGroupSize: 2,
       });
     });
@@ -133,7 +157,7 @@ describe('eventGrouping-utils', () => {
     it('should return default config for DISCORD', () => {
       const config = getDefaultEventGroupConfig('DISCORD');
       expect(config).toEqual({
-        settleMs: 15_000,
+        settleMs: 60_000,
         minGroupSize: 2,
       });
     });
@@ -392,6 +416,299 @@ describe('eventGrouping-utils', () => {
       await new Promise((resolve) => setTimeout(resolve, SETTLE_BUFFER_MS));
       const readyGroups = groupManager.getReadyGroups();
       expect(readyGroups.length).toBe(0);
+    });
+  });
+
+  describe('processEventsWithAggregator', () => {
+    it('should add events to aggregator and return empty groups when not settled', () => {
+      const groupManager = new EventGroupManager({
+        settleMs: 15_000,
+        minGroupSize: 2,
+      });
+
+      const mintEvents = [
+        createMintEvent('1', '0xminter1', 1_234_567_890),
+        createMintEvent('2', '0xminter1', 1_234_567_890),
+      ];
+
+      const result = processEventsWithAggregator(groupManager, mintEvents);
+
+      expect(result.readyGroups).toHaveLength(0);
+      expect(result.processableEvents).toHaveLength(0);
+      expect(result.skippedPending).toBe(2); // Both held in aggregator
+      expect(result.skippedDupes).toBe(0);
+    });
+
+    it('should flush settled groups when called with no new events', async () => {
+      const groupManager = new EventGroupManager({
+        settleMs: 100, // Short settle time for testing
+        minGroupSize: 2,
+      });
+
+      // First call: add 2 mint events
+      const mintEvents = [
+        createMintEvent('1', '0xminter1', 1_234_567_890),
+        createMintEvent('2', '0xminter1', 1_234_567_890),
+      ];
+
+      const result1 = processEventsWithAggregator(groupManager, mintEvents);
+      expect(result1.readyGroups).toHaveLength(0);
+      expect(result1.skippedPending).toBe(2);
+
+      // Wait for settle time to pass
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      // Second call: no new events, but should flush the settled group
+      const result2 = processEventsWithAggregator(groupManager, []);
+      expect(result2.readyGroups).toHaveLength(1);
+      expect(result2.readyGroups[0]?.events).toHaveLength(2);
+      expect(result2.processableEvents).toHaveLength(0);
+      expect(result2.skippedPending).toBe(0);
+      expect(result2.skippedDupes).toBe(0);
+    });
+
+    it('should handle multiple polling cycles with mint events', async () => {
+      const groupManager = new EventGroupManager({
+        settleMs: 100,
+        minGroupSize: 2,
+      });
+
+      // Cycle 1: Add 2 mint events
+      const cycle1Events = [
+        createMintEvent('1', '0xminter1', 1_234_567_890),
+        createMintEvent('2', '0xminter1', 1_234_567_890),
+      ];
+      const result1 = processEventsWithAggregator(groupManager, cycle1Events);
+      expect(result1.readyGroups).toHaveLength(0);
+      expect(result1.skippedPending).toBe(2);
+
+      // Cycle 2: No new events, not settled yet
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const result2 = processEventsWithAggregator(groupManager, []);
+      expect(result2.readyGroups).toHaveLength(0);
+
+      // Cycle 3: No new events, should flush now
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      const result3 = processEventsWithAggregator(groupManager, []);
+      expect(result3.readyGroups).toHaveLength(1);
+      expect(result3.readyGroups[0]?.events).toHaveLength(2);
+    });
+
+    it('should not skip events that do not meet minGroupSize', () => {
+      const groupManager = new EventGroupManager({
+        settleMs: 15_000,
+        minGroupSize: 3, // Need 3 events to group
+      });
+
+      const mintEvents = [
+        createMintEvent('1', '0xminter1', 1_234_567_890),
+        createMintEvent('2', '0xminter1', 1_234_567_890),
+      ];
+
+      const result = processEventsWithAggregator(groupManager, mintEvents);
+
+      // Only 2 events, not enough to meet minGroupSize, so should be processable
+      expect(result.readyGroups).toHaveLength(0);
+      expect(result.processableEvents).toHaveLength(2);
+      expect(result.skippedPending).toBe(0);
+    });
+
+    it('should handle mixed event types correctly', async () => {
+      const groupManager = new EventGroupManager({
+        settleMs: 100,
+        minGroupSize: 2,
+      });
+
+      // Add 2 mints from same address
+      const mintEvents = [
+        createMintEvent('1', '0xminter1', 1_234_567_890),
+        createMintEvent('2', '0xminter1', 1_234_567_890),
+      ];
+
+      // Add 1 purchase (should be processable immediately)
+      const purchaseEvent: OpenSeaAssetEvent = {
+        ...mockEvent1,
+        buyer: '0xbuyer2',
+      };
+
+      const result1 = processEventsWithAggregator(groupManager, [
+        ...mintEvents,
+        purchaseEvent,
+      ]);
+
+      // Mints held, purchase processable
+      expect(result1.readyGroups).toHaveLength(0);
+      expect(result1.skippedPending).toBe(2); // 2 mints
+      expect(result1.processableEvents).toHaveLength(1); // 1 purchase
+
+      // Wait and flush
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const result2 = processEventsWithAggregator(groupManager, []);
+      expect(result2.readyGroups).toHaveLength(1); // Mint group
+      expect(result2.readyGroups[0]?.events).toHaveLength(2);
+    });
+
+    it('should handle duplicate events across calls', () => {
+      const groupManager = new EventGroupManager({
+        settleMs: 15_000,
+        minGroupSize: 2,
+      });
+
+      const mintEvents = [
+        createMintEvent('1', '0xminter1', 1_234_567_890),
+        createMintEvent('2', '0xminter1', 1_234_567_890),
+      ];
+
+      // First call
+      const result1 = processEventsWithAggregator(groupManager, mintEvents);
+      expect(result1.skippedPending).toBe(2);
+
+      // Second call with same events (duplicates)
+      const result2 = processEventsWithAggregator(groupManager, mintEvents);
+      expect(result2.skippedPending).toBe(2);
+      expect(result2.skippedDupes).toBe(0); // Dedupe happens inside aggregator
+
+      // Verify no duplicate events in aggregator
+      const pendingTxs = groupManager.getPendingLargeTxHashes();
+      expect(pendingTxs.size).toBe(1);
+    });
+
+    it('should not create mixed groups due to actor-based keying', async () => {
+      const groupManager = new EventGroupManager({
+        settleMs: 100,
+        minGroupSize: 2,
+      });
+
+      // Add 2 mints and 2 burns from same address
+      // These will create separate groups due to different actor keys
+      const mintEvent1 = createMintEvent('1', '0xuser1', 1_234_567_890);
+      const mintEvent2 = createMintEvent('2', '0xuser1', 1_234_567_890);
+      const burnEvent1 = createBurnEvent('3', '0xuser1', 1_234_567_890);
+      const burnEvent2 = createBurnEvent('4', '0xuser1', 1_234_567_890);
+
+      const result1 = processEventsWithAggregator(groupManager, [
+        mintEvent1,
+        mintEvent2,
+        burnEvent1,
+        burnEvent2,
+      ]);
+      // All held in aggregator (separate groups)
+      expect(result1.readyGroups).toHaveLength(0);
+      expect(result1.skippedPending).toBe(4);
+
+      // Wait for settle time
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      // Should flush as 2 separate groups (mints and burns)
+      const result2 = processEventsWithAggregator(groupManager, []);
+      expect(result2.readyGroups).toHaveLength(2);
+
+      // Verify groups are not mixed
+      for (const group of result2.readyGroups) {
+        const kind = groupKindForEvents(group.events);
+        expect(['mint', 'burn']).toContain(kind);
+        expect(kind).not.toBe('purchase'); // Since we only have mints and burns
+      }
+    });
+
+    it('should group multiple offers from the same maker', async () => {
+      const groupManager = new EventGroupManager({
+        settleMs: 100,
+        minGroupSize: 2,
+      });
+
+      const offer1 = createOfferEvent('1', '0xmaker1', 1_234_567_890);
+      const offer2 = createOfferEvent('2', '0xmaker1', 1_234_567_890);
+      const offer3 = createOfferEvent('3', '0xmaker1', 1_234_567_890);
+
+      const result1 = processEventsWithAggregator(groupManager, [
+        offer1,
+        offer2,
+        offer3,
+      ]);
+
+      // All held in aggregator
+      expect(result1.readyGroups).toHaveLength(0);
+      expect(result1.skippedPending).toBe(3);
+
+      // Wait for settle time
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      // Should flush as 1 group of 3 offers
+      const result2 = processEventsWithAggregator(groupManager, []);
+      expect(result2.readyGroups).toHaveLength(1);
+      expect(result2.readyGroups[0]?.events).toHaveLength(3);
+
+      const kind = groupKindForEvents(result2.readyGroups[0]?.events ?? []);
+      expect(kind).toBe('offer');
+    });
+
+    it('should group multiple listings from the same maker', async () => {
+      const groupManager = new EventGroupManager({
+        settleMs: 100,
+        minGroupSize: 2,
+      });
+
+      const listing1 = createListingEvent('1', '0xmaker1', 1_234_567_890);
+      const listing2 = createListingEvent('2', '0xmaker1', 1_234_567_890);
+
+      const result1 = processEventsWithAggregator(groupManager, [
+        listing1,
+        listing2,
+      ]);
+
+      // All held in aggregator
+      expect(result1.readyGroups).toHaveLength(0);
+      expect(result1.skippedPending).toBe(2);
+
+      // Wait for settle time
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      // Should flush as 1 group of 2 listings
+      const result2 = processEventsWithAggregator(groupManager, []);
+      expect(result2.readyGroups).toHaveLength(1);
+      expect(result2.readyGroups[0]?.events).toHaveLength(2);
+
+      const kind = groupKindForEvents(result2.readyGroups[0]?.events ?? []);
+      expect(kind).toBe('listing');
+    });
+
+    it('should not group offers and listings together', async () => {
+      const groupManager = new EventGroupManager({
+        settleMs: 100,
+        minGroupSize: 2,
+      });
+
+      // Same maker but different event types
+      const offer1 = createOfferEvent('1', '0xmaker1', 1_234_567_890);
+      const offer2 = createOfferEvent('2', '0xmaker1', 1_234_567_890);
+      const listing1 = createListingEvent('3', '0xmaker1', 1_234_567_890);
+      const listing2 = createListingEvent('4', '0xmaker1', 1_234_567_890);
+
+      const result1 = processEventsWithAggregator(groupManager, [
+        offer1,
+        offer2,
+        listing1,
+        listing2,
+      ]);
+
+      // All held in aggregator (separate groups due to different actor keys)
+      expect(result1.readyGroups).toHaveLength(0);
+      expect(result1.skippedPending).toBe(4);
+
+      // Wait for settle time
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      // Should flush as 2 separate groups
+      const result2 = processEventsWithAggregator(groupManager, []);
+      expect(result2.readyGroups).toHaveLength(2);
+
+      // Verify groups are separate
+      const kinds = result2.readyGroups.map((g) =>
+        groupKindForEvents(g.events)
+      );
+      expect(kinds).toContain('offer');
+      expect(kinds).toContain('listing');
     });
   });
 });

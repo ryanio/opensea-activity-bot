@@ -127,7 +127,6 @@ Originally developed for [@dutchtide](https://twitter.com/dutchtide)'s [𝕄𝕚
 | `CHAIN` | Blockchain network | `ethereum` | `ethereum`, `polygon`, `arbitrum` |
 | `OPENSEA_BOT_INTERVAL` | Polling interval (seconds) | `60` | `30` |
 | `MIN_OFFER_ETH` | Minimum offer amount (ETH) | `0` | `0.1` |
-| `MINT_DELAY_SECONDS` | Delay for mint events to allow metadata to populate | `60` | `90` |
 | `TWITTER_PREPEND_TWEET` | Text to prepend to tweets | - | `#NFT ` |
 | `TWITTER_APPEND_TWEET` | Text to append to tweets | - | ` #OpenSea` |
 | `LOG_LEVEL` | Log verbosity | `info` | `debug`, `info`, `warn`, `error` |
@@ -139,11 +138,11 @@ The bot automatically groups multiple events from the same transaction or actor 
 | Variable | Description | Default | Example |
 |----------|-------------|---------|---------|
 | `TWITTER_EVENT_GROUP_MIN_GROUP_SIZE` | Min events to group together for Twitter | `2` | `5` |
-| `TWITTER_EVENT_GROUP_SETTLE_MS` | Time to wait for more events (ms) for Twitter | `15000` | `30000` |
+| `TWITTER_EVENT_GROUP_SETTLE_MS` | Time to wait for more events (ms) for Twitter | `60000` | `300000` |
 | `DISCORD_EVENT_GROUP_MIN_GROUP_SIZE` | Min events to group together for Discord | `2` | `5` |
-| `DISCORD_EVENT_GROUP_SETTLE_MS` | Time to wait for more events (ms) for Discord | `15000` | `30000` |
+| `DISCORD_EVENT_GROUP_SETTLE_MS` | Time to wait for more events (ms) for Discord | `60000` | `300000` |
 
-> **Note**: Event grouping helps consolidate multiple NFT purchases/mints/burns from the same transaction or actor into a single post. For example, if someone buys 10 NFTs in one transaction, it will be posted as "10 purchased by @user for 5 ETH" instead of 10 separate posts.
+> **Note**: Event grouping helps consolidate multiple NFT purchases/mints/burns from the same transaction or actor into a single post. For example, if someone buys 10 NFTs in one transaction, it will be posted as "10 purchased by @user for 5 ETH" instead of 10 separate posts. The default 60-second settle time also allows OpenSea metadata to populate for mint events before posting.
 
 ### Supported Event Types
 

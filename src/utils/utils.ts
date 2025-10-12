@@ -85,6 +85,29 @@ export const imageForNFT = (nft?: NFTLike): string | undefined => {
   return nft?.image_url?.replace(WIDTH_QUERY_PARAM, 'w=1000');
 };
 
+// Helper to check if NFT is ERC1155 with multiple editions
+export const isERC1155WithMultipleEditions = (
+  tokenStandard: string | undefined,
+  quantity: number | undefined
+): boolean => {
+  const isErc1155 = (tokenStandard ?? '').toLowerCase() === 'erc1155';
+  const editions = Number(quantity ?? 0);
+  return isErc1155 && editions > 1;
+};
+
+// Helper to format editions text for ERC1155
+export const formatEditionsText = (
+  name: string,
+  tokenStandard: string | undefined,
+  quantity: number | undefined
+): string => {
+  if (isERC1155WithMultipleEditions(tokenStandard, quantity)) {
+    const editions = Number(quantity ?? 0);
+    return `${name} (${editions} editions)`;
+  }
+  return name;
+};
+
 export const formatNftPrefix = (
   nft: { name?: string; identifier?: string | number } | undefined
 ): string => {

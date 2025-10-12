@@ -111,12 +111,13 @@ const logStartupConfiguration = () => {
 function main() {
   const run = async () => {
     const events: OpenSeaAssetEvent[] = await fetchEvents();
-    if (!events || events.length === 0) {
-      return;
+
+    if (events.length > 0) {
+      logger.debug('OpenSea API Events:', events);
     }
 
-    logger.debug('OpenSea API Events:', events);
-
+    // Always call platform handlers even with empty events
+    // to flush any pending aggregated groups that have settled
     messageEvents(events);
     tweetEvents(events);
   };

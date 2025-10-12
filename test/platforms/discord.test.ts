@@ -68,6 +68,8 @@ describe('discord routing', () => {
     for (const k of Object.keys(channelsMap)) {
       delete channelsMap[k];
     }
+    // Reset environment to prevent test pollution
+    process.env.DISCORD_EVENTS = undefined;
   });
 
   test('routes mint to mint-configured channel', async () => {
@@ -108,7 +110,7 @@ describe('discord routing', () => {
       chain: 'ethereum',
       quantity: 5,
       from_address: '0x0000000000000000000000000000000000000000',
-      to_address: '0x1111110000000000000000000000000000000000',
+      to_address: '0x2222220000000000000000000000000000000000', // Different address to avoid grouping
       nft: {
         identifier: '99',
         token_standard: 'erc1155',

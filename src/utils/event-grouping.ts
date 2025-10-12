@@ -141,6 +141,9 @@ export class EventGroupManager {
     if (event.event_type === 'transfer') {
       return this.actorKeyForTransfer(event);
     }
+    if (event.event_type === 'order') {
+      return this.actorKeyForOrder(event);
+    }
     return;
   }
 
@@ -161,6 +164,16 @@ export class EventGroupManager {
     }
     const from = (event.from_address ?? '').toLowerCase();
     return from ? `transfer:${from}` : undefined;
+  }
+
+  private actorKeyForOrder(event: OpenSeaAssetEvent): string | undefined {
+    const maker = (event.maker ?? '').toLowerCase();
+    if (!maker) {
+      return;
+    }
+    const isOffer = (event.order_type ?? '').includes('offer');
+    const prefix = isOffer ? 'offer' : 'listing';
+    return `${prefix}:${maker}`;
   }
 
   // Check if an event was already processed
@@ -249,17 +262,30 @@ export class EventGroupManager {
   }
 }
 
-// ---- Generic group helpers (not sale-specific) ----
+// ---- Generic group helpers ----
 
-export type GroupKind = 'purchase' | 'burn' | 'mint' | 'mixed';
+export type GroupKind = 'purchase' | 'burn' | 'mint' | 'offer' | 'listing';
 
 export const groupKindForEvents = (events: OpenSeaAssetEvent[]): GroupKind => {
   if (events.length === 0) {
-    return 'mixed';
+    // Empty groups shouldn't happen, but default to purchase
+    return 'purchase';
   }
   const allSales = events.every((e) => e.event_type === 'sale');
   if (allSales) {
     return 'purchase';
+  }
+  const allOffers = events.every(
+    (e) => e.event_type === 'order' && (e.order_type ?? '').includes('offer')
+  );
+  if (allOffers) {
+    return 'offer';
+  }
+  const allListings = events.every(
+    (e) => e.event_type === 'order' && e.order_type === 'listing'
+  );
+  if (allListings) {
+    return 'listing';
   }
   const allMintTransfers = events.every(
     (e) => e.event_type === 'transfer' && classifyTransfer(e) === 'mint'
@@ -273,7 +299,29 @@ export const groupKindForEvents = (events: OpenSeaAssetEvent[]): GroupKind => {
   if (allBurnTransfers) {
     return 'burn';
   }
-  return 'mixed';
+  // Mixed groups shouldn't happen due to actor-based grouping keys,
+  // but if they do, treat the first event's type as canonical
+  const firstEvent = events[0];
+  if (!firstEvent) {
+    return 'purchase';
+  }
+  if (firstEvent.event_type === 'sale') {
+    return 'purchase';
+  }
+  if (firstEvent.event_type === 'order') {
+    if ((firstEvent.order_type ?? '').includes('offer')) {
+      return 'offer';
+    }
+    return 'listing';
+  }
+  const transferKind = classifyTransfer(firstEvent);
+  if (transferKind === 'mint') {
+    return 'mint';
+  }
+  if (transferKind === 'burn') {
+    return 'burn';
+  }
+  return 'purchase';
 };
 
 export const primaryActorAddressForGroup = (
@@ -292,6 +340,9 @@ export const primaryActorAddressForGroup = (
   }
   if (kind === 'burn') {
     return first.from_address;
+  }
+  if (kind === 'offer' || kind === 'listing') {
+    return first.maker;
   }
   return;
 };
@@ -355,6 +406,83 @@ export const getTopExpensiveEvents = (
   });
 };
 
+// Format group title based on count and kind
+export const formatGroupTitle = (count: number, kind: GroupKind): string => {
+  if (kind === 'burn') {
+    return `${count} burned`;
+  }
+  if (kind === 'mint') {
+    return `${count} minted`;
+  }
+  if (kind === 'offer') {
+    return `${count} offers`;
+  }
+  if (kind === 'listing') {
+    return `${count} listings`;
+  }
+  return `${count} purchased`;
+};
+
+// Format group actor text (username and URLs)
+export const formatGroupActorInfo = async (
+  actorAddress: string | undefined,
+  kind: GroupKind,
+  collectionUrl: string
+): Promise<{
+  actorName?: string;
+  actorLabel: string;
+  actorUrl: string;
+}> => {
+  const { username } = require('../opensea');
+  const {
+    openseaProfileCollectionUrl,
+    openseaProfileTransferActivityUrl,
+    openseaProfileActivityUrl,
+    openseaCollectionActivityUrl,
+  } = require('./links');
+
+  let actorLabel: string;
+  let activityType: string | undefined;
+
+  if (kind === 'burn') {
+    actorLabel = 'By';
+    activityType = 'transfer';
+  } else if (kind === 'mint') {
+    actorLabel = 'Minter';
+    activityType = 'mint';
+  } else if (kind === 'offer') {
+    actorLabel = 'Offerer';
+    activityType = 'offer';
+  } else if (kind === 'listing') {
+    actorLabel = 'Lister';
+    activityType = 'listing';
+  } else {
+    actorLabel = 'Buyer';
+    activityType = 'sale';
+  }
+
+  if (actorAddress) {
+    const actorName = await username(actorAddress);
+    let actorUrl: string;
+    if (kind === 'mint') {
+      actorUrl = openseaProfileCollectionUrl(actorAddress);
+    } else if (kind === 'offer') {
+      actorUrl = openseaProfileActivityUrl(actorAddress, 'offer');
+    } else if (kind === 'listing') {
+      actorUrl = openseaProfileActivityUrl(actorAddress, 'listing');
+    } else {
+      actorUrl = openseaProfileTransferActivityUrl(actorAddress);
+    }
+    return { actorName, actorLabel, actorUrl };
+  }
+
+  // Fallback to collection activity URL with activity type filter
+  return {
+    actorLabel,
+    actorUrl: openseaCollectionActivityUrl(collectionUrl, activityType),
+  };
+};
+
 // Utility to calculate total spent across events (ETH/WETH only)
 export const calculateTotalSpent = (
   events: OpenSeaAssetEvent[]
@@ -386,4 +514,39 @@ export const calculateTotalSpent = (
   // Import formatAmount from utils when needed
   const { formatAmount } = require('./utils');
   return formatAmount(totalQuantity.toString(), decimals, symbol);
+};
+
+// Shared function to process events with aggregator flushing
+// This ensures both Discord and Twitter flush pending groups consistently
+export type ProcessEventsResult = {
+  readyGroups: Array<{ tx: string; events: OpenSeaAssetEvent[] }>;
+  processableEvents: OpenSeaAssetEvent[];
+  skippedDupes: number;
+  skippedPending: number;
+};
+
+export const processEventsWithAggregator = (
+  groupManager: EventGroupManager,
+  events: OpenSeaAssetEvent[]
+): ProcessEventsResult => {
+  // Add new events to aggregator if any
+  if (events.length > 0) {
+    groupManager.addEvents(events);
+  }
+
+  // Always flush ready groups (even if no new events)
+  const readyGroups = groupManager.getReadyGroups();
+
+  // Filter processable events (only if we have new events)
+  const { processableEvents, skippedDupes, skippedPending } =
+    events.length > 0
+      ? groupManager.filterProcessableEvents(events)
+      : { processableEvents: [], skippedDupes: 0, skippedPending: 0 };
+
+  return {
+    readyGroups,
+    processableEvents,
+    skippedDupes,
+    skippedPending,
+  };
 };
