@@ -18,7 +18,7 @@ describe('imageForNFT', () => {
   test('replaces width param with 1000', () => {
     expect(
       imageForNFT({ image_url: 'https://img.example.com/foo?w=200&h=200' })
-    ).toBe('https://img.example.com/foo?w=1000&h=200');
+    ).toBe('https://img.example.com/foo?w=10000&h=200');
   });
   test('returns undefined when missing', () => {
     expect(imageForNFT(undefined)).toBeUndefined();

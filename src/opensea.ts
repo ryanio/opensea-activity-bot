@@ -6,6 +6,8 @@ import type {
   OpenSeaAssetEvent,
   OpenSeaContractResponse,
   OpenSeaEventsResponse,
+  OpenSeaNFT,
+  OpenSeaNFTResponse,
 } from './types';
 import { eventKeyFor } from './utils/event-grouping';
 import { parseEvents, wantsOpenSeaEventTypes } from './utils/events';
@@ -106,6 +108,18 @@ const fetchAccount = async (
   const url = opensea.getAccount(address);
   const result = await openseaGet<OpenSeaAccount>(url);
   return result;
+};
+
+/**
+ * Fetches fresh NFT metadata from OpenSea API by token ID.
+ * Useful for mints where metadata may not be immediately available.
+ */
+export const fetchNFT = async (
+  tokenId: string | number
+): Promise<OpenSeaNFT | undefined> => {
+  const url = opensea.getNFT(Number(tokenId));
+  const result = await openseaGet<OpenSeaNFTResponse>(url);
+  return result?.nft;
 };
 
 export const EventType = {

@@ -17,6 +17,10 @@ import {
 import { isEventWanted, parseEvents } from '../utils/events';
 import { logger } from '../utils/logger';
 import { LRUCache } from '../utils/lru-cache';
+import {
+  refetchMintMetadata,
+  refetchMintMetadataForEvent,
+} from '../utils/metadata';
 import { AsyncQueue } from '../utils/queue';
 import {
   classifyTransfer,
@@ -338,6 +342,7 @@ export const textForTweet = async (event: OpenSeaAssetEvent) => {
 const MAX_MEDIA_IMAGES = 4;
 
 // getPurchasePrice is now imported from event-grouping
+// Metadata refetching is now imported from utils/metadata
 
 const uploadImagesForGroup = async (
   client: MinimalTwitterClient,
@@ -363,10 +368,10 @@ const uploadImagesForGroup = async (
       const id = await client.v1.uploadMedia(buffer, { mimeType });
       mediaIds.push(id);
     } catch (uploadError) {
-      logger.warn(
-        `${logStart} Group media upload failed; continuing:`,
-        uploadError
+      logger.info(
+        `${logStart} Group media upload failed for URL ${imageUrl}, continuing without this image`
       );
+      logger.debug(`${logStart} Upload error details:`, uploadError);
     }
   }
   return mediaIds;
@@ -378,6 +383,14 @@ const tweetGroup = async (
   client: MinimalTwitterClient,
   group: OpenSeaAssetEvent[]
 ) => {
+  // Refetch metadata for any mint events before processing
+  const refetchCount = await refetchMintMetadata(group);
+  if (refetchCount > 0) {
+    logger.info(
+      `${logStart} Refetched metadata for ${refetchCount} mint event${refetchCount === 1 ? '' : 's'}`
+    );
+  }
+
   const count = group.length;
   const mediaIds = await uploadImagesForGroup(client, group);
   const kind = groupKindForEvents(group);
@@ -408,6 +421,9 @@ const tweetSingle = async (
   client: MinimalTwitterClient,
   event: OpenSeaAssetEvent
 ) => {
+  // Refetch metadata if this is a mint event
+  await refetchMintMetadataForEvent(event);
+
   let mediaId: string | undefined;
   const image = imageForNFT(event.nft ?? event.asset);
   if (image) {
@@ -415,11 +431,15 @@ const tweetSingle = async (
       const { buffer, mimeType } = await fetchImageBuffer(image);
       mediaId = await client.v1.uploadMedia(buffer, { mimeType });
     } catch (uploadError) {
-      logger.warn(
-        `${logStart} Media upload failed, tweeting without media:`,
-        uploadError
+      logger.info(
+        `${logStart} Media upload failed for URL ${image}, continuing with text-only tweet (will use native link preview)`
       );
+      logger.debug(`${logStart} Upload error details:`, uploadError);
     }
+  } else {
+    logger.debug(
+      `${logStart} No image URL available, will use native link preview`
+    );
   }
   const status = await textForTweet(event);
   const tweetParams: { text: string; media?: { media_ids: string[] } } = mediaId

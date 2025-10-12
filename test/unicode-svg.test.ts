@@ -12,6 +12,7 @@ describe('Unicode SVG Character Encoding', () => {
 
   it('should convert SVG with unicode characters to PNG and fix font issues', async () => {
     (fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
       arrayBuffer: () =>
         Promise.resolve(new TextEncoder().encode(mockSvgContent).buffer),
       headers: {
@@ -37,6 +38,7 @@ describe('Unicode SVG Character Encoding', () => {
 
     // Mock the actual response from the SVG URL
     (fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
       arrayBuffer: () =>
         Promise.resolve(new TextEncoder().encode(mockSvgContent).buffer),
       headers: {
@@ -60,6 +62,7 @@ describe('Unicode SVG Character Encoding', () => {
     </svg>`;
 
     (fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
       arrayBuffer: () =>
         Promise.resolve(
           new TextEncoder().encode(svgWithProblematicFont).buffer
@@ -96,6 +99,7 @@ describe('Unicode SVG Character Encoding', () => {
     ]); // PNG header
 
     (fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
       arrayBuffer: () => Promise.resolve(pngBuffer.buffer),
       headers: {
         get: () => 'image/png',

@@ -28,6 +28,7 @@ import {
   openseaProfileCollectionUrl,
 } from '../utils/links';
 import { prefixedLogger } from '../utils/logger';
+import { refetchMintMetadata } from '../utils/metadata';
 import {
   classifyTransfer,
   formatAmount,
@@ -432,6 +433,14 @@ const processGroupMessages = async (
   discordChannels: Record<string, TextBasedChannel>
 ) => {
   for (const readyGroup of readyGroups) {
+    // Refetch metadata for any mint events before processing
+    const refetchCount = await refetchMintMetadata(readyGroup.events);
+    if (refetchCount > 0) {
+      log.info(
+        `Refetched metadata for ${refetchCount} mint event${refetchCount === 1 ? '' : 's'}`
+      );
+    }
+
     const group: GroupedEvent = {
       kind: 'group',
       txHash: readyGroup.tx,
@@ -465,6 +474,14 @@ const processIndividualMessages = async (
   channelEvents: ChannelEvents,
   discordChannels: Record<string, TextBasedChannel>
 ) => {
+  // Refetch metadata for any mint events before creating messages
+  const refetchCount = await refetchMintMetadata(processableEvents);
+  if (refetchCount > 0) {
+    log.info(
+      `Refetched metadata for ${refetchCount} mint event${refetchCount === 1 ? '' : 's'}`
+    );
+  }
+
   const messages = await messagesForEvents(
     processableEvents as AggregatorEvent[]
   );

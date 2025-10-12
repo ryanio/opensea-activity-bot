@@ -82,7 +82,7 @@ export const formatAmount = (
 
 const WIDTH_QUERY_PARAM = /w=(\d)*/;
 export const imageForNFT = (nft?: NFTLike): string | undefined => {
-  return nft?.image_url?.replace(WIDTH_QUERY_PARAM, 'w=1000');
+  return nft?.image_url?.replace(WIDTH_QUERY_PARAM, 'w=10000');
 };
 
 // Helper to check if NFT is ERC1155 with multiple editions
@@ -133,9 +133,29 @@ export const fetchImageBuffer = async (
   imageURL: string
 ): Promise<{ buffer: Buffer; mimeType: string }> => {
   const response = await fetch(imageURL);
+
+  // Check if response is successful
+  if (!response.ok) {
+    throw new Error(
+      `Failed to fetch image: ${response.status} ${response.statusText}`
+    );
+  }
+
   const arrayBuffer = await response.arrayBuffer();
+
+  // Check if we got any data
+  if (arrayBuffer.byteLength === 0) {
+    throw new Error('Image fetch returned empty data');
+  }
+
   let buffer: Buffer = Buffer.from(new Uint8Array(arrayBuffer)) as Buffer;
   const contentType = response.headers.get('content-type') ?? undefined;
+
+  // Validate that we got an image content type
+  if (contentType && !contentType.startsWith('image/')) {
+    throw new Error(`Invalid content type: ${contentType} (expected image/*)`);
+  }
+
   let mimeType = contentType?.split(';')[0] ?? 'image/jpeg';
 
   if (mimeType === 'image/svg+xml' || imageURL.toLowerCase().endsWith('.svg')) {
