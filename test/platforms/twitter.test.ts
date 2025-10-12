@@ -55,6 +55,7 @@ jest.mock('../../src/opensea', () => ({
     transfer: 'transfer',
   },
   username: jest.fn(async () => 'user'),
+  getCollectionSlug: jest.fn(() => 'glyphbots'),
 }));
 
 // Manual stable mock for twitter-api-v2

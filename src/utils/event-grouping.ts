@@ -427,7 +427,8 @@ export const formatGroupTitle = (count: number, kind: GroupKind): string => {
 export const formatGroupActorInfo = async (
   actorAddress: string | undefined,
   kind: GroupKind,
-  collectionUrl: string
+  collectionUrl: string,
+  collectionSlug: string
 ): Promise<{
   actorName?: string;
   actorLabel: string;
@@ -436,7 +437,6 @@ export const formatGroupActorInfo = async (
   const { username } = require('../opensea');
   const {
     openseaProfileCollectionUrl,
-    openseaProfileTransferActivityUrl,
     openseaProfileActivityUrl,
     openseaCollectionActivityUrl,
   } = require('./links');
@@ -464,14 +464,16 @@ export const formatGroupActorInfo = async (
   if (actorAddress) {
     const actorName = await username(actorAddress);
     let actorUrl: string;
-    if (kind === 'mint') {
-      actorUrl = openseaProfileCollectionUrl(actorAddress);
+    if (kind === 'mint' || kind === 'purchase') {
+      // For mints and purchases, show profile filtered by collection
+      actorUrl = openseaProfileCollectionUrl(actorAddress, collectionSlug);
     } else if (kind === 'offer') {
       actorUrl = openseaProfileActivityUrl(actorAddress, 'offer');
     } else if (kind === 'listing') {
       actorUrl = openseaProfileActivityUrl(actorAddress, 'listing');
     } else {
-      actorUrl = openseaProfileTransferActivityUrl(actorAddress);
+      // For burns and other transfers
+      actorUrl = openseaProfileActivityUrl(actorAddress, 'transfer');
     }
     return { actorName, actorLabel, actorUrl };
   }
@@ -481,6 +483,54 @@ export const formatGroupActorInfo = async (
     actorLabel,
     actorUrl: openseaCollectionActivityUrl(collectionUrl, activityType),
   };
+};
+
+// Format complete group text with actor info for Twitter
+export const formatGroupText = async (options: {
+  group: OpenSeaAssetEvent[];
+  count: number;
+  kind: GroupKind;
+  collectionUrl: string;
+  collectionSlug: string;
+  totalSpent?: string | null;
+}): Promise<string> => {
+  const { group, count, kind, collectionUrl, collectionSlug, totalSpent } =
+    options;
+  const actorAddress = primaryActorAddressForGroup(group, kind);
+  const title = formatGroupTitle(count, kind);
+
+  let text = '';
+
+  if (actorAddress) {
+    const actorInfo = await formatGroupActorInfo(
+      actorAddress,
+      kind,
+      collectionUrl,
+      collectionSlug
+    );
+    // Twitter-specific formatting with @ for usernames
+    const formattedName =
+      kind === 'burn' ? `@${actorInfo.actorName}` : actorInfo.actorName;
+    text += `${title} by ${formattedName}`;
+    if (kind === 'purchase' && totalSpent) {
+      text += ` for ${totalSpent}`;
+    }
+    text += ` ${actorInfo.actorUrl}`;
+  } else {
+    text += title;
+    if (kind === 'purchase' && totalSpent) {
+      text += ` for ${totalSpent}`;
+    }
+    const fallbackInfo = await formatGroupActorInfo(
+      undefined,
+      kind,
+      collectionUrl,
+      collectionSlug
+    );
+    text += ` ${fallbackInfo.actorUrl}`;
+  }
+
+  return text;
 };
 
 // Utility to calculate total spent across events (ETH/WETH only)

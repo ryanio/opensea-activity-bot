@@ -6,7 +6,7 @@ import {
   type TextBasedChannel,
 } from 'discord.js';
 import { format } from 'timeago.js';
-import { EventType, opensea, username } from '../opensea';
+import { EventType, getCollectionSlug, opensea, username } from '../opensea';
 import { BotEvent, type OpenSeaAssetEvent } from '../types';
 import type { AggregatorEvent } from '../utils/aggregator';
 import { MS_PER_SECOND } from '../utils/constants';
@@ -24,7 +24,8 @@ import {
 import { effectiveEventTypeFor } from '../utils/event-types';
 import {
   openseaCollectionActivityUrl,
-  openseaProfileTransferActivityUrl,
+  openseaProfileActivityUrl,
+  openseaProfileCollectionUrl,
 } from '../utils/links';
 import { prefixedLogger } from '../utils/logger';
 import {
@@ -316,7 +317,13 @@ const buildGroupEmbed = async (group: GroupedEvent): Promise<EmbedBuilder> => {
   }
 
   if (actorAddress) {
-    const url = openseaProfileTransferActivityUrl(actorAddress);
+    // Use collection-filtered URL for mints and purchases, activity-filtered for others
+    let url: string;
+    if (kind === 'mint' || kind === 'purchase') {
+      url = openseaProfileCollectionUrl(actorAddress, getCollectionSlug());
+    } else {
+      url = openseaProfileActivityUrl(actorAddress, activityType);
+    }
     fields.push({
       name: 'Activity',
       value: `[View on OpenSea](${url})`,

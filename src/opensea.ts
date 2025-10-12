@@ -162,6 +162,10 @@ const fetchCollectionSlug = async (address: string): Promise<string> => {
   return result.collection;
 };
 
+export const getCollectionSlug = (): string => {
+  return collectionSlug;
+};
+
 const filterPrivateListings = (
   events: OpenSeaAssetEvent[]
 ): OpenSeaAssetEvent[] => {

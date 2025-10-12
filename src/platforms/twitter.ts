@@ -1,26 +1,20 @@
 import { TwitterApi } from 'twitter-api-v2';
-import { EventType, opensea, username } from '../opensea';
+import { EventType, getCollectionSlug, opensea, username } from '../opensea';
 import type { BotEvent, OpenSeaAssetEvent, OpenSeaPayment } from '../types';
 import { txHashFor } from '../utils/aggregator';
 import {
   calculateTotalSpent,
   EventGroupManager,
   eventKeyFor,
+  formatGroupText,
   type GroupedEvent,
   getDefaultEventGroupConfig,
   groupKindForEvents,
   isGroupedEvent,
-  primaryActorAddressForGroup,
   processEventsWithAggregator,
   sortEventsByPrice,
 } from '../utils/event-grouping';
 import { isEventWanted, parseEvents } from '../utils/events';
-import {
-  openseaCollectionActivityUrl,
-  openseaProfileActivityUrl,
-  openseaProfileCollectionUrl,
-  openseaProfileTransferActivityUrl,
-} from '../utils/links';
 import { logger } from '../utils/logger';
 import { LRUCache } from '../utils/lru-cache';
 import { AsyncQueue } from '../utils/queue';
@@ -387,112 +381,17 @@ const tweetGroup = async (
   const count = group.length;
   const mediaIds = await uploadImagesForGroup(client, group);
   const kind = groupKindForEvents(group);
-  const buyerAddress = group[0]?.buyer;
   const totalSpent = calculateTotalSpent(group);
 
-  let text = '';
-
-  const appendBurn = async () => {
-    const burnerAddress = primaryActorAddressForGroup(group, 'burn');
-    if (burnerAddress) {
-      const burnerName = await username(burnerAddress);
-      text += `${count} burned by @${burnerName}`;
-      const activityUrl = openseaProfileTransferActivityUrl(burnerAddress);
-      text += ` ${activityUrl}`;
-    } else {
-      text += `${count} burned`;
-      const activityUrl = openseaCollectionActivityUrl(
-        opensea.collectionURL(),
-        'transfer'
-      );
-      text += ` ${activityUrl}`;
-    }
-  };
-
-  const appendMint = async () => {
-    const minterAddress = primaryActorAddressForGroup(group, 'mint');
-    if (minterAddress) {
-      const minterName = await username(minterAddress);
-      text += `${count} minted by ${minterName}`;
-      const profileUrl = openseaProfileCollectionUrl(minterAddress);
-      text += ` ${profileUrl}`;
-    } else {
-      text += `${count} minted`;
-      const activityUrl = openseaCollectionActivityUrl(
-        opensea.collectionURL(),
-        'mint'
-      );
-      text += ` ${activityUrl}`;
-    }
-  };
-
-  const appendPurchase = async () => {
-    if (buyerAddress) {
-      const buyerName = await username(buyerAddress);
-      text += `${count} purchased by ${buyerName}`;
-      if (totalSpent) {
-        text += ` for ${totalSpent}`;
-      }
-      const profileUrl = openseaProfileCollectionUrl(buyerAddress);
-      text += ` ${profileUrl}`;
-    } else {
-      text += `${count} purchased`;
-      if (totalSpent) {
-        text += ` for ${totalSpent}`;
-      }
-      const activityUrl = openseaCollectionActivityUrl(
-        opensea.collectionURL(),
-        'sale'
-      );
-      text += ` ${activityUrl}`;
-    }
-  };
-
-  const appendOffer = async () => {
-    const makerAddress = primaryActorAddressForGroup(group, 'offer');
-    if (makerAddress) {
-      const makerName = await username(makerAddress);
-      text += `${count} offers by ${makerName}`;
-      const activityUrl = openseaProfileActivityUrl(makerAddress, 'offer');
-      text += ` ${activityUrl}`;
-    } else {
-      text += `${count} offers`;
-      const activityUrl = openseaCollectionActivityUrl(
-        opensea.collectionURL(),
-        'offer'
-      );
-      text += ` ${activityUrl}`;
-    }
-  };
-
-  const appendListing = async () => {
-    const makerAddress = primaryActorAddressForGroup(group, 'listing');
-    if (makerAddress) {
-      const makerName = await username(makerAddress);
-      text += `${count} listings by ${makerName}`;
-      const activityUrl = openseaProfileActivityUrl(makerAddress, 'listing');
-      text += ` ${activityUrl}`;
-    } else {
-      text += `${count} listings`;
-      const activityUrl = openseaCollectionActivityUrl(
-        opensea.collectionURL(),
-        'listing'
-      );
-      text += ` ${activityUrl}`;
-    }
-  };
-
-  if (kind === 'burn') {
-    await appendBurn();
-  } else if (kind === 'mint') {
-    await appendMint();
-  } else if (kind === 'offer') {
-    await appendOffer();
-  } else if (kind === 'listing') {
-    await appendListing();
-  } else {
-    await appendPurchase();
-  }
+  // Use shared utility to format group text
+  let text = await formatGroupText({
+    group,
+    count,
+    kind,
+    collectionUrl: opensea.collectionURL(),
+    collectionSlug: getCollectionSlug(),
+    totalSpent,
+  });
 
   text = wrapTweetText(text);
   const params: { text: string; media?: { media_ids: string[] } } =
