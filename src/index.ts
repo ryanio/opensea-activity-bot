@@ -133,7 +133,7 @@ function main() {
 
   process.on('SIGINT', () => {
     logger.info('');
-    logger.info('⚠️  Interrupt signal received (SIGINT)');
+    logger.info('⚠️ Interrupt signal received (SIGINT)');
     logger.info('🛑 Shutting down gracefully...');
     clearInterval(interval);
     logger.info('✅ Bot stopped successfully');
