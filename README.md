@@ -71,7 +71,6 @@ TWITTER_EVENTS=sale,transfer
 # Optional settings
 CHAIN=ethereum
 OPENSEA_BOT_INTERVAL=60
-QUERY_LIMIT=50
 LOG_LEVEL=info
 ```
 
@@ -127,7 +126,6 @@ Originally developed for [@dutchtide](https://twitter.com/dutchtide)'s [𝕄𝕚
 |----------|-------------|---------|---------|
 | `CHAIN` | Blockchain network | `ethereum` | `ethereum`, `polygon`, `arbitrum` |
 | `OPENSEA_BOT_INTERVAL` | Polling interval (seconds) | `60` | `30` |
-| `QUERY_LIMIT` | Max events per query | `50` | `100` |
 | `MIN_OFFER_ETH` | Minimum offer amount (ETH) | `0` | `0.1` |
 | `MINT_DELAY_SECONDS` | Delay for mint events to allow metadata to populate | `60` | `90` |
 | `TWITTER_PREPEND_TWEET` | Text to prepend to tweets | - | `#NFT ` |
@@ -307,7 +305,6 @@ Set your environment variables in your deployment platform:
 - Verify `TOKEN_ADDRESS` is correct for your collection
 - Check `OPENSEA_API_TOKEN` is valid
 - Ensure collection has recent activity
-- Try increasing `QUERY_LIMIT`
 
 **Duplicate posts:**
 - Check that only one instance is running

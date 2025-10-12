@@ -6,7 +6,6 @@ import { getDefaultEventGroupConfig } from './utils/event-grouping';
 import { logger } from './utils/logger';
 import { botInterval, chain, fullTokenAddr, minOfferETH } from './utils/utils';
 
-const DEFAULT_QUERY_LIMIT = 50;
 const MILLISECONDS_PER_SECOND = 1000;
 
 const logPlatformConfig = (
@@ -95,9 +94,6 @@ const logStartupConfiguration = () => {
   logger.info(`│  📦  Collection Contract: ${fullTokenAddr}`);
   logger.info(`│  ⛓️  Network Chain: ${chain}`);
   logger.info(`│  ⏱️  Poll Interval: ${botInterval}s`);
-  logger.info(
-    `│  📊  Query Limit: ${process.env.QUERY_LIMIT ?? DEFAULT_QUERY_LIMIT} events per fetch`
-  );
   logger.info(`│  💰  Min Offer Filter: ${minOfferETH} ETH`);
   logger.info(`│  📝  Log Level: ${process.env.LOG_LEVEL ?? 'info'}`);
   logger.info('│');

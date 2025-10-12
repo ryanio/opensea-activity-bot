@@ -18,7 +18,6 @@ const {
   TOKEN_ADDRESS,
   TWITTER_EVENTS,
   LAST_EVENT_TIMESTAMP,
-  QUERY_LIMIT,
 } = process.env;
 
 let lastEventTimestamp = unixTimestamp(new Date());
@@ -226,9 +225,9 @@ const updateLastEventTimestamp = (events: OpenSeaAssetEvent[]): void => {
 
 const buildEventsUrl = (): string => {
   const eventTypes = enabledEventTypes();
-  const DEFAULT_QUERY_LIMIT = 50;
+  const OPENSEA_MAX_LIMIT = 50;
   const params: Record<string, string> = {
-    limit: (QUERY_LIMIT ?? DEFAULT_QUERY_LIMIT).toString(),
+    limit: OPENSEA_MAX_LIMIT.toString(),
     after: lastEventTimestamp.toString(),
   };
   const urlParams = new URLSearchParams(params);
@@ -285,13 +284,12 @@ export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
   logger.info(`Fetched events: ${allEvents.length}`);
 
   // Pagination: if there's a 'next' cursor and we got exactly the limit, fetch more pages
-  const DEFAULT_QUERY_LIMIT = 50;
-  const limit = Number(QUERY_LIMIT ?? DEFAULT_QUERY_LIMIT);
+  const OPENSEA_MAX_LIMIT = 50;
   let pagesFollowed = 0;
 
   while (
     result?.next &&
-    allEvents.length >= limit &&
+    allEvents.length >= OPENSEA_MAX_LIMIT &&
     pagesFollowed < MAX_PAGINATION_PAGES
   ) {
     pagesFollowed += 1;
