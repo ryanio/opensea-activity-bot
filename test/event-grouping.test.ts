@@ -183,13 +183,13 @@ describe('eventGrouping-utils', () => {
   describe('eventKeyFor', () => {
     it('should generate unique key for event', () => {
       const key = eventKeyFor(mockEvent1);
-      expect(key).toBe('1234567890|1');
+      expect(key).toBe('1234567890|1|sale');
     });
 
     it('should handle missing fields gracefully', () => {
       const eventWithoutNft = { ...mockEvent1, nft: undefined };
       const key = eventKeyFor(eventWithoutNft);
-      expect(key).toBe('1234567890|');
+      expect(key).toBe('1234567890||sale');
     });
   });
 

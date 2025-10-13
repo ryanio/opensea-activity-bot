@@ -15,7 +15,9 @@ describe('Event Deduplication System', () => {
       const key2 = eventKeyFor(event);
 
       expect(key1).toBe(key2);
-      expect(key1).toBe(`${event.event_timestamp}|${event.nft?.identifier}`);
+      expect(key1).toBe(
+        `${event.event_timestamp}|${event.nft?.identifier}|${event.event_type}`
+      );
     });
 
     it('should generate different keys for different events', () => {
@@ -35,7 +37,7 @@ describe('Event Deduplication System', () => {
       };
 
       const key = eventKeyFor(event as OpenSeaAssetEvent);
-      expect(key).toBe('1756492379|');
+      expect(key).toBe('1756492379||sale');
     });
   });
 

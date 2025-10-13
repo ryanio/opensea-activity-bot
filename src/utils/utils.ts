@@ -139,7 +139,7 @@ export const formatNftPrefix = (
 
 /**
  * Fetch an image and return a buffer and mimeType.
- * Converts SVGs to PNG for broader compatibility.
+ * Converts SVGs and AVIFs to PNG for compatibility with Twitter API.
  */
 export const fetchImageBuffer = async (
   imageURL: string
@@ -170,6 +170,7 @@ export const fetchImageBuffer = async (
 
   let mimeType = contentType?.split(';')[0] ?? 'image/jpeg';
 
+  // Convert SVG to PNG
   if (mimeType === 'image/svg+xml' || imageURL.toLowerCase().endsWith('.svg')) {
     try {
       // Fix font issues for unicode character rendering
@@ -189,6 +190,18 @@ export const fetchImageBuffer = async (
     } catch (e) {
       logger.debug('utils: SVG to PNG conversion failed:', e);
       // Keep original SVG buffer and mime type on failure
+    }
+  }
+
+  // Convert AVIF to PNG (Twitter doesn't support AVIF)
+  if (mimeType === 'image/avif') {
+    try {
+      logger.debug(`utils: Converting AVIF to PNG for URL: ${imageURL}`);
+      buffer = (await sharp(buffer).png().toBuffer()) as Buffer;
+      mimeType = 'image/png';
+    } catch (e) {
+      logger.debug('utils: AVIF to PNG conversion failed:', e);
+      // Keep original AVIF buffer and mime type on failure
     }
   }
 

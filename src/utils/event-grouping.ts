@@ -25,7 +25,8 @@ export const eventKeyFor = (event: OpenSeaAssetEvent): string => {
   const ts = String(event?.event_timestamp ?? '');
   const nft = event?.nft ?? event?.asset;
   const tokenId = String(nft?.identifier ?? '');
-  return `${ts}|${tokenId}`;
+  const eventType = event?.event_type ?? '';
+  return `${ts}|${tokenId}|${eventType}`;
 };
 
 // Grouped event type for shared use
