@@ -301,15 +301,10 @@ export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
   let allEvents = [...result.asset_events];
   logger.info(`Fetched events: ${allEvents.length}`);
 
-  // Pagination: if there's a 'next' cursor and we got exactly the limit, fetch more pages
-  const OPENSEA_MAX_LIMIT = 50;
+  // Pagination: if there's a 'next' cursor, fetch more pages
   let pagesFollowed = 0;
 
-  while (
-    result?.next &&
-    allEvents.length >= OPENSEA_MAX_LIMIT &&
-    pagesFollowed < MAX_PAGINATION_PAGES
-  ) {
+  while (result?.next && pagesFollowed < MAX_PAGINATION_PAGES) {
     pagesFollowed += 1;
     const nextUrl = `${opensea.getEvents()}?${result.next}`;
     const cursorPreview = result.next.slice(0, SUBSTRING_LENGTH_FOR_CURSOR_LOG);

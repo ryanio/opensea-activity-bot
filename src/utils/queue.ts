@@ -1,3 +1,5 @@
+import { logger } from './logger';
+
 // Local timeout to avoid cross-module deps in tests
 const timeout = (ms: number) =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -33,6 +35,11 @@ export class AsyncQueue<T> {
 
   enqueue(item: T) {
     this.list.push({ item, attempts: 0 });
+
+    // Auto-start the queue if it's idle
+    if (!this.isProcessing) {
+      this.start();
+    }
   }
 
   size(): number {
@@ -41,8 +48,17 @@ export class AsyncQueue<T> {
 
   start() {
     if (!this.isProcessing) {
+      if (this.options.debug) {
+        logger.debug(
+          `[Queue] Starting queue processing (${this.list.length} items)`
+        );
+      }
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      this.processLoop();
+      this.processLoop().catch((err) => {
+        logger.error('[Queue] Uncaught error in processLoop:', err);
+      });
+    } else if (this.options.debug) {
+      logger.debug('[Queue] Queue already processing, skipping start()');
     }
   }
 
@@ -60,37 +76,64 @@ export class AsyncQueue<T> {
 
   private async processLoop() {
     if (this.isProcessing) {
+      if (this.options.debug) {
+        logger.debug('[Queue] processLoop called but already processing');
+      }
       return;
     }
     this.isProcessing = true;
     try {
-      // eslint-disable-next-line no-constant-condition
-      while (this.list.length > 0) {
-        const now = Date.now();
-        await this.pauseIfNeeded(now);
-
-        const next = this.list[0];
-        const key = this.options.keyFor(next.item);
-        if (this.shouldSkipProcessed(key, next.item)) {
-          this.list.shift();
-          continue;
-        }
-
-        const processed = await this.tryProcessNext(next);
-        if (!processed) {
-          // tryProcessNext decides whether to retry or drop. If it returns false, we either
-          // paused/backed off and should continue loop, or item was dropped and removed.
-          continue;
-        }
-        // Successful process
-        this.list.shift();
-        this.options.onProcessed?.(next.item);
-        if (this.list.length > 0) {
-          await timeout(this.options.perItemDelayMs);
-        }
+      await this.processQueueItems();
+      if (this.options.debug) {
+        logger.debug('[Queue] Finished processing all items');
       }
     } finally {
       this.isProcessing = false;
+    }
+  }
+
+  private async processQueueItems() {
+    // eslint-disable-next-line no-constant-condition
+    while (this.list.length > 0) {
+      const now = Date.now();
+      await this.pauseIfNeeded(now);
+
+      const next = this.list[0];
+      const key = this.options.keyFor(next.item);
+
+      if (this.handleSkipIfProcessed(key, next.item)) {
+        continue;
+      }
+
+      const processed = await this.tryProcessNext(next);
+      if (!processed) {
+        // tryProcessNext decides whether to retry or drop
+        continue;
+      }
+
+      this.handleSuccessfulProcess(key, next.item);
+    }
+  }
+
+  private handleSkipIfProcessed(key: string, item: T): boolean {
+    if (this.shouldSkipProcessed(key, item)) {
+      if (this.options.debug) {
+        logger.debug(`[Queue] Skipping already-processed item: ${key}`);
+      }
+      this.list.shift();
+      return true;
+    }
+    return false;
+  }
+
+  private async handleSuccessfulProcess(key: string, item: T) {
+    if (this.options.debug) {
+      logger.debug(`[Queue] Successfully processed item: ${key}`);
+    }
+    this.list.shift();
+    this.options.onProcessed?.(item);
+    if (this.list.length > 0) {
+      await timeout(this.options.perItemDelayMs);
     }
   }
 
@@ -118,15 +161,25 @@ export class AsyncQueue<T> {
           this.options.backoffBaseMs
         );
         this.pauseUntilMs = Date.now() + waitMs;
+        if (this.options.debug) {
+          logger.debug(`[Queue] Rate limited, pausing for ${waitMs}ms`);
+        }
         return false; // retry same item after pause
       }
       if (classification.type === 'transient') {
         next.attempts += 1;
         const waitMs = this.calcBackoffMs(next.attempts);
+        if (this.options.debug) {
+          logger.debug(
+            `[Queue] Transient error (attempt ${next.attempts}), backing off for ${waitMs}ms:`,
+            error
+          );
+        }
         await timeout(waitMs);
         return false; // retry same item after backoff
       }
       // fatal
+      logger.error('[Queue] Fatal error processing item, dropping:', error);
       this.list.shift();
       return false;
     }

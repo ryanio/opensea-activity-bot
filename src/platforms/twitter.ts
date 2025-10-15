@@ -533,10 +533,10 @@ const enqueueGroups = (
   if (readyGroups.length > 0) {
     const counts = readyGroups.map((r) => r.events.length).join(',');
     logger.info(
-      `${logStart} Group tweeted: ${readyGroups.map((r) => r.events.length).join(', ')} items`
+      `${logStart} Enqueued ${readyGroups.length} group(s) for tweeting [${readyGroups.map((r) => r.events.length).join(', ')} items]`
     );
     logger.debug(
-      `${logStart} Enqueued ${readyGroups.length} group(s) [sizes=${counts}] queue=${tweetQueue.size()}`
+      `${logStart} Group sizes: ${counts}, queue=${tweetQueue.size()}`
     );
   }
 };
