@@ -5,4 +5,5 @@ module.exports = {
   testMatch: ['**/*.test.ts'],
   collectCoverageFrom: ['src/**/*.ts'],
   coveragePathIgnorePatterns: ['/node_modules/', '/dist/'],
+  setupFiles: ['<rootDir>/test/setup.ts'],
 };

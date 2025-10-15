@@ -28,6 +28,7 @@ jest.mock('../../src/utils/utils', () => {
   return {
     ...actual,
     fetchImageBuffer,
+    timeout: jest.fn(() => Promise.resolve()),
   } satisfies typeof import('../../src/utils/utils');
 });
 
@@ -73,7 +74,7 @@ const loadFixture = (name: string) => {
   return JSON.parse(raw);
 };
 
-const waitFor = async (
+const _waitFor = async (
   predicate: () => boolean,
   timeoutMs = 1500,
   stepMs = 20
@@ -92,11 +93,16 @@ const waitFor = async (
 
 describe('twitter flows', () => {
   beforeEach(() => {
+    jest.useFakeTimers();
     jest.resetModules();
     jest.clearAllMocks();
     process.env.TWITTER_QUEUE_DELAY_MS = '0';
     process.env.TWITTER_EVENT_GROUP_SETTLE_MS = '0';
     process.env.TWITTER_EVENT_GROUP_MIN_GROUP_SIZE = '2';
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   it('tweets a group for grouped sales', async () => {
@@ -109,9 +115,7 @@ describe('twitter flows', () => {
         v2: { tweet: jest.Mock };
       };
     };
-    await waitFor(
-      () => (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls.length > 0
-    );
+    await jest.runAllTimersAsync();
     expect(m.__mockReadWrite.v2.tweet).toHaveBeenCalled();
     const calls = (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls;
     expect(calls.length).toBeGreaterThan(0);
@@ -157,9 +161,7 @@ describe('twitter flows', () => {
     const m = require('twitter-api-v2') as {
       __mockReadWrite: { v2: { tweet: jest.Mock } };
     };
-    await waitFor(
-      () => (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls.length > 0
-    );
+    await jest.runAllTimersAsync();
     const first = (
       (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls[0][0] as {
         text: string;
@@ -182,12 +184,7 @@ describe('twitter flows', () => {
         v2: { tweet: jest.Mock };
       };
     };
-    await waitFor(
-      () => (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls.length > 0
-    );
-    // Allow the queue to process/skip any duplicates enqueued
-    const QUEUE_DRAIN_MS = 100;
-    await new Promise((r) => setTimeout(r, QUEUE_DRAIN_MS));
+    await jest.runAllTimersAsync();
     const calls = (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls;
     expect(calls.length).toBe(1);
     const first = calls[0][0] as { text: string };
@@ -204,14 +201,7 @@ describe('twitter flows', () => {
         v2: { tweet: jest.Mock };
       };
     };
-    await waitFor(
-      () =>
-        (m.__mockReadWrite.v1.uploadMedia as jest.Mock).mock.calls.length > 0
-    );
-    // also wait for tweet attempt
-    await waitFor(
-      () => (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls.length > 0
-    );
+    await jest.runAllTimersAsync();
     expect(m.__mockReadWrite.v1.uploadMedia).toHaveBeenCalled();
     expect(m.__mockReadWrite.v2.tweet).toHaveBeenCalled();
     const callArg = (m.__mockReadWrite.v2.tweet as jest.Mock).mock
@@ -229,9 +219,7 @@ describe('twitter flows', () => {
         v2: { tweet: jest.Mock };
       };
     };
-    await waitFor(
-      () => (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls.length > 0
-    );
+    await jest.runAllTimersAsync();
     expect(m.__mockReadWrite.v2.tweet).toHaveBeenCalled();
     const text = (
       (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls.at(-1)?.[0] as {
@@ -273,10 +261,7 @@ describe('twitter flows', () => {
       };
     };
 
-    // Wait for processing
-    await waitFor(
-      () => (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls.length > 0
-    );
+    await jest.runAllTimersAsync();
 
     // Verify the tweet was called (group should be detected)
     expect(m.__mockReadWrite.v2.tweet).toHaveBeenCalled();
@@ -307,9 +292,7 @@ describe('twitter flows', () => {
     const m = require('twitter-api-v2') as {
       __mockReadWrite: { v2: { tweet: jest.Mock } };
     };
-    await waitFor(
-      () => (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls.length > 0
-    );
+    await jest.runAllTimersAsync();
     const calls = (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls;
     // Should tweet exactly one group of 5 (actor group is suppressed for same-tx overlap)
     expect(calls.length).toBe(1);
@@ -349,7 +332,7 @@ describe('twitter flows', () => {
       firstFive as unknown as import('../../src/types').OpenSeaAssetEvent[]
     );
     // Add the second set shortly after
-    await new Promise((r) => setTimeout(r, 10));
+    jest.advanceTimersByTime(10);
     tweetEvents(
       secondFive as unknown as import('../../src/types').OpenSeaAssetEvent[]
     );
@@ -358,16 +341,11 @@ describe('twitter flows', () => {
       __mockReadWrite: { v2: { tweet: jest.Mock } };
     };
     // Allow settle window to elapse, then trigger a flush by invoking again with duplicates
-    await new Promise((r) => setTimeout(r, 60));
+    jest.advanceTimersByTime(60);
     tweetEvents(
       firstFive as unknown as import('../../src/types').OpenSeaAssetEvent[]
     );
-    // Wait for tweets to be emitted (actor group)
-    await waitFor(
-      () => (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls.length > 0,
-      2000,
-      25
-    );
+    await jest.runAllTimersAsync();
     const calls = (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls as [
       { text: string },
     ][];

@@ -1,3 +1,6 @@
+// Override global test setup to allow info logs for logger tests
+process.env.LOG_LEVEL = 'info';
+
 import { prefixedLogger } from '../../src/utils/logger';
 
 describe('prefixedLogger', () => {
