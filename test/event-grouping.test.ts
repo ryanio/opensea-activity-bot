@@ -337,11 +337,16 @@ describe('eventGrouping-utils', () => {
     let groupManager: EventGroupManager;
 
     beforeEach(() => {
+      jest.useFakeTimers();
       const config = {
         settleMs: 1000,
         minGroupSize: 2,
       };
       groupManager = new EventGroupManager(config);
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
     });
 
     it('should add events and track them', () => {
@@ -388,7 +393,7 @@ describe('eventGrouping-utils', () => {
       expect(groupManager.isProcessed(mockEvent2)).toBe(true);
     });
 
-    it('should get ready groups after settle time', async () => {
+    it('should get ready groups after settle time', () => {
       groupManager.addEvents([mockEvent1, mockEvent2]);
 
       // Initially no ready groups
@@ -397,7 +402,7 @@ describe('eventGrouping-utils', () => {
 
       // Wait for settle time (config.settleMs is 1000, so wait 1100 to be safe)
       const SETTLE_BUFFER_MS = 1100;
-      await new Promise((resolve) => setTimeout(resolve, SETTLE_BUFFER_MS));
+      jest.advanceTimersByTime(SETTLE_BUFFER_MS);
 
       readyGroups = groupManager.getReadyGroups();
       expect(readyGroups).toHaveLength(1);
@@ -405,7 +410,7 @@ describe('eventGrouping-utils', () => {
       expect(readyGroups[0].events).toHaveLength(2);
     });
 
-    it('does not flush a group if duplicates reduce below min size', async () => {
+    it('does not flush a group if duplicates reduce below min size', () => {
       // Add the same event twice (deduped to unique size 1)
       groupManager.addEvents([mockEvent1, mockEvent1]);
 
@@ -413,13 +418,21 @@ describe('eventGrouping-utils', () => {
       expect(pendingTxs.size).toBe(1);
 
       const SETTLE_BUFFER_MS = 1100;
-      await new Promise((resolve) => setTimeout(resolve, SETTLE_BUFFER_MS));
+      jest.advanceTimersByTime(SETTLE_BUFFER_MS);
       const readyGroups = groupManager.getReadyGroups();
       expect(readyGroups.length).toBe(0);
     });
   });
 
   describe('processEventsWithAggregator', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
     it('should add events to aggregator and return empty groups when not settled', () => {
       const groupManager = new EventGroupManager({
         settleMs: 15_000,
@@ -439,7 +452,7 @@ describe('eventGrouping-utils', () => {
       expect(result.skippedDupes).toBe(0);
     });
 
-    it('should flush settled groups when called with no new events', async () => {
+    it('should flush settled groups when called with no new events', () => {
       const groupManager = new EventGroupManager({
         settleMs: 100, // Short settle time for testing
         minGroupSize: 2,
@@ -456,7 +469,7 @@ describe('eventGrouping-utils', () => {
       expect(result1.skippedPending).toBe(2);
 
       // Wait for settle time to pass
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      jest.advanceTimersByTime(150);
 
       // Second call: no new events, but should flush the settled group
       const result2 = processEventsWithAggregator(groupManager, []);
@@ -467,7 +480,7 @@ describe('eventGrouping-utils', () => {
       expect(result2.skippedDupes).toBe(0);
     });
 
-    it('should handle multiple polling cycles with mint events', async () => {
+    it('should handle multiple polling cycles with mint events', () => {
       const groupManager = new EventGroupManager({
         settleMs: 100,
         minGroupSize: 2,
@@ -483,12 +496,12 @@ describe('eventGrouping-utils', () => {
       expect(result1.skippedPending).toBe(2);
 
       // Cycle 2: No new events, not settled yet
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      jest.advanceTimersByTime(50);
       const result2 = processEventsWithAggregator(groupManager, []);
       expect(result2.readyGroups).toHaveLength(0);
 
       // Cycle 3: No new events, should flush now
-      await new Promise((resolve) => setTimeout(resolve, 60));
+      jest.advanceTimersByTime(60);
       const result3 = processEventsWithAggregator(groupManager, []);
       expect(result3.readyGroups).toHaveLength(1);
       expect(result3.readyGroups[0]?.events).toHaveLength(2);
@@ -513,7 +526,7 @@ describe('eventGrouping-utils', () => {
       expect(result.skippedPending).toBe(0);
     });
 
-    it('should handle mixed event types correctly', async () => {
+    it('should handle mixed event types correctly', () => {
       const groupManager = new EventGroupManager({
         settleMs: 100,
         minGroupSize: 2,
@@ -542,7 +555,7 @@ describe('eventGrouping-utils', () => {
       expect(result1.processableEvents).toHaveLength(1); // 1 purchase
 
       // Wait and flush
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      jest.advanceTimersByTime(150);
       const result2 = processEventsWithAggregator(groupManager, []);
       expect(result2.readyGroups).toHaveLength(1); // Mint group
       expect(result2.readyGroups[0]?.events).toHaveLength(2);
@@ -573,7 +586,7 @@ describe('eventGrouping-utils', () => {
       expect(pendingTxs.size).toBe(1);
     });
 
-    it('should not create mixed groups due to actor-based keying', async () => {
+    it('should not create mixed groups due to actor-based keying', () => {
       const groupManager = new EventGroupManager({
         settleMs: 100,
         minGroupSize: 2,
@@ -597,7 +610,7 @@ describe('eventGrouping-utils', () => {
       expect(result1.skippedPending).toBe(4);
 
       // Wait for settle time
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      jest.advanceTimersByTime(150);
 
       // Should flush as 2 separate groups (mints and burns)
       const result2 = processEventsWithAggregator(groupManager, []);
@@ -611,7 +624,7 @@ describe('eventGrouping-utils', () => {
       }
     });
 
-    it('should group multiple offers from the same maker', async () => {
+    it('should group multiple offers from the same maker', () => {
       const groupManager = new EventGroupManager({
         settleMs: 100,
         minGroupSize: 2,
@@ -632,7 +645,7 @@ describe('eventGrouping-utils', () => {
       expect(result1.skippedPending).toBe(3);
 
       // Wait for settle time
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      jest.advanceTimersByTime(150);
 
       // Should flush as 1 group of 3 offers
       const result2 = processEventsWithAggregator(groupManager, []);
@@ -643,7 +656,7 @@ describe('eventGrouping-utils', () => {
       expect(kind).toBe('offer');
     });
 
-    it('should group multiple listings from the same maker', async () => {
+    it('should group multiple listings from the same maker', () => {
       const groupManager = new EventGroupManager({
         settleMs: 100,
         minGroupSize: 2,
@@ -662,7 +675,7 @@ describe('eventGrouping-utils', () => {
       expect(result1.skippedPending).toBe(2);
 
       // Wait for settle time
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      jest.advanceTimersByTime(150);
 
       // Should flush as 1 group of 2 listings
       const result2 = processEventsWithAggregator(groupManager, []);
@@ -673,7 +686,7 @@ describe('eventGrouping-utils', () => {
       expect(kind).toBe('listing');
     });
 
-    it('should not group offers and listings together', async () => {
+    it('should not group offers and listings together', () => {
       const groupManager = new EventGroupManager({
         settleMs: 100,
         minGroupSize: 2,
@@ -697,7 +710,7 @@ describe('eventGrouping-utils', () => {
       expect(result1.skippedPending).toBe(4);
 
       // Wait for settle time
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      jest.advanceTimersByTime(150);
 
       // Should flush as 2 separate groups
       const result2 = processEventsWithAggregator(groupManager, []);

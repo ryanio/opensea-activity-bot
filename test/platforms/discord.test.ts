@@ -12,7 +12,8 @@ jest.mock('discord.js', () => {
     return {
       on: (event: string, cb: () => void) => {
         if (event === 'ready') {
-          setImmediate(cb);
+          // Call immediately instead of using setImmediate for faster tests
+          cb();
         }
       },
       login: jest.fn(),
@@ -22,7 +23,7 @@ jest.mock('discord.js', () => {
           if (!channelsMap[id]) {
             channelsMap[id] = { send: jest.fn(), id };
           }
-          return channelsMap[id];
+          return Promise.resolve(channelsMap[id]);
         },
       },
     } as unknown as object;
@@ -57,6 +58,17 @@ jest.mock('../../src/opensea', () => {
     },
     opensea: { collectionURL: () => '' },
     username: jest.fn(async (addr: string) => `addr:${addr.slice(0, 6)}`),
+  };
+});
+
+// Mock timeout to avoid delays in tests
+jest.mock('../../src/utils/utils', () => {
+  const actual = jest.requireActual<typeof import('../../src/utils/utils')>(
+    '../../src/utils/utils'
+  );
+  return {
+    ...actual,
+    timeout: jest.fn(() => Promise.resolve()),
   };
 });
 
