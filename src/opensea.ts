@@ -37,6 +37,7 @@ const fetchedEventsCache = new LRUCache<string, boolean>(
 // Pagination constants
 const SUBSTRING_LENGTH_FOR_CURSOR_LOG = 20;
 const MAX_PAGINATION_PAGES = 10;
+const OPENSEA_MAX_LIMIT = 200;
 
 export const opensea = {
   api: 'https://api.opensea.io/api/v2/',
@@ -250,7 +251,6 @@ const updateLastEventTimestamp = (events: OpenSeaAssetEvent[]): void => {
 
 const buildEventsUrl = (): string => {
   const eventTypes = enabledEventTypes();
-  const OPENSEA_MAX_LIMIT = 200;
   const params: Record<string, string> = {
     limit: OPENSEA_MAX_LIMIT.toString(),
     after: lastEventTimestamp.toString(),
@@ -322,14 +322,25 @@ export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
 
   // Pagination: only paginate if first page returned events.
   let pagesFollowed = 0;
+  let prevCursor: string | undefined;
+  let lastBatchCount = allEvents.length;
 
   while (
     result?.next &&
     pagesFollowed < MAX_PAGINATION_PAGES &&
-    allEvents.length > 0
+    allEvents.length > 0 &&
+    lastBatchCount >= OPENSEA_MAX_LIMIT
   ) {
+    // Guard against buggy cursors that repeat and could cause loops
+    if (prevCursor && result.next === prevCursor) {
+      logger.debug(
+        'Stopping pagination: repeated cursor indicates API bug or end of results'
+      );
+      break;
+    }
     pagesFollowed += 1;
     const nextUrl = `${opensea.getEvents()}?${result.next}`;
+    prevCursor = result.next;
     const cursorPreview = result.next.slice(0, SUBSTRING_LENGTH_FOR_CURSOR_LOG);
     logger.debug(
       `Fetching page ${pagesFollowed + 1} (cursor: ${cursorPreview}...)`
@@ -340,6 +351,7 @@ export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
 
     if (result?.asset_events && result.asset_events.length > 0) {
       allEvents = [...allEvents, ...result.asset_events];
+      lastBatchCount = result.asset_events.length;
       logger.info(
         `Fetched events: ${result.asset_events.length} (total: ${allEvents.length})`
       );
