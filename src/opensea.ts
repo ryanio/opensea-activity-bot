@@ -309,6 +309,7 @@ export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
   await fetchCollectionSlug(TOKEN_ADDRESS ?? '');
 
   const url = buildEventsUrl();
+  logger.debug(`Events URL: ${url}`);
   let result = await openseaGet<OpenSeaEventsResponse>(url);
 
   if (!result?.asset_events) {
@@ -329,6 +330,7 @@ export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
     logger.debug(
       `Fetching page ${pagesFollowed + 1} (cursor: ${cursorPreview}...)`
     );
+    logger.debug(`Next Events URL: ${nextUrl}`);
 
     result = await openseaGet<OpenSeaEventsResponse>(nextUrl);
 
