@@ -188,7 +188,7 @@ export const createOfferEvent = (
   maker: string,
   timestamp: number
 ): OpenSeaAssetEvent => ({
-  event_type: 'order',
+  event_type: 'offer',
   event_timestamp: timestamp,
   order_hash: `0xoffer${identifier}`,
   order_type: 'criteria_offer',
@@ -228,7 +228,7 @@ export const createListingEvent = (
   maker: string,
   timestamp: number
 ): OpenSeaAssetEvent => ({
-  event_type: 'order',
+  event_type: 'listing',
   event_timestamp: timestamp,
   order_hash: `0xlisting${identifier}`,
   order_type: 'listing',

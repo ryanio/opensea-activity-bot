@@ -9,7 +9,7 @@ import type {
   OpenSeaNFT,
   OpenSeaNFTResponse,
 } from './types';
-import { eventKeyFor } from './utils/event-grouping';
+import { effectiveEventTypeFor } from './utils/event-types';
 import { parseEvents, wantsOpenSeaEventTypes } from './utils/events';
 import { logger } from './utils/logger';
 import { LRUCache } from './utils/lru-cache';
@@ -123,11 +123,12 @@ export const fetchNFT = async (
 };
 
 export const EventType = {
-  order: 'order',
   listing: 'listing',
   offer: 'offer',
+  trait_offer: 'trait_offer',
+  collection_offer: 'collection_offer',
+  mint: 'mint',
   sale: 'sale',
-  cancel: 'cancel',
   transfer: 'transfer',
 } as const;
 export type EventType = (typeof EventType)[keyof typeof EventType];
@@ -222,7 +223,13 @@ const deduplicateEvents = (
 } => {
   const preDedup = events.length;
   const deduplicated = events.filter((event) => {
-    const eventKey = eventKeyFor(event);
+    // Use canonical event key so 'mint' and transfer-mint dedupe together
+    const nft = (event?.nft ?? event?.asset) as
+      | { identifier?: string }
+      | undefined;
+    const tokenId = String(nft?.identifier ?? '');
+    const canonicalType = String(effectiveEventTypeFor(event));
+    const eventKey = `${event.event_timestamp}|${tokenId}|${canonicalType}`;
     if (fetchedEventsCache.get(eventKey)) {
       return false;
     }
@@ -249,8 +256,18 @@ const buildEventsUrl = (): string => {
     after: lastEventTimestamp.toString(),
   };
   const urlParams = new URLSearchParams(params);
+  // Map internal/event selection to API-supported event_type filters
+  // - "mint"/"burn" are derived from "transfer" so request "transfer"
+  const apiEventTypes = new Set<string>();
   for (const eventType of eventTypes) {
-    urlParams.append('event_type', eventType);
+    if (eventType === 'mint' || eventType === 'burn') {
+      apiEventTypes.add(EventType.transfer);
+      continue;
+    }
+    apiEventTypes.add(eventType);
+  }
+  for (const apiType of apiEventTypes) {
+    urlParams.append('event_type', apiType);
   }
   return `${opensea.getEvents()}?${urlParams}`;
 };

@@ -312,7 +312,10 @@ export const textForTweet = async (event: OpenSeaAssetEvent) => {
   let text = '';
 
   if (
-    event_type === 'order' &&
+    (event_type === 'listing' ||
+      event_type === 'offer' ||
+      event_type === 'trait_offer' ||
+      event_type === 'collection_offer') &&
     payment &&
     maker &&
     order_type &&
@@ -327,7 +330,10 @@ export const textForTweet = async (event: OpenSeaAssetEvent) => {
     });
   } else if (event_type === EventType.sale && payment && buyer) {
     text += await textForSale({ nft, payment, buyer });
-  } else if (event_type === EventType.transfer) {
+  } else if (
+    event_type === EventType.transfer ||
+    event_type === EventType.mint
+  ) {
     text += await textForTransfer(nft, ev);
   }
   if (nft?.identifier) {

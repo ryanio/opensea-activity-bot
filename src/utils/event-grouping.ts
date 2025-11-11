@@ -1,3 +1,4 @@
+import { EventType } from '../opensea';
 import type { OpenSeaAssetEvent } from '../types';
 import { DEFAULT_SETTLE_MS, MIN_GROUP_SIZE } from './constants';
 import { LRUCache } from './lru-cache';
@@ -142,7 +143,12 @@ export class EventGroupManager {
     if (event.event_type === 'transfer') {
       return this.actorKeyForTransfer(event);
     }
-    if (event.event_type === 'order') {
+    if (event.event_type === EventType.mint) {
+      // Treat mint similarly to transfer-mint for actor grouping (group by recipient)
+      const to = (event.to_address ?? '').toLowerCase();
+      return to ? `mint:${to}` : undefined;
+    }
+    if (event.event_type === 'offer' || event.event_type === 'listing') {
       return this.actorKeyForOrder(event);
     }
     return;
@@ -276,20 +282,18 @@ export const groupKindForEvents = (events: OpenSeaAssetEvent[]): GroupKind => {
   if (allSales) {
     return 'purchase';
   }
-  const allOffers = events.every(
-    (e) => e.event_type === 'order' && (e.order_type ?? '').includes('offer')
-  );
+  const allOffers = events.every((e) => e.event_type === 'offer');
   if (allOffers) {
     return 'offer';
   }
-  const allListings = events.every(
-    (e) => e.event_type === 'order' && e.order_type === 'listing'
-  );
+  const allListings = events.every((e) => e.event_type === 'listing');
   if (allListings) {
     return 'listing';
   }
   const allMintTransfers = events.every(
-    (e) => e.event_type === 'transfer' && classifyTransfer(e) === 'mint'
+    (e) =>
+      e.event_type === EventType.mint ||
+      (e.event_type === 'transfer' && classifyTransfer(e) === 'mint')
   );
   if (allMintTransfers) {
     return 'mint';
@@ -309,10 +313,10 @@ export const groupKindForEvents = (events: OpenSeaAssetEvent[]): GroupKind => {
   if (firstEvent.event_type === 'sale') {
     return 'purchase';
   }
-  if (firstEvent.event_type === 'order') {
-    if ((firstEvent.order_type ?? '').includes('offer')) {
-      return 'offer';
-    }
+  if (firstEvent.event_type === 'offer') {
+    return 'offer';
+  }
+  if (firstEvent.event_type === 'listing') {
     return 'listing';
   }
   const transferKind = classifyTransfer(firstEvent);

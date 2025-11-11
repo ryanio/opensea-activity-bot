@@ -7,19 +7,19 @@ import {
 
 describe('effectiveEventTypeFor', () => {
   const base: Partial<OpenSeaAssetEvent> = {
-    event_type: 'order',
+    event_type: 'listing',
     event_timestamp: 1,
     chain: 'ethereum',
     quantity: 1,
   };
 
-  test('maps listing order to listing', () => {
-    const ev = { ...base, order_type: 'listing' } as OpenSeaAssetEvent;
+  test('listing remains listing', () => {
+    const ev = { ...base } as OpenSeaAssetEvent;
     expect(effectiveEventTypeFor(ev)).toBe(BotEvent.listing);
   });
 
-  test('maps offer order to offer', () => {
-    const ev = { ...base, order_type: 'item_offer' } as OpenSeaAssetEvent;
+  test('offer remains offer', () => {
+    const ev = { ...base, event_type: 'offer' } as OpenSeaAssetEvent;
     expect(effectiveEventTypeFor(ev)).toBe(BotEvent.offer);
   });
 
@@ -38,8 +38,10 @@ describe('effectiveEventTypeFor', () => {
 
 describe('colorForEvent', () => {
   test('returns expected colors', () => {
-    expect(colorForEvent(EventType.order, 'listing')).toBe('#66dcf0');
-    expect(colorForEvent(EventType.order, 'item_offer')).toBe('#d63864');
+    expect(colorForEvent('listing' as unknown as EventType, '')).toBe(
+      '#66dcf0'
+    );
+    expect(colorForEvent('offer' as unknown as EventType, '')).toBe('#d63864');
     expect(colorForEvent(EventType.sale, '')).toBe('#62b778');
     expect(colorForEvent(EventType.transfer, '')).toBe('#5296d5');
     expect(colorForEvent(BotEvent.mint as unknown as EventType, '')).toBe(

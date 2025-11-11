@@ -70,13 +70,6 @@ export const channelsWithEvents = (): ChannelEvents => {
     const channelWithEvents = channel.split('=');
     const channelId = channelWithEvents[0];
     const eventTypes = channelWithEvents[1].split(',');
-    if (
-      eventTypes.includes(BotEvent.listing) ||
-      eventTypes.includes(BotEvent.offer)
-    ) {
-      // Workaround
-      eventTypes.push(EventType.order);
-    }
     list.push([channelId, eventTypes as unknown as (EventType | BotEvent)[]]);
   }
 
@@ -206,6 +199,21 @@ const buildTransferEmbed = async (
   return { title: 'Transferred:', fields };
 };
 
+const isOrderLikeType = (t: unknown): boolean => {
+  const s = String(t);
+  return (
+    s === BotEvent.listing ||
+    s === BotEvent.offer ||
+    s === 'trait_offer' ||
+    s === 'collection_offer'
+  );
+};
+
+const isTransferLikeType = (t: unknown): boolean => {
+  const s = String(t);
+  return s === EventType.transfer || s === EventType.mint;
+};
+
 const embed = async (event: AggregatorEvent) => {
   const { event_type, asset, order_type } = event as unknown as {
     event_type?: EventType | string;
@@ -219,11 +227,11 @@ const embed = async (event: AggregatorEvent) => {
   }
   let fields: Field[] = [];
   let title = '';
-  if (event_type === EventType.order) {
+  if (isOrderLikeType(event_type)) {
     ({ title, fields } = await buildOrderEmbed(event));
   } else if (event_type === EventType.sale) {
     ({ title, fields } = await buildSaleEmbed(event));
-  } else if (event_type === EventType.transfer) {
+  } else if (isTransferLikeType(event_type)) {
     ({ title, fields } = await buildTransferEmbed(event));
   }
 

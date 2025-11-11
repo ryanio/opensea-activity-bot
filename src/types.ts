@@ -73,7 +73,14 @@ export type OpenSeaNFT = {
 };
 
 export type OpenSeaAssetEvent = {
-  event_type: 'sale' | 'order' | 'transfer' | 'listing' | 'offer' | 'cancel';
+  event_type:
+    | 'sale'
+    | 'transfer'
+    | 'mint'
+    | 'listing'
+    | 'offer'
+    | 'trait_offer'
+    | 'collection_offer';
   event_timestamp: number;
   transaction?: string;
   order_hash?: string;

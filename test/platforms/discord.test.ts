@@ -49,11 +49,12 @@ jest.mock('discord.js', () => {
 jest.mock('../../src/opensea', () => {
   return {
     EventType: {
-      order: 'order',
       listing: 'listing',
       offer: 'offer',
+      trait_offer: 'trait_offer',
+      collection_offer: 'collection_offer',
+      mint: 'mint',
       sale: 'sale',
-      cancel: 'cancel',
       transfer: 'transfer',
     },
     opensea: { collectionURL: () => '' },
@@ -134,10 +135,10 @@ describe('discord routing', () => {
     expect(channelsMap['123'].send).toHaveBeenCalled();
   });
 
-  test('routes offer/listing orders to respective channels', async () => {
+  test('routes offer/listing to respective channels', async () => {
     process.env.DISCORD_EVENTS = 'o1=offer&l1=listing';
     const offerEv = {
-      event_type: 'order',
+      event_type: 'offer',
       event_timestamp: 1,
       chain: 'ethereum',
       quantity: 1,
@@ -154,6 +155,7 @@ describe('discord routing', () => {
     } as unknown as OpenSeaAssetEvent;
     const listingEv = {
       ...offerEv,
+      event_type: 'listing',
       order_type: 'listing',
     } as unknown as OpenSeaAssetEvent;
     await messageEvents([offerEv, listingEv] as OpenSeaAssetEvent[]);

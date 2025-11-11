@@ -21,17 +21,24 @@ export const parseEvents = (raw: string | undefined): Set<BotEvent> => {
 export const wantsOpenSeaEventTypes = (selection: Set<BotEvent>): string[] => {
   const want = new Set<string>();
   if (selection.has(BotEvent.listing) || selection.has(BotEvent.offer)) {
-    want.add('order');
+    if (selection.has(BotEvent.listing)) {
+      want.add('listing');
+    }
+    if (selection.has(BotEvent.offer)) {
+      // Include all offer variants
+      want.add('offer');
+      want.add('trait_offer');
+      want.add('collection_offer');
+    }
   }
   if (selection.has(BotEvent.sale)) {
     want.add('sale');
   }
-  if (
-    selection.has(BotEvent.transfer) ||
-    selection.has(BotEvent.mint) ||
-    selection.has(BotEvent.burn)
-  ) {
+  if (selection.has(BotEvent.transfer) || selection.has(BotEvent.burn)) {
     want.add('transfer');
+  }
+  if (selection.has(BotEvent.mint)) {
+    want.add('mint');
   }
   return [...want];
 };
@@ -41,13 +48,18 @@ export const isEventWanted = (
   selection: Set<BotEvent>
 ): boolean => {
   const type = event.event_type as EventType;
-  if (type === 'order') {
-    const isListing = (event.order_type ?? '') === BotEvent.listing;
-    const isOffer = (event.order_type ?? '').includes(BotEvent.offer);
-    return (
-      (isListing && selection.has(BotEvent.listing)) ||
-      (isOffer && selection.has(BotEvent.offer))
-    );
+  if (type === 'listing') {
+    return selection.has(BotEvent.listing);
+  }
+  if (
+    type === 'offer' ||
+    type === 'trait_offer' ||
+    type === 'collection_offer'
+  ) {
+    return selection.has(BotEvent.offer);
+  }
+  if (type === EventType.mint) {
+    return selection.has(BotEvent.mint);
   }
   if (type === EventType.sale) {
     return selection.has(BotEvent.sale);
@@ -55,10 +67,10 @@ export const isEventWanted = (
   if (type === EventType.transfer) {
     const eff = String(effectiveEventTypeFor(event));
     if (eff === BotEvent.mint) {
-      return selection.has(BotEvent.mint) || selection.has(BotEvent.transfer);
+      return selection.has(BotEvent.mint);
     }
     if (eff === BotEvent.burn) {
-      return selection.has(BotEvent.burn) || selection.has(BotEvent.transfer);
+      return selection.has(BotEvent.burn);
     }
     return selection.has(BotEvent.transfer);
   }

@@ -148,14 +148,16 @@ The bot automatically groups multiple events from the same transaction or actor 
 
 | Event Type | Description |
 |------------|-------------|
-| `listing` | New NFT listings |
-| `offer` | New offers/bids |
 | `sale` | NFT sales |
 | `transfer` | NFT transfers |
-| `mint` | New mints (auto-detected from transfers) |
+| `mint` | New mints |
+| `listing` | New NFT listings |
+| `offer` | New item offers/bids |
+| `trait_offer` | New trait offers |
+| `collection_offer` | New collection offers |
 | `burn` | NFT burns (auto-detected from transfers) |
 
-> **Note**: `mint` and `burn` events are automatically classified from `transfer` events based on the from/to addresses.
+> **Note**: `burn` events are automatically classified from `transfer` events based on the from/to addresses.
 
 ## Usage
 

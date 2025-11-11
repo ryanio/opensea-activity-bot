@@ -19,10 +19,10 @@ describe('parseEvents', () => {
 });
 
 describe('wantsOpenSeaEventTypes', () => {
-  test('maps to order/sale/transfer', () => {
+  test('maps to listing/offer/transfer', () => {
     const set = new Set([BotEvent.listing, BotEvent.offer, BotEvent.mint]);
     const want = wantsOpenSeaEventTypes(set);
-    expect(want.sort()).toEqual(['order', 'transfer']);
+    expect(want.sort()).toEqual(['listing', 'offer', 'transfer'].sort());
   });
 });
 
@@ -33,16 +33,14 @@ describe('isEventWanted', () => {
     quantity: 1,
   };
 
-  test('order listing vs offer', () => {
+  test('listing vs offer', () => {
     const listing = {
       ...base,
-      event_type: 'order',
-      order_type: 'listing',
+      event_type: 'listing',
     } as OpenSeaAssetEvent;
     const offer = {
       ...base,
-      event_type: 'order',
-      order_type: 'item_offer',
+      event_type: 'offer',
     } as OpenSeaAssetEvent;
     expect(isEventWanted(listing, new Set([BotEvent.listing]))).toBe(true);
     expect(isEventWanted(listing, new Set([BotEvent.offer]))).toBe(false);

@@ -7,11 +7,12 @@ process.env.TOKEN_ADDRESS = '0x0000000000000000000000000000000000000000';
 jest.mock('../../src/opensea', () => {
   return {
     EventType: {
-      order: 'order',
       listing: 'listing',
       offer: 'offer',
+      trait_offer: 'trait_offer',
+      collection_offer: 'collection_offer',
+      mint: 'mint',
       sale: 'sale',
-      cancel: 'cancel',
       transfer: 'transfer',
     },
     opensea: { collectionURL: () => '' },

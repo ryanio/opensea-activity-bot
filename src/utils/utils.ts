@@ -45,6 +45,9 @@ export const classifyTransfer = (event: {
   from_address?: string;
   to_address?: string;
 }): TransferKind => {
+  if (event?.event_type === 'mint') {
+    return 'mint';
+  }
   if (event?.event_type !== 'transfer') {
     return 'transfer';
   }

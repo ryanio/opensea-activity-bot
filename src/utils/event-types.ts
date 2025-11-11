@@ -4,19 +4,24 @@ import { classifyTransfer } from './utils';
 
 export const colorForEvent = (
   eventType: EventType | BotEvent,
-  orderType: string
+  _orderType: string
 ): string => {
-  if (eventType === EventType.order) {
-    if (orderType.includes('offer')) {
-      return '#d63864';
-    }
+  if (
+    (eventType as unknown as string) === BotEvent.offer ||
+    eventType === 'offer' ||
+    eventType === 'trait_offer' ||
+    eventType === 'collection_offer'
+  ) {
+    return '#d63864';
+  }
+  if (
+    (eventType as unknown as string) === BotEvent.listing ||
+    eventType === 'listing'
+  ) {
     return '#66dcf0';
   }
   if (eventType === EventType.sale) {
     return '#62b778';
-  }
-  if (eventType === EventType.cancel) {
-    return '#9537b0';
   }
   if (eventType === EventType.transfer) {
     return '#5296d5';
@@ -34,11 +39,14 @@ export const effectiveEventTypeFor = (
   event: OpenSeaAssetEvent
 ): EventType | BotEvent => {
   const baseType = event.event_type as EventType;
-  if (baseType === EventType.order) {
-    return (event.order_type ?? '').includes(BotEvent.offer)
-      ? (BotEvent.offer as unknown as EventType)
-      : (BotEvent.listing as unknown as EventType);
+  if (
+    baseType === 'trait_offer' ||
+    baseType === 'collection_offer' ||
+    baseType === 'offer'
+  ) {
+    return BotEvent.offer as unknown as EventType;
   }
+  // listing/offer are already explicit event types
   if (baseType === EventType.transfer) {
     const kind = classifyTransfer(event);
     if (kind === 'mint') {
