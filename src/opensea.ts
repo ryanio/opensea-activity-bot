@@ -320,10 +320,14 @@ export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
   let allEvents = [...result.asset_events];
   logger.info(`Fetched events: ${allEvents.length}`);
 
-  // Pagination: if there's a 'next' cursor, fetch more pages
+  // Pagination: only paginate if first page returned events.
   let pagesFollowed = 0;
 
-  while (result?.next && pagesFollowed < MAX_PAGINATION_PAGES) {
+  while (
+    result?.next &&
+    pagesFollowed < MAX_PAGINATION_PAGES &&
+    allEvents.length > 0
+  ) {
     pagesFollowed += 1;
     const nextUrl = `${opensea.getEvents()}?${result.next}`;
     const cursorPreview = result.next.slice(0, SUBSTRING_LENGTH_FOR_CURSOR_LOG);
