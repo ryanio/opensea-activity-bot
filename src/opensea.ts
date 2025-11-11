@@ -250,17 +250,18 @@ const updateLastEventTimestamp = (events: OpenSeaAssetEvent[]): void => {
 
 const buildEventsUrl = (): string => {
   const eventTypes = enabledEventTypes();
-  const OPENSEA_MAX_LIMIT = 50;
+  const OPENSEA_MAX_LIMIT = 200;
   const params: Record<string, string> = {
     limit: OPENSEA_MAX_LIMIT.toString(),
     after: lastEventTimestamp.toString(),
   };
   const urlParams = new URLSearchParams(params);
   // Map internal/event selection to API-supported event_type filters
-  // - "mint"/"burn" are derived from "transfer" so request "transfer"
+  // - "burn" is derived from "transfer" so request "transfer"
+  // - "mint" is first-class and can be requested directly
   const apiEventTypes = new Set<string>();
   for (const eventType of eventTypes) {
-    if (eventType === 'mint' || eventType === 'burn') {
+    if (eventType === 'burn') {
       apiEventTypes.add(EventType.transfer);
       continue;
     }

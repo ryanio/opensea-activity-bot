@@ -1,4 +1,3 @@
-import { EventType } from '../opensea';
 import type { OpenSeaAssetEvent } from '../types';
 import { DEFAULT_SETTLE_MS, MIN_GROUP_SIZE } from './constants';
 import { LRUCache } from './lru-cache';
@@ -143,7 +142,7 @@ export class EventGroupManager {
     if (event.event_type === 'transfer') {
       return this.actorKeyForTransfer(event);
     }
-    if (event.event_type === EventType.mint) {
+    if (event.event_type === 'mint') {
       // Treat mint similarly to transfer-mint for actor grouping (group by recipient)
       const to = (event.to_address ?? '').toLowerCase();
       return to ? `mint:${to}` : undefined;
@@ -292,7 +291,7 @@ export const groupKindForEvents = (events: OpenSeaAssetEvent[]): GroupKind => {
   }
   const allMintTransfers = events.every(
     (e) =>
-      e.event_type === EventType.mint ||
+      e.event_type === 'mint' ||
       (e.event_type === 'transfer' && classifyTransfer(e) === 'mint')
   );
   if (allMintTransfers) {

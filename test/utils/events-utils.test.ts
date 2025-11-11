@@ -19,10 +19,12 @@ describe('parseEvents', () => {
 });
 
 describe('wantsOpenSeaEventTypes', () => {
-  test('maps to listing/offer/transfer', () => {
+  test('maps to listing/offer variants/mint', () => {
     const set = new Set([BotEvent.listing, BotEvent.offer, BotEvent.mint]);
-    const want = wantsOpenSeaEventTypes(set);
-    expect(want.sort()).toEqual(['listing', 'offer', 'transfer'].sort());
+    const want = wantsOpenSeaEventTypes(set).sort();
+    expect(want).toEqual(
+      ['collection_offer', 'listing', 'mint', 'offer', 'trait_offer'].sort()
+    );
   });
 });
 
@@ -69,9 +71,9 @@ describe('isEventWanted', () => {
     expect(isEventWanted(mint, new Set([BotEvent.mint]))).toBe(true);
     expect(isEventWanted(burn, new Set([BotEvent.burn]))).toBe(true);
     expect(isEventWanted(normal, new Set([BotEvent.transfer]))).toBe(true);
-    // transfer should include mint/burn when requested
-    expect(isEventWanted(mint, new Set([BotEvent.transfer]))).toBe(true);
-    expect(isEventWanted(burn, new Set([BotEvent.transfer]))).toBe(true);
+    // transfer no longer implies mint/burn unless explicitly selected
+    expect(isEventWanted(mint, new Set([BotEvent.transfer]))).toBe(false);
+    expect(isEventWanted(burn, new Set([BotEvent.transfer]))).toBe(false);
   });
 
   test('sale selection', () => {

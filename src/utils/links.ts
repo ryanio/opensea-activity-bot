@@ -4,7 +4,7 @@ export const openseaProfileCollectionUrl = (
   address: string,
   collectionSlug: string
 ): string => {
-  return `https://opensea.io/${address}?collectionSlugs=${collectionSlug}`;
+  return `https://opensea.io/${address}/items?collectionSlugs=${collectionSlug}`;
 };
 
 export const openseaProfileActivityUrl = (

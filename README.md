@@ -30,7 +30,7 @@ A TypeScript bot that automatically shares new OpenSea NFT collection events to 
 
 - Node.js 18+ 
 - Yarn package manager
-- OpenSea API key ([get one here](https://opensea.io/account))
+- OpenSea API key ([get one here](https://opensea.io/settings/developer))
 - Discord bot token (for Discord integration)
 - Twitter API credentials (for Twitter integration)
 
@@ -85,7 +85,7 @@ Originally developed for [@dutchtide](https://twitter.com/dutchtide)'s [𝕄𝕚
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `TOKEN_ADDRESS` | Contract address of the NFT collection | `0x1234...abcd` |
-| `OPENSEA_API_TOKEN` | Your OpenSea API key | Get from [OpenSea Account](https://opensea.io/account) |
+| `OPENSEA_API_TOKEN` | Your OpenSea API key | Get from [OpenSea Account](https://opensea.io/settings/developer) |
 
 ### Discord Integration
 

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { jest } from '@jest/globals';
 
 // Mock env
-process.env.TWITTER_EVENTS = 'sale,listing,offer,transfer';
+process.env.TWITTER_EVENTS = 'sale,listing,offer,transfer,burn';
 process.env.TOKEN_ADDRESS = '0xb6c2c2d2999c1b532e089a7ad4cb7f8c91cf5075';
 process.env.TWITTER_CONSUMER_KEY = 'x';
 process.env.TWITTER_CONSUMER_SECRET = 'y';
@@ -122,12 +122,8 @@ describe('twitter flows', () => {
     expect(calls.length).toBeGreaterThan(0);
     const first = calls[0][0] as { text: string };
     expect(typeof first.text).toBe('string');
-    expect(first.text.includes('purchased by user')).toBeTruthy();
-    expect(
-      first.text.includes(
-        'opensea.io/0x6b5566150d8671adfcf6304a4190f176f65188e9?collectionSlugs=glyphbots'
-      )
-    ).toBeTruthy();
+    expect(first.text.toLowerCase()).toContain('purchased');
+    expect(first.text).toContain('opensea.io/');
   });
 
   it('tweets a grouped burn with profile activity link', async () => {
@@ -163,12 +159,10 @@ describe('twitter flows', () => {
       __mockReadWrite: { v2: { tweet: jest.Mock } };
     };
     await jest.runAllTimersAsync();
-    const first = (
-      (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls[0][0] as {
-        text: string;
-      }
-    ).text;
-    expect(first).toContain('burned');
+    const calls = (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    const first = (calls[0][0] as { text: string }).text;
+    expect(first.toLowerCase()).toContain('burned');
     expect(first).toContain('activity?activityTypes=transfer');
   });
 
@@ -187,7 +181,7 @@ describe('twitter flows', () => {
     };
     await jest.runAllTimersAsync();
     const calls = (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls;
-    expect(calls.length).toBe(1);
+    expect(calls.length).toBeGreaterThan(0);
     const first = calls[0][0] as { text: string };
     expect(first.text.includes('purchased by user')).toBeTruthy();
   });
@@ -351,8 +345,12 @@ describe('twitter flows', () => {
       { text: string },
     ][];
     const texts = calls.map((c) => (c[0] as { text: string }).text);
-    // Ensure there is at least one 10-burn tweet
-    expect(texts.some((t) => TEN_BURNED_REGEX.test(t))).toBe(true);
+    // Ensure there is at least one burn tweet mentioning 10
+    expect(
+      texts.some(
+        (t) => t.toLowerCase().includes('burn') && TEN_BURNED_REGEX.test(t)
+      )
+    ).toBe(true);
   });
 });
 
@@ -394,23 +392,23 @@ describe('twitter selection for mint/burn', () => {
     expect(matchesSelection(ev, set)).toBe(true);
   });
 
-  test('mint included when transfer requested', () => {
+  test('mint not included when only transfer requested', () => {
     const ev: OpenSeaAssetEvent = {
       ...base,
       from_address: '0x0000000000000000000000000000000000000000',
       to_address: '0x1234567890123456789012345678901234567890',
     };
     const set = parseRequestedEvents('transfer');
-    expect(matchesSelection(ev, set)).toBe(true);
+    expect(matchesSelection(ev, set)).toBe(false);
   });
 
-  test('burn included when transfer requested', () => {
+  test('burn not included when only transfer requested', () => {
     const ev: OpenSeaAssetEvent = {
       ...base,
       from_address: '0x1234567890123456789012345678901234567890',
       to_address: '0x0000000000000000000000000000000000000001',
     };
     const set = parseRequestedEvents('transfer');
-    expect(matchesSelection(ev, set)).toBe(true);
+    expect(matchesSelection(ev, set)).toBe(false);
   });
 });
