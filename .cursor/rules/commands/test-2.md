@@ -1,0 +1,1 @@
+Run `npm run test` and fix ALL warnings and errors, related or unrelated to your work.

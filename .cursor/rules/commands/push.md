@@ -1,0 +1,1 @@
+Run .cursor/commands/commit-all.md and push

@@ -9,6 +9,7 @@ import type {
   OpenSeaNFT,
   OpenSeaNFTResponse,
 } from './types';
+import { txHashFor } from './utils/aggregator';
 import { effectiveEventTypeFor } from './utils/event-types';
 import { parseEvents, wantsOpenSeaEventTypes } from './utils/events';
 import { logger } from './utils/logger';
@@ -20,6 +21,8 @@ const {
   TOKEN_ADDRESS,
   TWITTER_EVENTS,
   LAST_EVENT_TIMESTAMP,
+  OPENSEA_EVENT_LAG_WINDOW,
+  OPENSEA_MAX_PAGES,
 } = process.env;
 
 let lastEventTimestamp = unixTimestamp(new Date());
@@ -34,10 +37,18 @@ const fetchedEventsCache = new LRUCache<string, boolean>(
   FETCHED_EVENTS_CACHE_CAPACITY
 );
 
-// Pagination constants
+// Pagination and safety window constants
 const SUBSTRING_LENGTH_FOR_CURSOR_LOG = 20;
-const MAX_PAGINATION_PAGES = 10;
+const DEFAULT_MAX_PAGINATION_PAGES = 100;
 const OPENSEA_MAX_LIMIT = 200;
+const MAX_PAGINATION_PAGES = Number(
+  OPENSEA_MAX_PAGES ?? DEFAULT_MAX_PAGINATION_PAGES
+);
+
+const DEFAULT_EVENT_LAG_SAFETY_WINDOW_SECONDS = 120;
+const EVENT_LAG_SAFETY_WINDOW_SECONDS = Number(
+  OPENSEA_EVENT_LAG_WINDOW ?? DEFAULT_EVENT_LAG_SAFETY_WINDOW_SECONDS
+);
 
 export const opensea = {
   api: 'https://api.opensea.io/api/v2/',
@@ -224,13 +235,26 @@ const deduplicateEvents = (
 } => {
   const preDedup = events.length;
   const deduplicated = events.filter((event) => {
-    // Use canonical event key so 'mint' and transfer-mint dedupe together
+    // Use canonical event key so 'mint' and transfer-mint dedupe together.
+    // Include transaction hash when available so distinct txs at the same
+    // timestamp for the same token are not incorrectly deduped.
     const nft = (event?.nft ?? event?.asset) as
-      | { identifier?: string }
+      | {
+          identifier?: string;
+        }
       | undefined;
     const tokenId = String(nft?.identifier ?? '');
     const canonicalType = String(effectiveEventTypeFor(event));
-    const eventKey = `${event.event_timestamp}|${tokenId}|${canonicalType}`;
+    const txHash = txHashFor(event);
+    const parts = [
+      String(event.event_timestamp),
+      tokenId,
+      canonicalType,
+    ] as string[];
+    if (txHash) {
+      parts.push(txHash);
+    }
+    const eventKey = parts.join('|');
     if (fetchedEventsCache.get(eventKey)) {
       return false;
     }
@@ -251,9 +275,16 @@ const updateLastEventTimestamp = (events: OpenSeaAssetEvent[]): void => {
 
 const buildEventsUrl = (): string => {
   const eventTypes = enabledEventTypes();
+  // Allow a small safety window behind the last seen timestamp so that
+  // late-indexed events with older timestamps are still fetched. Rely on the
+  // in-memory cache to prevent reprocessing duplicates.
+  const afterCursorBase = Math.max(
+    0,
+    lastEventTimestamp - EVENT_LAG_SAFETY_WINDOW_SECONDS
+  );
   const params: Record<string, string> = {
     limit: OPENSEA_MAX_LIMIT.toString(),
-    after: lastEventTimestamp.toString(),
+    after: afterCursorBase.toString(),
   };
   const urlParams = new URLSearchParams(params);
   // Map internal/event selection to API-supported event_type filters
