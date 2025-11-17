@@ -23,8 +23,20 @@ describe('wantsOpenSeaEventTypes', () => {
     const set = new Set([BotEvent.listing, BotEvent.offer, BotEvent.mint]);
     const want = wantsOpenSeaEventTypes(set).sort();
     expect(want).toEqual(
-      ['collection_offer', 'listing', 'mint', 'offer', 'trait_offer'].sort()
+      [
+        EventType.collection_offer,
+        EventType.listing,
+        EventType.mint,
+        EventType.offer,
+        EventType.trait_offer,
+        EventType.transfer,
+      ].sort()
     );
+  });
+
+  test('includes transfer when mint requested', () => {
+    const want = wantsOpenSeaEventTypes(new Set([BotEvent.mint])).sort();
+    expect(want).toEqual([EventType.mint, EventType.transfer].sort());
   });
 });
 

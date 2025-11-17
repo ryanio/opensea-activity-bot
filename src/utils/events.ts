@@ -18,27 +18,30 @@ export const parseEvents = (raw: string | undefined): Set<BotEvent> => {
   return new Set(parts as BotEvent[]);
 };
 
-export const wantsOpenSeaEventTypes = (selection: Set<BotEvent>): string[] => {
-  const want = new Set<string>();
-  if (selection.has(BotEvent.listing) || selection.has(BotEvent.offer)) {
-    if (selection.has(BotEvent.listing)) {
-      want.add('listing');
-    }
-    if (selection.has(BotEvent.offer)) {
-      // Include all offer variants
-      want.add('offer');
-      want.add('trait_offer');
-      want.add('collection_offer');
-    }
+export const wantsOpenSeaEventTypes = (
+  selection: Set<BotEvent>
+): EventType[] => {
+  const want = new Set<EventType>();
+  if (selection.has(BotEvent.listing)) {
+    want.add(EventType.listing);
+  }
+  if (selection.has(BotEvent.offer)) {
+    want.add(EventType.offer);
+    want.add(EventType.trait_offer);
+    want.add(EventType.collection_offer);
   }
   if (selection.has(BotEvent.sale)) {
-    want.add('sale');
+    want.add(EventType.sale);
   }
-  if (selection.has(BotEvent.transfer) || selection.has(BotEvent.burn)) {
-    want.add('transfer');
+  const needsTransferEvents =
+    selection.has(BotEvent.transfer) ||
+    selection.has(BotEvent.burn) ||
+    selection.has(BotEvent.mint);
+  if (needsTransferEvents) {
+    want.add(EventType.transfer);
   }
   if (selection.has(BotEvent.mint)) {
-    want.add('mint');
+    want.add(EventType.mint);
   }
   return [...want];
 };
@@ -48,13 +51,13 @@ export const isEventWanted = (
   selection: Set<BotEvent>
 ): boolean => {
   const type = event.event_type as EventType;
-  if (type === 'listing') {
+  if (type === EventType.listing) {
     return selection.has(BotEvent.listing);
   }
   if (
-    type === 'offer' ||
-    type === 'trait_offer' ||
-    type === 'collection_offer'
+    type === EventType.offer ||
+    type === EventType.trait_offer ||
+    type === EventType.collection_offer
   ) {
     return selection.has(BotEvent.offer);
   }
