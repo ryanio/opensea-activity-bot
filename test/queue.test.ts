@@ -1,10 +1,10 @@
-import { AsyncQueue } from '../src/utils/queue';
+import { AsyncQueue } from "../src/utils/queue";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-describe('AsyncQueue', () => {
-  describe('Basic Functionality', () => {
-    it('processes items in order', async () => {
+describe("AsyncQueue", () => {
+  describe("Basic Functionality", () => {
+    it("processes items in order", async () => {
       const processed: number[] = [];
       const q = new AsyncQueue<number>({
         perItemDelayMs: 1,
@@ -15,15 +15,15 @@ describe('AsyncQueue', () => {
           return Promise.resolve();
         },
         keyFor: (n) => String(n),
-        classifyError: () => ({ type: 'fatal' }),
+        classifyError: () => ({ type: "fatal" }),
       });
       q.enqueue(1);
       q.enqueue(2);
       await sleep(50);
-      expect(processed.join(',')).toBe('1,2');
+      expect(processed.join(",")).toBe("1,2");
     });
 
-    it('respects per-item delay', async () => {
+    it("respects per-item delay", async () => {
       const processed: number[] = [];
       const timestamps: number[] = [];
       const DELAY_MS = 100;
@@ -39,7 +39,7 @@ describe('AsyncQueue', () => {
           return Promise.resolve();
         },
         keyFor: (n) => String(n),
-        classifyError: () => ({ type: 'fatal' }),
+        classifyError: () => ({ type: "fatal" }),
       });
 
       const startTime = Date.now();
@@ -53,7 +53,7 @@ describe('AsyncQueue', () => {
       expect(totalTime).toBeGreaterThanOrEqual(DELAY_MS * 0.8);
     });
 
-    it('returns correct queue size', () => {
+    it("returns correct queue size", () => {
       const q = new AsyncQueue<number>({
         perItemDelayMs: 1,
         backoffBaseMs: 1,
@@ -61,7 +61,7 @@ describe('AsyncQueue', () => {
         debug: false,
         process: () => Promise.resolve(),
         keyFor: (n) => String(n),
-        classifyError: () => ({ type: 'fatal' }),
+        classifyError: () => ({ type: "fatal" }),
       });
 
       expect(q.size()).toBe(0);
@@ -72,8 +72,8 @@ describe('AsyncQueue', () => {
     });
   });
 
-  describe('Error Handling', () => {
-    it('handles fatal errors by dropping items', async () => {
+  describe("Error Handling", () => {
+    it("handles fatal errors by dropping items", async () => {
       const processed: number[] = [];
       const errors: unknown[] = [];
 
@@ -83,7 +83,7 @@ describe('AsyncQueue', () => {
         backoffMaxMs: 10,
         process: (n) => {
           if (n === 2) {
-            throw new Error('Fatal error');
+            throw new Error("Fatal error");
           }
           processed.push(n);
           return Promise.resolve();
@@ -91,7 +91,7 @@ describe('AsyncQueue', () => {
         keyFor: (n) => String(n),
         classifyError: (error) => {
           errors.push(error);
-          return { type: 'fatal' };
+          return { type: "fatal" };
         },
       });
 
@@ -105,7 +105,7 @@ describe('AsyncQueue', () => {
       expect(errors.length).toBe(1);
     });
 
-    it('retries transient errors', async () => {
+    it("retries transient errors", async () => {
       const processed: number[] = [];
       const attempts = new Map<number, number>();
 
@@ -125,7 +125,7 @@ describe('AsyncQueue', () => {
           return Promise.resolve();
         },
         keyFor: (n) => String(n),
-        classifyError: () => ({ type: 'transient' }),
+        classifyError: () => ({ type: "transient" }),
       });
 
       q.enqueue(42);
@@ -135,7 +135,7 @@ describe('AsyncQueue', () => {
       expect(attempts.get(42)).toBe(3);
     });
 
-    it('handles rate limiting', async () => {
+    it("handles rate limiting", async () => {
       const processed: number[] = [];
       let rateLimitHit = false;
       const RATE_LIMIT_DELAY = 100;
@@ -147,7 +147,7 @@ describe('AsyncQueue', () => {
         process: (n) => {
           if (n === 1 && !rateLimitHit) {
             rateLimitHit = true;
-            throw new Error('Rate limited');
+            throw new Error("Rate limited");
           }
           processed.push(n);
           return Promise.resolve();
@@ -155,10 +155,10 @@ describe('AsyncQueue', () => {
         keyFor: (n) => String(n),
         classifyError: () => {
           if (!rateLimitHit) {
-            return { type: 'fatal' };
+            return { type: "fatal" };
           }
           return {
-            type: 'rate_limit',
+            type: "rate_limit",
             pauseUntilMs: Date.now() + RATE_LIMIT_DELAY,
           };
         },
@@ -174,8 +174,8 @@ describe('AsyncQueue', () => {
     });
   });
 
-  describe('Deduplication', () => {
-    it('skips already-processed items', async () => {
+  describe("Deduplication", () => {
+    it("skips already-processed items", async () => {
       const processed: number[] = [];
       const processedKeys = new Set<string>();
 
@@ -191,7 +191,7 @@ describe('AsyncQueue', () => {
         },
         keyFor: (n) => String(n),
         isAlreadyProcessed: (key) => processedKeys.has(key),
-        classifyError: () => ({ type: 'fatal' }),
+        classifyError: () => ({ type: "fatal" }),
       });
 
       // Enqueue 1 and 2
@@ -217,8 +217,8 @@ describe('AsyncQueue', () => {
     });
   });
 
-  describe('Callbacks', () => {
-    it('calls onProcessed after successful processing', async () => {
+  describe("Callbacks", () => {
+    it("calls onProcessed after successful processing", async () => {
       const processed: number[] = [];
       const onProcessedCalls: number[] = [];
 
@@ -234,7 +234,7 @@ describe('AsyncQueue', () => {
         onProcessed: (n) => {
           onProcessedCalls.push(n);
         },
-        classifyError: () => ({ type: 'fatal' }),
+        classifyError: () => ({ type: "fatal" }),
       });
 
       q.enqueue(1);
@@ -244,7 +244,7 @@ describe('AsyncQueue', () => {
       expect(onProcessedCalls).toEqual([1, 2]);
     });
 
-    it('does not call onProcessed for failed items', async () => {
+    it("does not call onProcessed for failed items", async () => {
       const processed: number[] = [];
       const onProcessedCalls: number[] = [];
 
@@ -254,7 +254,7 @@ describe('AsyncQueue', () => {
         backoffMaxMs: 10,
         process: (n) => {
           if (n === 2) {
-            throw new Error('Fatal error');
+            throw new Error("Fatal error");
           }
           processed.push(n);
           return Promise.resolve();
@@ -263,7 +263,7 @@ describe('AsyncQueue', () => {
         onProcessed: (n) => {
           onProcessedCalls.push(n);
         },
-        classifyError: () => ({ type: 'fatal' }),
+        classifyError: () => ({ type: "fatal" }),
       });
 
       q.enqueue(1);

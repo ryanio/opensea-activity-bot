@@ -3,16 +3,14 @@
 export const openseaProfileCollectionUrl = (
   address: string,
   collectionSlug: string
-): string => {
-  return `https://opensea.io/${address}/items?collectionSlugs=${collectionSlug}`;
-};
+): string =>
+  `https://opensea.io/${address}/items?collectionSlugs=${collectionSlug}`;
 
 export const openseaProfileActivityUrl = (
   address: string,
   activityType: string
-): string => {
-  return `https://opensea.io/${address}/activity?activityTypes=${activityType}`;
-};
+): string =>
+  `https://opensea.io/${address}/activity?activityTypes=${activityType}`;
 
 export const openseaCollectionActivityUrl = (
   collectionUrl: string,

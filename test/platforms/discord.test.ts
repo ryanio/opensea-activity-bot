@@ -1,17 +1,17 @@
-import { jest } from '@jest/globals';
+import { jest } from "@jest/globals";
 
 // Env setup
-process.env.DISCORD_TOKEN = 'x';
+process.env.DISCORD_TOKEN = "x";
 
 // Mock discord.js runtime API minimally
 const channelsMap: Record<string, { send: jest.Mock; id: string }> = {};
 const setColorArgs: Record<string, string[]> = {};
 
-jest.mock('discord.js', () => {
+jest.mock("discord.js", () => {
   const Client = jest.fn().mockImplementation(() => {
     return {
       on: (event: string, cb: () => void) => {
-        if (event === 'ready') {
+        if (event === "ready") {
           // Call immediately instead of using setImmediate for faster tests
           cb();
         }
@@ -46,26 +46,24 @@ jest.mock('discord.js', () => {
 });
 
 // Mock opensea username
-jest.mock('../../src/opensea', () => {
-  return {
-    EventType: {
-      listing: 'listing',
-      offer: 'offer',
-      trait_offer: 'trait_offer',
-      collection_offer: 'collection_offer',
-      mint: 'mint',
-      sale: 'sale',
-      transfer: 'transfer',
-    },
-    opensea: { collectionURL: () => '' },
-    username: jest.fn(async (addr: string) => `addr:${addr.slice(0, 6)}`),
-  };
-});
+jest.mock("../../src/opensea", () => ({
+  EventType: {
+    listing: "listing",
+    offer: "offer",
+    trait_offer: "trait_offer",
+    collection_offer: "collection_offer",
+    mint: "mint",
+    sale: "sale",
+    transfer: "transfer",
+  },
+  opensea: { collectionURL: () => "" },
+  username: jest.fn(async (addr: string) => `addr:${addr.slice(0, 6)}`),
+}));
 
 // Mock timeout to avoid delays in tests
-jest.mock('../../src/utils/utils', () => {
-  const actual = jest.requireActual<typeof import('../../src/utils/utils')>(
-    '../../src/utils/utils'
+jest.mock("../../src/utils/utils", () => {
+  const actual = jest.requireActual<typeof import("../../src/utils/utils")>(
+    "../../src/utils/utils"
   );
   return {
     ...actual,
@@ -73,10 +71,10 @@ jest.mock('../../src/utils/utils', () => {
   };
 });
 
-import { messageEvents } from '../../src/platforms/discord';
-import type { OpenSeaAssetEvent } from '../../src/types';
+import { messageEvents } from "../../src/platforms/discord";
+import type { OpenSeaAssetEvent } from "../../src/types";
 
-describe('discord routing', () => {
+describe("discord routing", () => {
   beforeEach(() => {
     for (const k of Object.keys(channelsMap)) {
       delete channelsMap[k];
@@ -85,78 +83,78 @@ describe('discord routing', () => {
     process.env.DISCORD_EVENTS = undefined;
   });
 
-  test('routes mint to mint-configured channel', async () => {
-    process.env.DISCORD_EVENTS = '123=mint';
+  test("routes mint to mint-configured channel", async () => {
+    process.env.DISCORD_EVENTS = "123=mint";
     const ev = {
-      event_type: 'transfer',
+      event_type: "transfer",
       event_timestamp: 1,
-      chain: 'ethereum',
+      chain: "ethereum",
       quantity: 1,
-      from_address: '0x0000000000000000000000000000000000000000',
-      to_address: '0x1111110000000000000000000000000000000000',
-      nft: { identifier: '1', opensea_url: 'https://x' },
+      from_address: "0x0000000000000000000000000000000000000000",
+      to_address: "0x1111110000000000000000000000000000000000",
+      nft: { identifier: "1", opensea_url: "https://x" },
     } as unknown as OpenSeaAssetEvent;
     await messageEvents([ev] as OpenSeaAssetEvent[]);
-    expect(channelsMap['123'].send).toHaveBeenCalled();
+    expect(channelsMap["123"].send).toHaveBeenCalled();
   });
 
-  test('routes burn to burn-configured channel', async () => {
-    process.env.DISCORD_EVENTS = '456=burn';
+  test("routes burn to burn-configured channel", async () => {
+    process.env.DISCORD_EVENTS = "456=burn";
     const ev = {
-      event_type: 'transfer',
+      event_type: "transfer",
       event_timestamp: 1,
-      chain: 'ethereum',
+      chain: "ethereum",
       quantity: 1,
-      from_address: '0x1111110000000000000000000000000000000000',
-      to_address: '0x000000000000000000000000000000000000dead',
-      nft: { identifier: '2', opensea_url: 'https://x' },
+      from_address: "0x1111110000000000000000000000000000000000",
+      to_address: "0x000000000000000000000000000000000000dead",
+      nft: { identifier: "2", opensea_url: "https://x" },
     } as unknown as OpenSeaAssetEvent;
     await messageEvents([ev] as OpenSeaAssetEvent[]);
-    expect(channelsMap['456'].send).toHaveBeenCalled();
+    expect(channelsMap["456"].send).toHaveBeenCalled();
   });
 
-  test('mint embed includes editions count for ERC1155', async () => {
-    process.env.DISCORD_EVENTS = '123=mint';
+  test("mint embed includes editions count for ERC1155", async () => {
+    process.env.DISCORD_EVENTS = "123=mint";
     const ev = {
-      event_type: 'transfer',
+      event_type: "transfer",
       event_timestamp: 2,
-      chain: 'ethereum',
+      chain: "ethereum",
       quantity: 5,
-      from_address: '0x0000000000000000000000000000000000000000',
-      to_address: '0x2222220000000000000000000000000000000000', // Different address to avoid grouping
+      from_address: "0x0000000000000000000000000000000000000000",
+      to_address: "0x2222220000000000000000000000000000000000", // Different address to avoid grouping
       nft: {
-        identifier: '99',
-        token_standard: 'erc1155',
-        opensea_url: 'https://x',
+        identifier: "99",
+        token_standard: "erc1155",
+        opensea_url: "https://x",
       },
     } as unknown as OpenSeaAssetEvent;
     await messageEvents([ev] as OpenSeaAssetEvent[]);
     // We can't inspect embed content with current mocks, but ensure it routed
-    expect(channelsMap['123'].send).toHaveBeenCalled();
+    expect(channelsMap["123"].send).toHaveBeenCalled();
   });
 
-  test('routes offer/listing to respective channels', async () => {
-    process.env.DISCORD_EVENTS = 'o1=offer&l1=listing';
+  test("routes offer/listing to respective channels", async () => {
+    process.env.DISCORD_EVENTS = "o1=offer&l1=listing";
     const offerEv = {
-      event_type: 'offer',
+      event_type: "offer",
       event_timestamp: 1,
-      chain: 'ethereum',
+      chain: "ethereum",
       quantity: 1,
-      order_type: 'item_offer',
-      nft: { identifier: '3', opensea_url: 'https://x' },
+      order_type: "item_offer",
+      nft: { identifier: "3", opensea_url: "https://x" },
       payment: {
-        quantity: '1',
+        quantity: "1",
         decimals: 18,
-        symbol: 'ETH',
-        token_address: '',
+        symbol: "ETH",
+        token_address: "",
       },
-      maker: '0x9999990000000000000000000000000000000000',
+      maker: "0x9999990000000000000000000000000000000000",
       expiration_date: Math.floor(Date.now() / 1000) + 3600,
     } as unknown as OpenSeaAssetEvent;
     const listingEv = {
       ...offerEv,
-      event_type: 'listing',
-      order_type: 'listing',
+      event_type: "listing",
+      order_type: "listing",
     } as unknown as OpenSeaAssetEvent;
     await messageEvents([offerEv, listingEv] as OpenSeaAssetEvent[]);
     expect(channelsMap.o1.send).toHaveBeenCalled();

@@ -1,7 +1,7 @@
-import { inspect } from 'node:util';
-import { shortTokenAddr } from './utils';
+import { inspect } from "node:util";
+import { shortTokenAddr } from "./utils";
 
-type Level = 'debug' | 'info' | 'warn' | 'error';
+type Level = "debug" | "info" | "warn" | "error";
 
 const { LOG_LEVEL } = process.env;
 
@@ -13,27 +13,26 @@ const levelOrder: Record<Level, number> = {
 };
 
 const selectedLevel: Level = ((): Level => {
-  if (LOG_LEVEL === 'debug') {
-    return 'debug';
+  if (LOG_LEVEL === "debug") {
+    return "debug";
   }
-  if (LOG_LEVEL === 'info') {
-    return 'info';
+  if (LOG_LEVEL === "info") {
+    return "info";
   }
-  if (LOG_LEVEL === 'warn') {
-    return 'warn';
+  if (LOG_LEVEL === "warn") {
+    return "warn";
   }
-  if (LOG_LEVEL === 'error') {
-    return 'error';
+  if (LOG_LEVEL === "error") {
+    return "error";
   }
-  return 'info';
+  return "info";
 })();
 
-const shouldLog = (level: Level): boolean => {
-  return levelOrder[level] >= levelOrder[selectedLevel];
-};
+const shouldLog = (level: Level): boolean =>
+  levelOrder[level] >= levelOrder[selectedLevel];
 
 const serialize = (arg: unknown): string => {
-  if (typeof arg === 'string') {
+  if (typeof arg === "string") {
     return arg;
   }
   try {
@@ -48,9 +47,9 @@ const write = (level: Level, parts: unknown[]) => {
     return;
   }
   const ts = new Date().toISOString();
-  const msg = parts.map(serialize).join(' ');
+  const msg = parts.map(serialize).join(" ");
   const line = `${ts} [${level.toUpperCase()}] [Activity] [${shortTokenAddr}] ${msg}\n`;
-  if (level === 'error' || level === 'warn') {
+  if (level === "error" || level === "warn") {
     process.stderr.write(line);
   } else {
     process.stdout.write(line);
@@ -58,10 +57,10 @@ const write = (level: Level, parts: unknown[]) => {
 };
 
 export const logger = {
-  debug: (...parts: unknown[]) => write('debug', parts),
-  info: (...parts: unknown[]) => write('info', parts),
-  warn: (...parts: unknown[]) => write('warn', parts),
-  error: (...parts: unknown[]) => write('error', parts),
+  debug: (...parts: unknown[]) => write("debug", parts),
+  info: (...parts: unknown[]) => write("info", parts),
+  warn: (...parts: unknown[]) => write("warn", parts),
+  error: (...parts: unknown[]) => write("error", parts),
 };
 
 export const prefixedLogger = (prefix: string) => {

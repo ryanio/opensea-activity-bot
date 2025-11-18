@@ -1,7 +1,7 @@
-import { TwitterApi } from 'twitter-api-v2';
-import { EventType, getCollectionSlug, opensea, username } from '../opensea';
-import type { BotEvent, OpenSeaAssetEvent, OpenSeaPayment } from '../types';
-import { txHashFor } from '../utils/aggregator';
+import { TwitterApi } from "twitter-api-v2";
+import { EventType, getCollectionSlug, opensea, username } from "../opensea";
+import type { BotEvent, OpenSeaAssetEvent, OpenSeaPayment } from "../types";
+import { txHashFor } from "../utils/aggregator";
 import {
   calculateTotalSpent,
   EventGroupManager,
@@ -13,24 +13,24 @@ import {
   isGroupedEvent,
   processEventsWithAggregator,
   sortEventsByPrice,
-} from '../utils/event-grouping';
-import { isEventWanted, parseEvents } from '../utils/events';
-import { logger } from '../utils/logger';
-import { LRUCache } from '../utils/lru-cache';
+} from "../utils/event-grouping";
+import { isEventWanted, parseEvents } from "../utils/events";
+import { logger } from "../utils/logger";
+import { LRUCache } from "../utils/lru-cache";
 import {
   refetchMintMetadata,
   refetchMintMetadataForEvent,
-} from '../utils/metadata';
-import { AsyncQueue } from '../utils/queue';
+} from "../utils/metadata";
+import { AsyncQueue } from "../utils/queue";
 import {
   classifyTransfer,
   fetchImageBuffer,
   formatAmount,
   formatEditionsText,
   imageForNFT,
-} from '../utils/utils';
+} from "../utils/utils";
 
-const logStart = '[Twitter]';
+const logStart = "[Twitter]";
 
 // In-memory dedupe for tweeted events
 const TWEETED_EVENTS_CACHE_CAPACITY = 2000;
@@ -75,7 +75,7 @@ type TweetEvent = OpenSeaAssetEvent | GroupedEvent;
 type TweetQueueItem = { event: TweetEvent };
 
 // Initialize event group manager for Twitter
-const groupConfig = getDefaultEventGroupConfig('TWITTER');
+const groupConfig = getDefaultEventGroupConfig("TWITTER");
 const groupManager = new EventGroupManager(groupConfig);
 
 // Generic async queue for tweeting
@@ -83,7 +83,7 @@ const tweetQueue = new AsyncQueue<TweetQueueItem>({
   perItemDelayMs: PER_TWEET_DELAY_MS,
   backoffBaseMs: BACKOFF_BASE_MS,
   backoffMaxMs: BACKOFF_MAX_MS,
-  debug: process.env.LOG_LEVEL === 'debug',
+  debug: process.env.LOG_LEVEL === "debug",
   keyFor: (i) => keyForQueueItem(i),
   isAlreadyProcessed: (key) => tweetedEventsCache.get(key) === true,
   onProcessed: (item) => {
@@ -100,7 +100,7 @@ const tweetQueue = new AsyncQueue<TweetQueueItem>({
   },
   process: async (item) => {
     if (!twitterClient) {
-      throw new Error('twitterClient not initialized');
+      throw new Error("twitterClient not initialized");
     }
     try {
       await tweetEvent(twitterClient, item.event);
@@ -124,13 +124,13 @@ const tweetQueue = new AsyncQueue<TweetQueueItem>({
     if (errCode === HTTP_TOO_MANY_REQUESTS) {
       const dayRemaining = rateLimit?.day?.remaining;
       const dayReset = rateLimit?.day?.reset;
-      if (dayRemaining === 0 && typeof dayReset === 'number') {
+      if (dayRemaining === 0 && typeof dayReset === "number") {
         return {
-          type: 'rate_limit',
+          type: "rate_limit",
           pauseUntilMs: (dayReset as number) * MS_PER_SECOND,
         } as const;
       }
-      return { type: 'transient' } as const;
+      return { type: "transient" } as const;
     }
     const status =
       (error as { data?: { status?: number }; status?: number })?.data
@@ -139,18 +139,18 @@ const tweetQueue = new AsyncQueue<TweetQueueItem>({
     if (
       (status as number) >= SERVER_ERROR_MIN ||
       status === 0 ||
-      (error as { name?: string })?.name === 'FetchError'
+      (error as { name?: string })?.name === "FetchError"
     ) {
-      return { type: 'transient' } as const;
+      return { type: "transient" } as const;
     }
-    return { type: 'fatal' } as const;
+    return { type: "fatal" } as const;
   },
 });
 
 const keyForQueueItem = (item: TweetQueueItem): string => {
   const ev = item.event;
   if (isGroupedEvent(ev)) {
-    const tx = ev.txHash ?? txHashFor(ev.events?.[0]) ?? 'unknown';
+    const tx = ev.txHash ?? txHashFor(ev.events?.[0]) ?? "unknown";
     return `group:${tx}`;
   }
   return eventKeyFor(item.event as OpenSeaAssetEvent);
@@ -171,14 +171,14 @@ const formatNftName = (
   nft: { name?: string; identifier?: string | number } | undefined
 ): string => {
   if (!nft) {
-    return '';
+    return "";
   }
   const GLYPHBOTS_CONTRACT_ADDRESS =
-    '0xb6c2c2d2999c1b532e089a7ad4cb7f8c91cf5075';
+    "0xb6c2c2d2999c1b532e089a7ad4cb7f8c91cf5075";
   const specialContract =
     process.env.TOKEN_ADDRESS?.toLowerCase() === GLYPHBOTS_CONTRACT_ADDRESS;
   if (specialContract && nft.name && nft.identifier !== undefined) {
-    const nameParts = String(nft.name).split(' - ');
+    const nameParts = String(nft.name).split(" - ");
     const suffix = nameParts.length > 1 ? nameParts[1].trim() : undefined;
     const idStr = String(nft.identifier);
     return suffix ? `${suffix} #${idStr} ` : `#${idStr} `;
@@ -199,19 +199,19 @@ const formatOrderText = async (
     payment.decimals,
     payment.symbol
   );
-  if (order_type === 'listing') {
+  if (order_type === "listing") {
     return `listed on sale for ${price} by ${name}`;
   }
-  if (order_type === 'item_offer') {
+  if (order_type === "item_offer") {
     return `has a new offer for ${price} by ${name}`;
   }
-  if (order_type === 'collection_offer') {
+  if (order_type === "collection_offer") {
     return `has a new collection offer for ${price} by ${name}`;
   }
-  if (order_type === 'trait_offer') {
+  if (order_type === "trait_offer") {
     return `has a new trait offer for ${price} by ${name}`;
   }
-  return '';
+  return "";
 };
 
 const formatSaleText = async (payment: OpenSeaPayment, buyer: string) => {
@@ -226,13 +226,13 @@ const formatSaleText = async (payment: OpenSeaPayment, buyer: string) => {
 
 const formatTransferText = async (event: OpenSeaAssetEvent) => {
   const kind = classifyTransfer(event);
-  const from = event.from_address ?? '';
-  const to = event.to_address ?? '';
-  if (kind === 'mint') {
+  const from = event.from_address ?? "";
+  const to = event.to_address ?? "";
+  if (kind === "mint") {
     const toName = await username(to);
     return `minted by ${toName}`;
   }
-  if (kind === 'burn') {
+  if (kind === "burn") {
     const fromName = await username(from);
     return `burned by ${fromName}`;
   }
@@ -249,7 +249,7 @@ const textForOrder = async (params: {
   expiration_date: number;
 }): Promise<string> => {
   const { nft, payment, maker, order_type, expiration_date } = params;
-  let text = '';
+  let text = "";
   if (nft) {
     text += formatNftName(nft);
   }
@@ -263,7 +263,7 @@ const textForSale = async (params: {
   buyer: string;
 }): Promise<string> => {
   const { nft, payment, buyer } = params;
-  let text = '';
+  let text = "";
   if (nft) {
     text += formatNftName(nft);
   }
@@ -278,10 +278,10 @@ const textForTransfer = async (
   ev: OpenSeaAssetEvent
 ): Promise<string> => {
   const kind = classifyTransfer(ev);
-  if (kind === 'mint' || kind === 'burn') {
+  if (kind === "mint" || kind === "burn") {
     // Use formatNftName to get the properly formatted name for special collections like glyphbots
     let name = formatNftName(nft).trim();
-    if (kind === 'mint') {
+    if (kind === "mint") {
       const tokenStandard = (nft as { token_standard?: string } | undefined)
         ?.token_standard;
       name = formatEditionsText(name, tokenStandard, ev.quantity);
@@ -289,7 +289,7 @@ const textForTransfer = async (
     const phrase = await formatTransferText(ev);
     return `${name} ${phrase}`;
   }
-  let text = '';
+  let text = "";
   if (nft) {
     text += formatNftName(nft);
   }
@@ -309,17 +309,17 @@ export const textForTweet = async (event: OpenSeaAssetEvent) => {
     expiration_date,
   } = ev;
   const nft = ev.nft ?? asset;
-  let text = '';
+  let text = "";
 
   if (
-    (event_type === 'listing' ||
-      event_type === 'offer' ||
-      event_type === 'trait_offer' ||
-      event_type === 'collection_offer') &&
+    (event_type === "listing" ||
+      event_type === "offer" ||
+      event_type === "trait_offer" ||
+      event_type === "collection_offer") &&
     payment &&
     maker &&
     order_type &&
-    typeof expiration_date === 'number'
+    typeof expiration_date === "number"
   ) {
     text += await textForOrder({
       nft,
@@ -393,7 +393,7 @@ const tweetGroup = async (
   const refetchCount = await refetchMintMetadata(group);
   if (refetchCount > 0) {
     logger.info(
-      `${logStart} Refetched metadata for ${refetchCount} mint event${refetchCount === 1 ? '' : 's'}`
+      `${logStart} Refetched metadata for ${refetchCount} mint event${refetchCount === 1 ? "" : "s"}`
     );
   }
 
@@ -457,7 +457,7 @@ const tweetSingle = async (
   const truncatedStatus = status.slice(0, MAX_LOG_LENGTH);
   const needsTruncation = status.length > MAX_LOG_LENGTH;
   logger.info(
-    `${logStart} 🐦 Tweeted: ${truncatedStatus}${needsTruncation ? '...' : ''}`
+    `${logStart} 🐦 Tweeted: ${truncatedStatus}${needsTruncation ? "..." : ""}`
   );
   logger.debug(`${logStart} Event key: ${key}`);
   tweetedEventsCache.put(key, true);
@@ -503,27 +503,27 @@ export const matchesSelection = (
 
 const getTransferKind = (event: OpenSeaAssetEvent): string => {
   const kind = classifyTransfer(event);
-  if (kind === 'burn') {
-    return 'burn';
+  if (kind === "burn") {
+    return "burn";
   }
-  if (kind === 'mint') {
-    return 'mint';
+  if (kind === "mint") {
+    return "mint";
   }
-  return 'transfer';
+  return "transfer";
 };
 
 const logEventBreakdown = (filteredEvents: OpenSeaAssetEvent[]): void => {
   const eventTypeBreakdown = new Map<string, number>();
   for (const event of filteredEvents) {
     const key =
-      event.event_type === 'transfer'
+      event.event_type === "transfer"
         ? getTransferKind(event)
         : event.event_type;
     eventTypeBreakdown.set(key, (eventTypeBreakdown.get(key) ?? 0) + 1);
   }
   const breakdown = Array.from(eventTypeBreakdown.entries())
     .map(([type, count]) => `${type}=${count}`)
-    .join(', ');
+    .join(", ");
   logger.debug(`${logStart} Event breakdown: ${breakdown}`);
 };
 
@@ -532,14 +532,14 @@ const enqueueGroups = (
 ): void => {
   for (const { tx, events: evts } of readyGroups) {
     tweetQueue.enqueue({
-      event: { kind: 'group', txHash: tx, events: evts },
+      event: { kind: "group", txHash: tx, events: evts },
     });
   }
 
   if (readyGroups.length > 0) {
-    const counts = readyGroups.map((r) => r.events.length).join(',');
+    const counts = readyGroups.map((r) => r.events.length).join(",");
     logger.info(
-      `${logStart} Enqueued ${readyGroups.length} group(s) for tweeting [${readyGroups.map((r) => r.events.length).join(', ')} items]`
+      `${logStart} Enqueued ${readyGroups.length} group(s) for tweeting [${readyGroups.map((r) => r.events.length).join(", ")} items]`
     );
     logger.debug(
       `${logStart} Group sizes: ${counts}, queue=${tweetQueue.size()}`
@@ -561,14 +561,14 @@ const logProcessingSummary = (
   skippedDupes: number
 ): void => {
   if (skippedPending > 0) {
-    const pluralSuffix = skippedPending === 1 ? '' : 's';
+    const pluralSuffix = skippedPending === 1 ? "" : "s";
     logger.info(
       `${logStart} Holding ${skippedPending} event${pluralSuffix} in aggregator (pending group detection)`
     );
   }
 
   if (processableEvents.length > 0) {
-    const pluralSuffix = processableEvents.length === 1 ? '' : 's';
+    const pluralSuffix = processableEvents.length === 1 ? "" : "s";
     logger.info(
       `${logStart} Queued ${processableEvents.length} individual event${pluralSuffix} for tweeting`
     );
@@ -591,7 +591,7 @@ export const tweetEvents = (events: OpenSeaAssetEvent[]) => {
   const requestedSet = parseRequestedEvents(process.env.TWITTER_EVENTS);
 
   logger.debug(
-    `${logStart} Twitter events configured: ${Array.from(requestedSet).join(', ')}`
+    `${logStart} Twitter events configured: ${Array.from(requestedSet).join(", ")}`
   );
 
   const filteredEvents = events.filter((event) =>

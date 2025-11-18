@@ -1,4 +1,4 @@
-import type { OpenSeaAssetEvent } from '../src/types';
+import type { OpenSeaAssetEvent } from "../src/types";
 import {
   calculateTotalSpent,
   EventGroupManager,
@@ -11,13 +11,13 @@ import {
   isGroupedEvent,
   processEventsWithAggregator,
   sortEventsByPrice,
-} from '../src/utils/event-grouping';
+} from "../src/utils/event-grouping";
 import {
   createBurnEvent,
   createListingEvent,
   createMintEvent,
   createOfferEvent,
-} from './helpers';
+} from "./helpers";
 
 // Mock the utils module
 function mockFormatAmount(quantity: string, decimals: number, symbol: string) {
@@ -27,150 +27,150 @@ function mockFormatAmount(quantity: string, decimals: number, symbol: string) {
 
 function mockClassifyTransfer(
   event: OpenSeaAssetEvent
-): 'mint' | 'burn' | 'transfer' {
-  const NULL_ADDRESS = '0x0000000000000000000000000000000000000000';
-  const DEAD_ADDRESS = '0x000000000000000000000000000000000000dead';
+): "mint" | "burn" | "transfer" {
+  const NULL_ADDRESS = "0x0000000000000000000000000000000000000000";
+  const DEAD_ADDRESS = "0x000000000000000000000000000000000000dead";
 
   if (event.from_address === NULL_ADDRESS) {
-    return 'mint';
+    return "mint";
   }
   if (event.to_address === NULL_ADDRESS || event.to_address === DEAD_ADDRESS) {
-    return 'burn';
+    return "burn";
   }
-  return 'transfer';
+  return "transfer";
 }
 
-jest.mock('../src/utils/utils', () => ({
+jest.mock("../src/utils/utils", () => ({
   formatAmount: jest.fn(mockFormatAmount),
   classifyTransfer: jest.fn(mockClassifyTransfer),
 }));
 
-describe('eventGrouping-utils', () => {
+describe("eventGrouping-utils", () => {
   const mockEvent1: OpenSeaAssetEvent = {
-    event_type: 'sale',
+    event_type: "sale",
     event_timestamp: 1_234_567_890,
-    chain: 'ethereum',
+    chain: "ethereum",
     quantity: 1,
-    transaction: '0xabc123',
+    transaction: "0xabc123",
     nft: {
-      identifier: '1',
-      collection: 'test-collection',
-      contract: '0x123',
-      token_standard: 'erc721',
-      name: 'Test NFT #1',
-      description: 'Test NFT',
-      image_url: 'https://example.com/1.png',
-      display_image_url: 'https://example.com/1.png',
+      identifier: "1",
+      collection: "test-collection",
+      contract: "0x123",
+      token_standard: "erc721",
+      name: "Test NFT #1",
+      description: "Test NFT",
+      image_url: "https://example.com/1.png",
+      display_image_url: "https://example.com/1.png",
       display_animation_url: null,
       metadata_url: null,
-      opensea_url: 'https://opensea.io/assets/ethereum/0x123/1',
-      updated_at: '2023-01-01T00:00:00Z',
+      opensea_url: "https://opensea.io/assets/ethereum/0x123/1",
+      updated_at: "2023-01-01T00:00:00Z",
       is_disabled: false,
       is_nsfw: false,
     },
     payment: {
-      quantity: '1000000000000000000', // 1 ETH
-      token_address: '0x0000000000000000000000000000000000000000',
+      quantity: "1000000000000000000", // 1 ETH
+      token_address: "0x0000000000000000000000000000000000000000",
       decimals: 18,
-      symbol: 'ETH',
+      symbol: "ETH",
     },
-    buyer: '0xbuyer1',
+    buyer: "0xbuyer1",
   };
 
   const mockEvent2: OpenSeaAssetEvent = {
-    event_type: 'sale',
+    event_type: "sale",
     event_timestamp: 1_234_567_890,
-    chain: 'ethereum',
+    chain: "ethereum",
     quantity: 1,
-    transaction: '0xabc123',
+    transaction: "0xabc123",
     nft: {
-      identifier: '2',
-      collection: 'test-collection',
-      contract: '0x123',
-      token_standard: 'erc721',
-      name: 'Test NFT #2',
-      description: 'Test NFT',
-      image_url: 'https://example.com/2.png',
-      display_image_url: 'https://example.com/2.png',
+      identifier: "2",
+      collection: "test-collection",
+      contract: "0x123",
+      token_standard: "erc721",
+      name: "Test NFT #2",
+      description: "Test NFT",
+      image_url: "https://example.com/2.png",
+      display_image_url: "https://example.com/2.png",
       display_animation_url: null,
       metadata_url: null,
-      opensea_url: 'https://opensea.io/assets/ethereum/0x123/2',
-      updated_at: '2023-01-01T00:00:00Z',
+      opensea_url: "https://opensea.io/assets/ethereum/0x123/2",
+      updated_at: "2023-01-01T00:00:00Z",
       is_disabled: false,
       is_nsfw: false,
     },
     payment: {
-      quantity: '500000000000000000', // 0.5 ETH
-      token_address: '0x0000000000000000000000000000000000000000',
+      quantity: "500000000000000000", // 0.5 ETH
+      token_address: "0x0000000000000000000000000000000000000000",
       decimals: 18,
-      symbol: 'ETH',
+      symbol: "ETH",
     },
-    buyer: '0xbuyer1',
+    buyer: "0xbuyer1",
   };
 
   const mockEvent3: OpenSeaAssetEvent = {
-    event_type: 'sale',
+    event_type: "sale",
     event_timestamp: 1_234_567_891,
-    chain: 'ethereum',
+    chain: "ethereum",
     quantity: 1,
-    transaction: '0xdef456',
+    transaction: "0xdef456",
     nft: {
-      identifier: '3',
-      collection: 'test-collection',
-      contract: '0x123',
-      token_standard: 'erc721',
-      name: 'Test NFT #3',
-      description: 'Test NFT',
-      image_url: 'https://example.com/3.png',
-      display_image_url: 'https://example.com/3.png',
+      identifier: "3",
+      collection: "test-collection",
+      contract: "0x123",
+      token_standard: "erc721",
+      name: "Test NFT #3",
+      description: "Test NFT",
+      image_url: "https://example.com/3.png",
+      display_image_url: "https://example.com/3.png",
       display_animation_url: null,
       metadata_url: null,
-      opensea_url: 'https://opensea.io/assets/ethereum/0x123/3',
-      updated_at: '2023-01-01T00:00:00Z',
+      opensea_url: "https://opensea.io/assets/ethereum/0x123/3",
+      updated_at: "2023-01-01T00:00:00Z",
       is_disabled: false,
       is_nsfw: false,
     },
     payment: {
-      quantity: '2000000000000000000', // 2 ETH
-      token_address: '0x0000000000000000000000000000000000000000',
+      quantity: "2000000000000000000", // 2 ETH
+      token_address: "0x0000000000000000000000000000000000000000",
       decimals: 18,
-      symbol: 'ETH',
+      symbol: "ETH",
     },
-    buyer: '0xbuyer2',
+    buyer: "0xbuyer2",
   };
 
   const mockGroupedEvent: GroupedEvent = {
-    kind: 'group',
-    txHash: '0xabc123',
+    kind: "group",
+    txHash: "0xabc123",
     events: [mockEvent1, mockEvent2],
   };
 
-  describe('getDefaultEventGroupConfig', () => {
-    it('should return default config for TWITTER', () => {
-      const config = getDefaultEventGroupConfig('TWITTER');
+  describe("getDefaultEventGroupConfig", () => {
+    it("should return default config for TWITTER", () => {
+      const config = getDefaultEventGroupConfig("TWITTER");
       expect(config).toEqual({
         settleMs: 60_000,
         minGroupSize: 2,
       });
     });
 
-    it('should return default config for DISCORD', () => {
-      const config = getDefaultEventGroupConfig('DISCORD');
+    it("should return default config for DISCORD", () => {
+      const config = getDefaultEventGroupConfig("DISCORD");
       expect(config).toEqual({
         settleMs: 60_000,
         minGroupSize: 2,
       });
     });
 
-    it('should use environment variables when set', () => {
+    it("should use environment variables when set", () => {
       const originalEnv = process.env;
       process.env = {
         ...originalEnv,
-        TWITTER_EVENT_GROUP_SETTLE_MS: '30000',
-        TWITTER_EVENT_GROUP_MIN_GROUP_SIZE: '10',
+        TWITTER_EVENT_GROUP_SETTLE_MS: "30000",
+        TWITTER_EVENT_GROUP_MIN_GROUP_SIZE: "10",
       };
 
-      const config = getDefaultEventGroupConfig('TWITTER');
+      const config = getDefaultEventGroupConfig("TWITTER");
       expect(config).toEqual({
         settleMs: 30_000,
         minGroupSize: 10,
@@ -180,55 +180,55 @@ describe('eventGrouping-utils', () => {
     });
   });
 
-  describe('eventKeyFor', () => {
-    it('should generate unique key for event', () => {
+  describe("eventKeyFor", () => {
+    it("should generate unique key for event", () => {
       const key = eventKeyFor(mockEvent1);
-      expect(key).toBe('1234567890|1|sale');
+      expect(key).toBe("1234567890|1|sale");
     });
 
-    it('should handle missing fields gracefully', () => {
+    it("should handle missing fields gracefully", () => {
       const eventWithoutNft = { ...mockEvent1, nft: undefined };
       const key = eventKeyFor(eventWithoutNft);
-      expect(key).toBe('1234567890||sale');
+      expect(key).toBe("1234567890||sale");
     });
   });
 
-  describe('isGroupedEvent', () => {
-    it('should identify grouped events correctly', () => {
+  describe("isGroupedEvent", () => {
+    it("should identify grouped events correctly", () => {
       expect(isGroupedEvent(mockGroupedEvent)).toBe(true);
       expect(isGroupedEvent(mockEvent1)).toBe(false);
     });
   });
 
-  describe('getPurchasePrice', () => {
-    it('should extract price correctly', () => {
+  describe("getPurchasePrice", () => {
+    it("should extract price correctly", () => {
       const price = getPurchasePrice(mockEvent1);
-      expect(price).toBe(BigInt('1000000000000000000'));
+      expect(price).toBe(BigInt("1000000000000000000"));
     });
 
-    it('should handle missing payment', () => {
+    it("should handle missing payment", () => {
       const eventWithoutPayment = { ...mockEvent1, payment: undefined };
       const price = getPurchasePrice(eventWithoutPayment);
       expect(price).toBe(0n);
     });
 
-    it('should handle invalid quantity', () => {
+    it("should handle invalid quantity", () => {
       const payment = mockEvent1.payment;
       if (!payment) {
-        throw new Error('Payment is required for test');
+        throw new Error("Payment is required for test");
       }
 
       const eventWithInvalidPayment = {
         ...mockEvent1,
-        payment: { ...payment, quantity: 'invalid' },
+        payment: { ...payment, quantity: "invalid" },
       };
       const price = getPurchasePrice(eventWithInvalidPayment);
       expect(price).toBe(0n);
     });
   });
 
-  describe('sortEventsByPrice', () => {
-    it('should sort events by price descending', () => {
+  describe("sortEventsByPrice", () => {
+    it("should sort events by price descending", () => {
       const events = [mockEvent2, mockEvent3, mockEvent1]; // 0.5, 2, 1 ETH
       const sorted = sortEventsByPrice(events);
 
@@ -237,7 +237,7 @@ describe('eventGrouping-utils', () => {
       expect(sorted[2]).toBe(mockEvent2); // 0.5 ETH
     });
 
-    it('should not mutate original array', () => {
+    it("should not mutate original array", () => {
       const events = [mockEvent2, mockEvent3, mockEvent1];
       const originalOrder = [...events];
       sortEventsByPrice(events);
@@ -246,25 +246,25 @@ describe('eventGrouping-utils', () => {
     });
   });
 
-  describe('getTopExpensiveEvents', () => {
-    it('should return top N events with details', () => {
+  describe("getTopExpensiveEvents", () => {
+    it("should return top N events with details", () => {
       const events = [mockEvent2, mockEvent3, mockEvent1]; // 0.5, 2, 1 ETH
       const topEvents = getTopExpensiveEvents(events, 2);
 
       expect(topEvents).toHaveLength(2);
       expect(topEvents[0].event).toBe(mockEvent3); // 2 ETH
-      expect(topEvents[0].price).toBe('2 ETH');
-      expect(topEvents[0].nft?.identifier).toBe('3');
+      expect(topEvents[0].price).toBe("2 ETH");
+      expect(topEvents[0].nft?.identifier).toBe("3");
 
       expect(topEvents[1].event).toBe(mockEvent1); // 1 ETH
-      expect(topEvents[1].price).toBe('1 ETH');
-      expect(topEvents[1].nft?.identifier).toBe('1');
+      expect(topEvents[1].price).toBe("1 ETH");
+      expect(topEvents[1].nft?.identifier).toBe("1");
     });
 
-    it('should use default limit of 4', () => {
+    it("should use default limit of 4", () => {
       const nft = mockEvent1.nft;
       if (!nft) {
-        throw new Error('NFT is required for test');
+        throw new Error("NFT is required for test");
       }
 
       const DEFAULT_LIMIT = 4;
@@ -278,7 +278,7 @@ describe('eventGrouping-utils', () => {
       expect(topEvents).toHaveLength(DEFAULT_LIMIT);
     });
 
-    it('should handle events without payment', () => {
+    it("should handle events without payment", () => {
       const eventWithoutPayment = { ...mockEvent1, payment: undefined };
       const topEvents = getTopExpensiveEvents([eventWithoutPayment]);
 
@@ -287,45 +287,45 @@ describe('eventGrouping-utils', () => {
     });
   });
 
-  describe('calculateTotalSpent', () => {
-    it('should calculate total for ETH payments', () => {
+  describe("calculateTotalSpent", () => {
+    it("should calculate total for ETH payments", () => {
       const events = [mockEvent1, mockEvent2]; // 1 + 0.5 = 1.5 ETH
       const total = calculateTotalSpent(events);
 
-      expect(total).toBe('1.5 ETH');
+      expect(total).toBe("1.5 ETH");
     });
 
-    it('should handle WETH payments', () => {
+    it("should handle WETH payments", () => {
       const payment = mockEvent1.payment;
       if (!payment) {
-        throw new Error('Payment is required for test');
+        throw new Error("Payment is required for test");
       }
 
       const wethEvent = {
         ...mockEvent1,
-        payment: { ...payment, symbol: 'WETH' },
+        payment: { ...payment, symbol: "WETH" },
       };
       const total = calculateTotalSpent([wethEvent]);
 
-      expect(total).toBe('1 WETH');
+      expect(total).toBe("1 WETH");
     });
 
-    it('should ignore non-ETH/WETH payments', () => {
+    it("should ignore non-ETH/WETH payments", () => {
       const payment = mockEvent1.payment;
       if (!payment) {
-        throw new Error('Payment is required for test');
+        throw new Error("Payment is required for test");
       }
 
       const usdcEvent = {
         ...mockEvent1,
-        payment: { ...payment, symbol: 'USDC' },
+        payment: { ...payment, symbol: "USDC" },
       };
       const total = calculateTotalSpent([usdcEvent]);
 
       expect(total).toBeNull();
     });
 
-    it('should return null when no ETH payments', () => {
+    it("should return null when no ETH payments", () => {
       const eventsWithoutPayment = [{ ...mockEvent1, payment: undefined }];
       const total = calculateTotalSpent(eventsWithoutPayment);
 
@@ -333,7 +333,7 @@ describe('eventGrouping-utils', () => {
     });
   });
 
-  describe('EventGroupManager', () => {
+  describe("EventGroupManager", () => {
     let groupManager: EventGroupManager;
 
     beforeEach(() => {
@@ -349,21 +349,21 @@ describe('eventGrouping-utils', () => {
       jest.useRealTimers();
     });
 
-    it('should add events and track them', () => {
+    it("should add events and track them", () => {
       groupManager.addEvents([mockEvent1, mockEvent2]);
 
       const pendingTxs = groupManager.getPendingTxHashes();
-      expect(pendingTxs.has('actor:purchase:0xbuyer1')).toBe(true);
+      expect(pendingTxs.has("actor:purchase:0xbuyer1")).toBe(true);
     });
 
-    it('should identify large pending transactions', () => {
+    it("should identify large pending transactions", () => {
       groupManager.addEvents([mockEvent1, mockEvent2]);
 
       const pendingLarge = groupManager.getPendingLargeTxHashes();
-      expect(pendingLarge.has('actor:purchase:0xbuyer1')).toBe(true);
+      expect(pendingLarge.has("actor:purchase:0xbuyer1")).toBe(true);
     });
 
-    it('should filter processable events', () => {
+    it("should filter processable events", () => {
       // Add events to create a pending group
       groupManager.addEvents([mockEvent1, mockEvent2]);
 
@@ -379,21 +379,21 @@ describe('eventGrouping-utils', () => {
       expect(result.skippedDupes).toBe(0);
     });
 
-    it('should mark events as processed', () => {
+    it("should mark events as processed", () => {
       groupManager.markProcessed(mockEvent1);
 
       expect(groupManager.isProcessed(mockEvent1)).toBe(true);
       expect(groupManager.isProcessed(mockEvent2)).toBe(false);
     });
 
-    it('should mark group as processed', () => {
+    it("should mark group as processed", () => {
       groupManager.markGroupProcessed(mockGroupedEvent);
 
       expect(groupManager.isProcessed(mockEvent1)).toBe(true);
       expect(groupManager.isProcessed(mockEvent2)).toBe(true);
     });
 
-    it('should get ready groups after settle time', () => {
+    it("should get ready groups after settle time", () => {
       groupManager.addEvents([mockEvent1, mockEvent2]);
 
       // Initially no ready groups
@@ -406,11 +406,11 @@ describe('eventGrouping-utils', () => {
 
       readyGroups = groupManager.getReadyGroups();
       expect(readyGroups).toHaveLength(1);
-      expect(readyGroups[0].tx).toBe('actor:purchase:0xbuyer1');
+      expect(readyGroups[0].tx).toBe("actor:purchase:0xbuyer1");
       expect(readyGroups[0].events).toHaveLength(2);
     });
 
-    it('does not flush a group if duplicates reduce below min size', () => {
+    it("does not flush a group if duplicates reduce below min size", () => {
       // Add the same event twice (deduped to unique size 1)
       groupManager.addEvents([mockEvent1, mockEvent1]);
 
@@ -424,7 +424,7 @@ describe('eventGrouping-utils', () => {
     });
   });
 
-  describe('processEventsWithAggregator', () => {
+  describe("processEventsWithAggregator", () => {
     beforeEach(() => {
       jest.useFakeTimers();
     });
@@ -433,15 +433,15 @@ describe('eventGrouping-utils', () => {
       jest.useRealTimers();
     });
 
-    it('should add events to aggregator and return empty groups when not settled', () => {
+    it("should add events to aggregator and return empty groups when not settled", () => {
       const groupManager = new EventGroupManager({
         settleMs: 15_000,
         minGroupSize: 2,
       });
 
       const mintEvents = [
-        createMintEvent('1', '0xminter1', 1_234_567_890),
-        createMintEvent('2', '0xminter1', 1_234_567_890),
+        createMintEvent("1", "0xminter1", 1_234_567_890),
+        createMintEvent("2", "0xminter1", 1_234_567_890),
       ];
 
       const result = processEventsWithAggregator(groupManager, mintEvents);
@@ -452,7 +452,7 @@ describe('eventGrouping-utils', () => {
       expect(result.skippedDupes).toBe(0);
     });
 
-    it('should flush settled groups when called with no new events', () => {
+    it("should flush settled groups when called with no new events", () => {
       const groupManager = new EventGroupManager({
         settleMs: 100, // Short settle time for testing
         minGroupSize: 2,
@@ -460,8 +460,8 @@ describe('eventGrouping-utils', () => {
 
       // First call: add 2 mint events
       const mintEvents = [
-        createMintEvent('1', '0xminter1', 1_234_567_890),
-        createMintEvent('2', '0xminter1', 1_234_567_890),
+        createMintEvent("1", "0xminter1", 1_234_567_890),
+        createMintEvent("2", "0xminter1", 1_234_567_890),
       ];
 
       const result1 = processEventsWithAggregator(groupManager, mintEvents);
@@ -480,7 +480,7 @@ describe('eventGrouping-utils', () => {
       expect(result2.skippedDupes).toBe(0);
     });
 
-    it('should handle multiple polling cycles with mint events', () => {
+    it("should handle multiple polling cycles with mint events", () => {
       const groupManager = new EventGroupManager({
         settleMs: 100,
         minGroupSize: 2,
@@ -488,8 +488,8 @@ describe('eventGrouping-utils', () => {
 
       // Cycle 1: Add 2 mint events
       const cycle1Events = [
-        createMintEvent('1', '0xminter1', 1_234_567_890),
-        createMintEvent('2', '0xminter1', 1_234_567_890),
+        createMintEvent("1", "0xminter1", 1_234_567_890),
+        createMintEvent("2", "0xminter1", 1_234_567_890),
       ];
       const result1 = processEventsWithAggregator(groupManager, cycle1Events);
       expect(result1.readyGroups).toHaveLength(0);
@@ -507,15 +507,15 @@ describe('eventGrouping-utils', () => {
       expect(result3.readyGroups[0]?.events).toHaveLength(2);
     });
 
-    it('should not skip events that do not meet minGroupSize', () => {
+    it("should not skip events that do not meet minGroupSize", () => {
       const groupManager = new EventGroupManager({
         settleMs: 15_000,
         minGroupSize: 3, // Need 3 events to group
       });
 
       const mintEvents = [
-        createMintEvent('1', '0xminter1', 1_234_567_890),
-        createMintEvent('2', '0xminter1', 1_234_567_890),
+        createMintEvent("1", "0xminter1", 1_234_567_890),
+        createMintEvent("2", "0xminter1", 1_234_567_890),
       ];
 
       const result = processEventsWithAggregator(groupManager, mintEvents);
@@ -526,7 +526,7 @@ describe('eventGrouping-utils', () => {
       expect(result.skippedPending).toBe(0);
     });
 
-    it('should handle mixed event types correctly', () => {
+    it("should handle mixed event types correctly", () => {
       const groupManager = new EventGroupManager({
         settleMs: 100,
         minGroupSize: 2,
@@ -534,14 +534,14 @@ describe('eventGrouping-utils', () => {
 
       // Add 2 mints from same address
       const mintEvents = [
-        createMintEvent('1', '0xminter1', 1_234_567_890),
-        createMintEvent('2', '0xminter1', 1_234_567_890),
+        createMintEvent("1", "0xminter1", 1_234_567_890),
+        createMintEvent("2", "0xminter1", 1_234_567_890),
       ];
 
       // Add 1 purchase (should be processable immediately)
       const purchaseEvent: OpenSeaAssetEvent = {
         ...mockEvent1,
-        buyer: '0xbuyer2',
+        buyer: "0xbuyer2",
       };
 
       const result1 = processEventsWithAggregator(groupManager, [
@@ -561,15 +561,15 @@ describe('eventGrouping-utils', () => {
       expect(result2.readyGroups[0]?.events).toHaveLength(2);
     });
 
-    it('should handle duplicate events across calls', () => {
+    it("should handle duplicate events across calls", () => {
       const groupManager = new EventGroupManager({
         settleMs: 15_000,
         minGroupSize: 2,
       });
 
       const mintEvents = [
-        createMintEvent('1', '0xminter1', 1_234_567_890),
-        createMintEvent('2', '0xminter1', 1_234_567_890),
+        createMintEvent("1", "0xminter1", 1_234_567_890),
+        createMintEvent("2", "0xminter1", 1_234_567_890),
       ];
 
       // First call
@@ -586,7 +586,7 @@ describe('eventGrouping-utils', () => {
       expect(pendingTxs.size).toBe(1);
     });
 
-    it('should not create mixed groups due to actor-based keying', () => {
+    it("should not create mixed groups due to actor-based keying", () => {
       const groupManager = new EventGroupManager({
         settleMs: 100,
         minGroupSize: 2,
@@ -594,10 +594,10 @@ describe('eventGrouping-utils', () => {
 
       // Add 2 mints and 2 burns from same address
       // These will create separate groups due to different actor keys
-      const mintEvent1 = createMintEvent('1', '0xuser1', 1_234_567_890);
-      const mintEvent2 = createMintEvent('2', '0xuser1', 1_234_567_890);
-      const burnEvent1 = createBurnEvent('3', '0xuser1', 1_234_567_890);
-      const burnEvent2 = createBurnEvent('4', '0xuser1', 1_234_567_890);
+      const mintEvent1 = createMintEvent("1", "0xuser1", 1_234_567_890);
+      const mintEvent2 = createMintEvent("2", "0xuser1", 1_234_567_890);
+      const burnEvent1 = createBurnEvent("3", "0xuser1", 1_234_567_890);
+      const burnEvent2 = createBurnEvent("4", "0xuser1", 1_234_567_890);
 
       const result1 = processEventsWithAggregator(groupManager, [
         mintEvent1,
@@ -619,20 +619,20 @@ describe('eventGrouping-utils', () => {
       // Verify groups are not mixed
       for (const group of result2.readyGroups) {
         const kind = groupKindForEvents(group.events);
-        expect(['mint', 'burn']).toContain(kind);
-        expect(kind).not.toBe('purchase'); // Since we only have mints and burns
+        expect(["mint", "burn"]).toContain(kind);
+        expect(kind).not.toBe("purchase"); // Since we only have mints and burns
       }
     });
 
-    it('should group multiple offers from the same maker', () => {
+    it("should group multiple offers from the same maker", () => {
       const groupManager = new EventGroupManager({
         settleMs: 100,
         minGroupSize: 2,
       });
 
-      const offer1 = createOfferEvent('1', '0xmaker1', 1_234_567_890);
-      const offer2 = createOfferEvent('2', '0xmaker1', 1_234_567_890);
-      const offer3 = createOfferEvent('3', '0xmaker1', 1_234_567_890);
+      const offer1 = createOfferEvent("1", "0xmaker1", 1_234_567_890);
+      const offer2 = createOfferEvent("2", "0xmaker1", 1_234_567_890);
+      const offer3 = createOfferEvent("3", "0xmaker1", 1_234_567_890);
 
       const result1 = processEventsWithAggregator(groupManager, [
         offer1,
@@ -653,17 +653,17 @@ describe('eventGrouping-utils', () => {
       expect(result2.readyGroups[0]?.events).toHaveLength(3);
 
       const kind = groupKindForEvents(result2.readyGroups[0]?.events ?? []);
-      expect(kind).toBe('offer');
+      expect(kind).toBe("offer");
     });
 
-    it('should group multiple listings from the same maker', () => {
+    it("should group multiple listings from the same maker", () => {
       const groupManager = new EventGroupManager({
         settleMs: 100,
         minGroupSize: 2,
       });
 
-      const listing1 = createListingEvent('1', '0xmaker1', 1_234_567_890);
-      const listing2 = createListingEvent('2', '0xmaker1', 1_234_567_890);
+      const listing1 = createListingEvent("1", "0xmaker1", 1_234_567_890);
+      const listing2 = createListingEvent("2", "0xmaker1", 1_234_567_890);
 
       const result1 = processEventsWithAggregator(groupManager, [
         listing1,
@@ -683,20 +683,20 @@ describe('eventGrouping-utils', () => {
       expect(result2.readyGroups[0]?.events).toHaveLength(2);
 
       const kind = groupKindForEvents(result2.readyGroups[0]?.events ?? []);
-      expect(kind).toBe('listing');
+      expect(kind).toBe("listing");
     });
 
-    it('should not group offers and listings together', () => {
+    it("should not group offers and listings together", () => {
       const groupManager = new EventGroupManager({
         settleMs: 100,
         minGroupSize: 2,
       });
 
       // Same maker but different event types
-      const offer1 = createOfferEvent('1', '0xmaker1', 1_234_567_890);
-      const offer2 = createOfferEvent('2', '0xmaker1', 1_234_567_890);
-      const listing1 = createListingEvent('3', '0xmaker1', 1_234_567_890);
-      const listing2 = createListingEvent('4', '0xmaker1', 1_234_567_890);
+      const offer1 = createOfferEvent("1", "0xmaker1", 1_234_567_890);
+      const offer2 = createOfferEvent("2", "0xmaker1", 1_234_567_890);
+      const listing1 = createListingEvent("3", "0xmaker1", 1_234_567_890);
+      const listing2 = createListingEvent("4", "0xmaker1", 1_234_567_890);
 
       const result1 = processEventsWithAggregator(groupManager, [
         offer1,
@@ -720,8 +720,8 @@ describe('eventGrouping-utils', () => {
       const kinds = result2.readyGroups.map((g) =>
         groupKindForEvents(g.events)
       );
-      expect(kinds).toContain('offer');
-      expect(kinds).toContain('listing');
+      expect(kinds).toContain("offer");
+      expect(kinds).toContain("listing");
     });
   });
 });

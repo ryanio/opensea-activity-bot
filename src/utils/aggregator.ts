@@ -18,18 +18,15 @@ export type AggregatorEvent = {
   order_type?: string;
 };
 
-export const txHashFor = (event: AggregatorEvent): string | undefined => {
-  return (
-    (typeof event?.transaction === 'string' ? event.transaction : undefined) ||
-    (typeof event?.transaction === 'object'
-      ? (event.transaction?.hash as string | undefined)
-      : undefined) ||
-    event?.transaction_hash ||
-    event?.tx_hash ||
-    event?.hash ||
-    undefined
-  );
-};
+export const txHashFor = (event: AggregatorEvent): string | undefined =>
+  (typeof event?.transaction === "string" ? event.transaction : undefined) ||
+  (typeof event?.transaction === "object"
+    ? (event.transaction?.hash as string | undefined)
+    : undefined) ||
+  event?.transaction_hash ||
+  event?.tx_hash ||
+  event?.hash ||
+  undefined;
 
 type EventGroupAggregatorOptions = {
   settleMs: number;
@@ -52,9 +49,9 @@ export class EventGroupAggregator {
   }
 
   private keyForEvent(event: AggregatorEvent): string {
-    const ts = String(event?.event_timestamp ?? '');
+    const ts = String(event?.event_timestamp ?? "");
     const nft = event?.nft ?? event?.asset ?? {};
-    const tokenId = String(nft?.identifier ?? nft?.token_id ?? '');
+    const tokenId = String(nft?.identifier ?? nft?.token_id ?? "");
     return `${ts}|${tokenId}`;
   }
 

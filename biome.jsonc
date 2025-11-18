@@ -1,6 +1,6 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.2.2/schema.json",
-  "extends": ["ultracite"],
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "extends": ["ultracite/core"],
   "javascript": {
     "globals": ["jest", "describe", "it", "expect", "beforeEach"]
   },

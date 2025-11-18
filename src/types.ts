@@ -1,12 +1,12 @@
 // Shared event selection type for config (do not use TS enum per project rules)
 
 export const BotEvent = {
-  listing: 'listing',
-  offer: 'offer',
-  sale: 'sale',
-  transfer: 'transfer',
-  mint: 'mint',
-  burn: 'burn',
+  listing: "listing",
+  offer: "offer",
+  sale: "sale",
+  transfer: "transfer",
+  mint: "mint",
+  burn: "burn",
 } as const;
 
 export type BotEvent = (typeof BotEvent)[keyof typeof BotEvent];
@@ -74,13 +74,13 @@ export type OpenSeaNFT = {
 
 export type OpenSeaAssetEvent = {
   event_type:
-    | 'sale'
-    | 'transfer'
-    | 'mint'
-    | 'listing'
-    | 'offer'
-    | 'trait_offer'
-    | 'collection_offer';
+    | "sale"
+    | "transfer"
+    | "mint"
+    | "listing"
+    | "offer"
+    | "trait_offer"
+    | "collection_offer";
   event_timestamp: number;
   transaction?: string;
   order_hash?: string;

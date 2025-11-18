@@ -1,11 +1,11 @@
-import type { OpenSeaAssetEvent } from '../src/types';
-import { eventKeyFor } from '../src/utils/event-grouping';
-import { LRUCache } from '../src/utils/lru-cache';
+import type { OpenSeaAssetEvent } from "../src/types";
+import { eventKeyFor } from "../src/utils/event-grouping";
+import { LRUCache } from "../src/utils/lru-cache";
 
 // Import JSON fixture
-const salesFixture = require('./fixtures/opensea/events-sales.json');
+const salesFixture = require("./fixtures/opensea/events-sales.json");
 
-describe('OpenSea Fetching Integration', () => {
+describe("OpenSea Fetching Integration", () => {
   const CACHE_SIZE = 1000;
   let fetchedEventsCache: LRUCache<string, boolean>;
   let lastEventTimestamp: number;
@@ -54,7 +54,7 @@ describe('OpenSea Fetching Integration', () => {
     return events;
   };
 
-  it('should prevent duplicate events on repeated API calls', () => {
+  it("should prevent duplicate events on repeated API calls", () => {
     const apiEvents = salesFixture.asset_events as OpenSeaAssetEvent[];
 
     // First fetch - should return all events
@@ -72,7 +72,7 @@ describe('OpenSea Fetching Integration', () => {
     }
   });
 
-  it('should handle mixed new and duplicate events', () => {
+  it("should handle mixed new and duplicate events", () => {
     const apiEvents = salesFixture.asset_events as OpenSeaAssetEvent[];
     const halfEvents = apiEvents.slice(0, Math.floor(apiEvents.length / 2));
 
@@ -86,7 +86,7 @@ describe('OpenSea Fetching Integration', () => {
     expect(secondFetch.length).toBe(expectedNewEvents);
   });
 
-  it('should properly update lastEventTimestamp', () => {
+  it("should properly update lastEventTimestamp", () => {
     const apiEvents = salesFixture.asset_events as OpenSeaAssetEvent[];
     const initialTimestamp = lastEventTimestamp;
 
@@ -99,7 +99,7 @@ describe('OpenSea Fetching Integration', () => {
     expect(lastEventTimestamp).toBeGreaterThan(initialTimestamp);
   });
 
-  it('should handle events with same timestamp correctly', () => {
+  it("should handle events with same timestamp correctly", () => {
     // Create events with identical timestamps
     const baseEvent = salesFixture.asset_events[0] as OpenSeaAssetEvent;
     const EXPECTED_EVENT_COUNT = 3;
@@ -107,19 +107,19 @@ describe('OpenSea Fetching Integration', () => {
       {
         ...baseEvent,
         nft: baseEvent.nft
-          ? { ...baseEvent.nft, identifier: '1001' }
+          ? { ...baseEvent.nft, identifier: "1001" }
           : undefined,
       },
       {
         ...baseEvent,
         nft: baseEvent.nft
-          ? { ...baseEvent.nft, identifier: '1002' }
+          ? { ...baseEvent.nft, identifier: "1002" }
           : undefined,
       },
       {
         ...baseEvent,
         nft: baseEvent.nft
-          ? { ...baseEvent.nft, identifier: '1003' }
+          ? { ...baseEvent.nft, identifier: "1003" }
           : undefined,
       },
     ];
@@ -136,38 +136,38 @@ describe('OpenSea Fetching Integration', () => {
     expect(lastEventTimestamp).toBe(baseEvent.event_timestamp + 1);
   });
 
-  it('should demonstrate the fix for the original issue', () => {
+  it("should demonstrate the fix for the original issue", () => {
     // Simulate the scenario from the user's logs
     const saleEvent: OpenSeaAssetEvent = {
       event_timestamp: 1_726_503_751, // Common timestamp
-      event_type: 'sale',
-      chain: 'ethereum',
+      event_type: "sale",
+      chain: "ethereum",
       quantity: 1,
       nft: {
-        identifier: '7691',
-        collection: 'glyphbots',
-        contract: '0xb6c2c2d2999c1b532e089a7ad4cb7f8c91cf5075',
-        token_standard: 'erc721',
-        name: 'Prismspark #7691',
-        description: '',
-        image_url: '',
-        display_image_url: '',
+        identifier: "7691",
+        collection: "glyphbots",
+        contract: "0xb6c2c2d2999c1b532e089a7ad4cb7f8c91cf5075",
+        token_standard: "erc721",
+        name: "Prismspark #7691",
+        description: "",
+        image_url: "",
+        display_image_url: "",
         display_animation_url: null,
         metadata_url: null,
-        opensea_url: '',
-        updated_at: '',
+        opensea_url: "",
+        updated_at: "",
         is_disabled: false,
         is_nsfw: false,
       },
       payment: {
-        quantity: '560000000000000',
-        token_address: '0x0000000000000000000000000000000000000000',
+        quantity: "560000000000000",
+        token_address: "0x0000000000000000000000000000000000000000",
         decimals: 18,
-        symbol: 'ETH',
+        symbol: "ETH",
       },
-      transaction: '0xtest123',
-      buyer: '0xralxz',
-      seller: '0xseller',
+      transaction: "0xtest123",
+      buyer: "0xralxz",
+      seller: "0xseller",
     };
 
     // First call - event is new

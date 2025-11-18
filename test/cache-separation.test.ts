@@ -1,11 +1,11 @@
-import type { OpenSeaAssetEvent } from '../src/types';
-import { eventKeyFor } from '../src/utils/event-grouping';
-import { LRUCache } from '../src/utils/lru-cache';
+import type { OpenSeaAssetEvent } from "../src/types";
+import { eventKeyFor } from "../src/utils/event-grouping";
+import { LRUCache } from "../src/utils/lru-cache";
 
 // Import JSON fixture
-const salesFixture = require('./fixtures/opensea/events-sales.json');
+const salesFixture = require("./fixtures/opensea/events-sales.json");
 
-describe('Cache Separation - Why Both Caches Are Needed', () => {
+describe("Cache Separation - Why Both Caches Are Needed", () => {
   const FETCH_CACHE_SIZE = 1000;
   const TWEET_CACHE_SIZE = 2000;
 
@@ -19,7 +19,7 @@ describe('Cache Separation - Why Both Caches Are Needed', () => {
     mockEvent = salesFixture.asset_events[0] as OpenSeaAssetEvent;
   });
 
-  it('should demonstrate why OpenSea cache cannot replace Twitter cache', () => {
+  it("should demonstrate why OpenSea cache cannot replace Twitter cache", () => {
     const eventKey = eventKeyFor(mockEvent);
 
     // Scenario: Event is fetched and cached at OpenSea level
@@ -47,7 +47,7 @@ describe('Cache Separation - Why Both Caches Are Needed', () => {
     // - Tweet cache prevents duplicate successful tweets
   });
 
-  it('should demonstrate queue deduplication scenarios', () => {
+  it("should demonstrate queue deduplication scenarios", () => {
     const eventKey = eventKeyFor(mockEvent);
 
     // Event gets added to tweet queue multiple times due to retries/errors
@@ -72,25 +72,25 @@ describe('Cache Separation - Why Both Caches Are Needed', () => {
     expect(tweetedEventsCache.get(eventKey)).toBe(true);
   });
 
-  it('should demonstrate event group aggregation deduplication', () => {
+  it("should demonstrate event group aggregation deduplication", () => {
     // Create multiple events that could be part of a group
     const groupEvents: OpenSeaAssetEvent[] = [
       {
         ...mockEvent,
         nft: mockEvent.nft
-          ? { ...mockEvent.nft, identifier: '1001' }
+          ? { ...mockEvent.nft, identifier: "1001" }
           : undefined,
       },
       {
         ...mockEvent,
         nft: mockEvent.nft
-          ? { ...mockEvent.nft, identifier: '1002' }
+          ? { ...mockEvent.nft, identifier: "1002" }
           : undefined,
       },
       {
         ...mockEvent,
         nft: mockEvent.nft
-          ? { ...mockEvent.nft, identifier: '1003' }
+          ? { ...mockEvent.nft, identifier: "1003" }
           : undefined,
       },
     ];
@@ -102,7 +102,7 @@ describe('Cache Separation - Why Both Caches Are Needed', () => {
     }
 
     // Events are aggregated into a group
-    const groupKey = 'group_tx_hash_123';
+    const groupKey = "group_tx_hash_123";
 
     // Individual events should not be tweeted if they're part of a group
     // Mark the group as tweeted, but also mark individual events to prevent duplicate processing
@@ -120,7 +120,7 @@ describe('Cache Separation - Why Both Caches Are Needed', () => {
     }
   });
 
-  it('should demonstrate platform-specific caching needs', () => {
+  it("should demonstrate platform-specific caching needs", () => {
     const eventKey = eventKeyFor(mockEvent);
 
     // Event is fetched once
@@ -149,7 +149,7 @@ describe('Cache Separation - Why Both Caches Are Needed', () => {
     // Each platform has different timing, retries, and success criteria
   });
 
-  it('should demonstrate memory efficiency of separate caches', () => {
+  it("should demonstrate memory efficiency of separate caches", () => {
     const OPENSEA_CACHE_SIZE = 1000;
     const TWITTER_CACHE_SIZE = 2000;
 

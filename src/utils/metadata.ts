@@ -1,6 +1,6 @@
-import { fetchNFT } from '../opensea';
-import type { OpenSeaAssetEvent } from '../types';
-import { classifyTransfer } from './utils';
+import { fetchNFT } from "../opensea";
+import type { OpenSeaAssetEvent } from "../types";
+import { classifyTransfer } from "./utils";
 
 /**
  * Refetches NFT metadata for a single event if it's a mint.
@@ -9,7 +9,7 @@ import { classifyTransfer } from './utils';
 export const refetchMintMetadataForEvent = async (
   event: OpenSeaAssetEvent
 ): Promise<void> => {
-  if (event.event_type !== 'transfer' || classifyTransfer(event) !== 'mint') {
+  if (event.event_type !== "transfer" || classifyTransfer(event) !== "mint") {
     return;
   }
 
@@ -42,7 +42,7 @@ export const refetchMintMetadata = async (
   events: OpenSeaAssetEvent[]
 ): Promise<number> => {
   const mintEvents = events.filter(
-    (e) => e.event_type === 'transfer' && classifyTransfer(e) === 'mint'
+    (e) => e.event_type === "transfer" && classifyTransfer(e) === "mint"
   );
 
   if (mintEvents.length === 0) {

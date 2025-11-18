@@ -1,18 +1,18 @@
-import { EventType } from '../opensea';
-import { BotEvent, botEventSet, type OpenSeaAssetEvent } from '../types';
-import { effectiveEventTypeFor } from './event-types';
+import { EventType } from "../opensea";
+import { BotEvent, botEventSet, type OpenSeaAssetEvent } from "../types";
+import { effectiveEventTypeFor } from "./event-types";
 
 export const parseEvents = (raw: string | undefined): Set<BotEvent> => {
-  const parts = (raw ?? '')
-    .split(',')
+  const parts = (raw ?? "")
+    .split(",")
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
   const invalid = parts.filter((t) => !botEventSet.has(t));
   if (invalid.length > 0) {
     throw new Error(
-      `Invalid events value(s): ${invalid.join(', ')}. Allowed: ${Object.values(
+      `Invalid events value(s): ${invalid.join(", ")}. Allowed: ${Object.values(
         BotEvent
-      ).join(', ')}`
+      ).join(", ")}`
     );
   }
   return new Set(parts as BotEvent[]);

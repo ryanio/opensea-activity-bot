@@ -1,13 +1,13 @@
-import { logger } from './logger';
+import { logger } from "./logger";
 
 // Local timeout to avoid cross-module deps in tests
 const timeout = (ms: number) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 export type QueueErrorClassification =
-  | { type: 'rate_limit'; pauseUntilMs: number }
-  | { type: 'transient' }
-  | { type: 'fatal' };
+  | { type: "rate_limit"; pauseUntilMs: number }
+  | { type: "transient" }
+  | { type: "fatal" };
 
 export type WorkItem<T> = { item: T; attempts: number };
 
@@ -55,10 +55,10 @@ export class AsyncQueue<T> {
       }
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
       this.processLoop().catch((err) => {
-        logger.error('[Queue] Uncaught error in processLoop:', err);
+        logger.error("[Queue] Uncaught error in processLoop:", err);
       });
     } else if (this.options.debug) {
-      logger.debug('[Queue] Queue already processing, skipping start()');
+      logger.debug("[Queue] Queue already processing, skipping start()");
     }
   }
 
@@ -77,7 +77,7 @@ export class AsyncQueue<T> {
   private async processLoop() {
     if (this.isProcessing) {
       if (this.options.debug) {
-        logger.debug('[Queue] processLoop called but already processing');
+        logger.debug("[Queue] processLoop called but already processing");
       }
       return;
     }
@@ -85,7 +85,7 @@ export class AsyncQueue<T> {
     try {
       await this.processQueueItems();
       if (this.options.debug) {
-        logger.debug('[Queue] Finished processing all items');
+        logger.debug("[Queue] Finished processing all items");
       }
     } finally {
       this.isProcessing = false;
@@ -155,7 +155,7 @@ export class AsyncQueue<T> {
       return true;
     } catch (error: unknown) {
       const classification = this.options.classifyError(error);
-      if (classification.type === 'rate_limit') {
+      if (classification.type === "rate_limit") {
         const waitMs = Math.max(
           classification.pauseUntilMs - Date.now(),
           this.options.backoffBaseMs
@@ -166,7 +166,7 @@ export class AsyncQueue<T> {
         }
         return false; // retry same item after pause
       }
-      if (classification.type === 'transient') {
+      if (classification.type === "transient") {
         next.attempts += 1;
         const waitMs = this.calcBackoffMs(next.attempts);
         if (this.options.debug) {
@@ -179,7 +179,7 @@ export class AsyncQueue<T> {
         return false; // retry same item after backoff
       }
       // fatal
-      logger.error('[Queue] Fatal error processing item, dropping:', error);
+      logger.error("[Queue] Fatal error processing item, dropping:", error);
       this.list.shift();
       return false;
     }

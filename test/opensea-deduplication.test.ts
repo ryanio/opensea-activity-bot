@@ -1,13 +1,13 @@
-import type { OpenSeaAssetEvent } from '../src/types';
-import { eventKeyFor } from '../src/utils/event-grouping';
-import { LRUCache } from '../src/utils/lru-cache';
+import type { OpenSeaAssetEvent } from "../src/types";
+import { eventKeyFor } from "../src/utils/event-grouping";
+import { LRUCache } from "../src/utils/lru-cache";
 
 // Import JSON fixture
-const salesFixture = require('./fixtures/opensea/events-sales.json');
+const salesFixture = require("./fixtures/opensea/events-sales.json");
 
-describe('Event Deduplication System', () => {
-  describe('Event Key Generation', () => {
-    it('should generate consistent event keys for the same event', () => {
+describe("Event Deduplication System", () => {
+  describe("Event Key Generation", () => {
+    it("should generate consistent event keys for the same event", () => {
       // Use real event from fixture
       const event = salesFixture.asset_events[0] as OpenSeaAssetEvent;
 
@@ -20,7 +20,7 @@ describe('Event Deduplication System', () => {
       );
     });
 
-    it('should generate different keys for different events', () => {
+    it("should generate different keys for different events", () => {
       const events = salesFixture.asset_events as OpenSeaAssetEvent[];
       const keys = events.map(eventKeyFor);
 
@@ -29,19 +29,19 @@ describe('Event Deduplication System', () => {
       expect(uniqueKeys.size).toBe(keys.length);
     });
 
-    it('should handle events without nft.identifier', () => {
+    it("should handle events without nft.identifier", () => {
       const event: Partial<OpenSeaAssetEvent> = {
         event_timestamp: 1_756_492_379,
-        event_type: 'sale',
+        event_type: "sale",
         // No nft field
       };
 
       const key = eventKeyFor(event as OpenSeaAssetEvent);
-      expect(key).toBe('1756492379||sale');
+      expect(key).toBe("1756492379||sale");
     });
   });
 
-  describe('OpenSea Fetch Cache', () => {
+  describe("OpenSea Fetch Cache", () => {
     const CACHE_SIZE = 100;
     let fetchCache: LRUCache<string, boolean>;
 
@@ -49,7 +49,7 @@ describe('Event Deduplication System', () => {
       fetchCache = new LRUCache<string, boolean>(CACHE_SIZE);
     });
 
-    it('should prevent duplicate events from being returned', () => {
+    it("should prevent duplicate events from being returned", () => {
       const event = salesFixture.asset_events[0] as OpenSeaAssetEvent;
       const eventKey = eventKeyFor(event);
 
@@ -61,20 +61,20 @@ describe('Event Deduplication System', () => {
       expect(fetchCache.get(eventKey)).toBe(true);
     });
 
-    it('should handle cache eviction properly', () => {
+    it("should handle cache eviction properly", () => {
       const smallCache = new LRUCache<string, boolean>(2);
 
-      smallCache.put('event1', true);
-      smallCache.put('event2', true);
-      smallCache.put('event3', true); // Should evict event1
+      smallCache.put("event1", true);
+      smallCache.put("event2", true);
+      smallCache.put("event3", true); // Should evict event1
 
-      expect(smallCache.get('event1')).toBeUndefined();
-      expect(smallCache.get('event2')).toBe(true);
-      expect(smallCache.get('event3')).toBe(true);
+      expect(smallCache.get("event1")).toBeUndefined();
+      expect(smallCache.get("event2")).toBe(true);
+      expect(smallCache.get("event3")).toBe(true);
     });
   });
 
-  describe('Twitter Tweet Cache', () => {
+  describe("Twitter Tweet Cache", () => {
     const CACHE_SIZE = 100;
     let tweetCache: LRUCache<string, boolean>;
 
@@ -82,7 +82,7 @@ describe('Event Deduplication System', () => {
       tweetCache = new LRUCache<string, boolean>(CACHE_SIZE);
     });
 
-    it('should prevent duplicate tweets', () => {
+    it("should prevent duplicate tweets", () => {
       const event = salesFixture.asset_events[0] as OpenSeaAssetEvent;
       const eventKey = eventKeyFor(event);
 
@@ -97,8 +97,8 @@ describe('Event Deduplication System', () => {
     });
   });
 
-  describe('Cache Independence', () => {
-    it('should demonstrate that both caches serve different purposes', () => {
+  describe("Cache Independence", () => {
+    it("should demonstrate that both caches serve different purposes", () => {
       const CACHE_SIZE = 100;
       const fetchCache = new LRUCache<string, boolean>(CACHE_SIZE);
       const tweetCache = new LRUCache<string, boolean>(CACHE_SIZE);
@@ -120,7 +120,7 @@ describe('Event Deduplication System', () => {
       // Now both caches prevent reprocessing
     });
 
-    it('should handle tweet failure scenarios', () => {
+    it("should handle tweet failure scenarios", () => {
       const CACHE_SIZE = 100;
       const fetchCache = new LRUCache<string, boolean>(CACHE_SIZE);
       const tweetCache = new LRUCache<string, boolean>(CACHE_SIZE);

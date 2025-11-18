@@ -4,12 +4,12 @@ import {
   EmbedBuilder,
   type MessageCreateOptions,
   type TextBasedChannel,
-} from 'discord.js';
-import { format } from 'timeago.js';
-import { EventType, getCollectionSlug, opensea, username } from '../opensea';
-import { BotEvent, type OpenSeaAssetEvent } from '../types';
-import type { AggregatorEvent } from '../utils/aggregator';
-import { MS_PER_SECOND } from '../utils/constants';
+} from "discord.js";
+import { format } from "timeago.js";
+import { EventType, getCollectionSlug, opensea, username } from "../opensea";
+import { BotEvent, type OpenSeaAssetEvent } from "../types";
+import type { AggregatorEvent } from "../utils/aggregator";
+import { MS_PER_SECOND } from "../utils/constants";
 import {
   calculateTotalSpent,
   EventGroupManager,
@@ -20,27 +20,27 @@ import {
   groupKindForEvents,
   primaryActorAddressForGroup,
   processEventsWithAggregator,
-} from '../utils/event-grouping';
-import { effectiveEventTypeFor } from '../utils/event-types';
+} from "../utils/event-grouping";
+import { effectiveEventTypeFor } from "../utils/event-types";
 import {
   openseaCollectionActivityUrl,
   openseaProfileActivityUrl,
   openseaProfileCollectionUrl,
-} from '../utils/links';
-import { prefixedLogger } from '../utils/logger';
-import { refetchMintMetadata } from '../utils/metadata';
+} from "../utils/links";
+import { prefixedLogger } from "../utils/logger";
+import { refetchMintMetadata } from "../utils/metadata";
 import {
   classifyTransfer,
   formatAmount,
   formatEditionsText,
   imageForNFT,
   timeout,
-} from '../utils/utils';
+} from "../utils/utils";
 
-const log = prefixedLogger('Discord');
+const log = prefixedLogger("Discord");
 
 // Initialize event group manager for Discord
-const groupConfig = getDefaultEventGroupConfig('DISCORD');
+const groupConfig = getDefaultEventGroupConfig("DISCORD");
 const groupManager = new EventGroupManager(groupConfig);
 
 // Type guard for sendable channels
@@ -52,7 +52,7 @@ const isSendableChannel = (
   const maybe = ch as unknown as {
     send?: (options: MessageCreateOptions) => Promise<unknown>;
   };
-  return typeof maybe.send === 'function';
+  return typeof maybe.send === "function";
 };
 
 type ChannelEvents = [
@@ -66,10 +66,10 @@ export const channelsWithEvents = (): ChannelEvents => {
   }
 
   const list: ChannelEvents = [];
-  for (const channel of DISCORD_EVENTS.split('&')) {
-    const channelWithEvents = channel.split('=');
+  for (const channel of DISCORD_EVENTS.split("&")) {
+    const channelWithEvents = channel.split("=");
     const channelId = channelWithEvents[0];
-    const eventTypes = channelWithEvents[1].split(',');
+    const eventTypes = channelWithEvents[1].split(",");
     list.push([channelId, eventTypes as unknown as (EventType | BotEvent)[]]);
   }
 
@@ -95,7 +95,7 @@ const channelsForEventType = (
   return channels;
 };
 
-import { colorForEvent } from '../utils/event-types';
+import { colorForEvent } from "../utils/event-types";
 
 const colorFor = (eventType: EventType | BotEvent, orderType: string) =>
   colorForEvent(eventType, orderType);
@@ -113,38 +113,38 @@ const buildOrderEmbed = async (
     criteria: { trait: { type: string; value: string } };
   };
   const fields: Field[] = [];
-  let title = '';
+  let title = "";
   const { quantity, decimals, symbol } = payment;
   const inTime = format(new Date(expiration_date * MS_PER_SECOND));
-  if (order_type === 'auction') {
-    title += 'Auction:';
+  if (order_type === "auction") {
+    title += "Auction:";
     const price = formatAmount(quantity, decimals, symbol);
-    fields.push({ name: 'Starting Price', value: price });
-    fields.push({ name: 'Ends', value: inTime });
-  } else if (order_type === 'trait_offer') {
+    fields.push({ name: "Starting Price", value: price });
+    fields.push({ name: "Ends", value: inTime });
+  } else if (order_type === "trait_offer") {
     const traitType = criteria.trait.type;
     const traitValue = criteria.trait.value;
     title += `Trait offer: ${traitType} -> ${traitValue}`;
     const price = formatAmount(quantity, decimals, symbol);
-    fields.push({ name: 'Price', value: price });
-    fields.push({ name: 'Expires', value: inTime });
-  } else if (order_type === 'item_offer') {
-    title += 'Item offer:';
+    fields.push({ name: "Price", value: price });
+    fields.push({ name: "Expires", value: inTime });
+  } else if (order_type === "item_offer") {
+    title += "Item offer:";
     const price = formatAmount(quantity, decimals, symbol);
-    fields.push({ name: 'Price', value: price });
-    fields.push({ name: 'Expires', value: inTime });
-  } else if (order_type === 'collection_offer') {
-    title += 'Collection offer';
+    fields.push({ name: "Price", value: price });
+    fields.push({ name: "Expires", value: inTime });
+  } else if (order_type === "collection_offer") {
+    title += "Collection offer";
     const price = formatAmount(quantity, decimals, symbol);
-    fields.push({ name: 'Price', value: price });
-    fields.push({ name: 'Expires', value: inTime });
+    fields.push({ name: "Price", value: price });
+    fields.push({ name: "Expires", value: inTime });
   } else {
-    title += 'Listed for sale:';
+    title += "Listed for sale:";
     const price = formatAmount(quantity, decimals, symbol);
-    fields.push({ name: 'Price', value: price });
-    fields.push({ name: 'Expires', value: inTime });
+    fields.push({ name: "Price", value: price });
+    fields.push({ name: "Expires", value: inTime });
   }
-  fields.push({ name: 'By', value: await username(maker) });
+  fields.push({ name: "By", value: await username(maker) });
   return { title, fields };
 };
 
@@ -158,9 +158,9 @@ const buildSaleEmbed = async (
   const fields: Field[] = [];
   const { quantity, decimals, symbol } = payment;
   const price = formatAmount(quantity, decimals, symbol);
-  fields.push({ name: 'Price', value: price });
-  fields.push({ name: 'By', value: await username(buyer) });
-  return { title: 'Purchased:', fields };
+  fields.push({ name: "Price", value: price });
+  fields.push({ name: "By", value: await username(buyer) });
+  return { title: "Purchased:", fields };
 };
 
 const buildTransferEmbed = async (
@@ -172,7 +172,7 @@ const buildTransferEmbed = async (
   };
   const kind = classifyTransfer(event as OpenSeaAssetEvent);
   const fields: Field[] = [];
-  if (kind === 'mint') {
+  if (kind === "mint") {
     // Include editions for ERC1155 mints if quantity > 1
     const quantity = (event as unknown as { quantity?: number })?.quantity;
     const tokenStandard =
@@ -187,16 +187,16 @@ const buildTransferEmbed = async (
 
     const toName = await username(to_address);
     const toValue = formatEditionsText(toName, tokenStandard, quantity);
-    fields.push({ name: 'To', value: toValue });
-    return { title: 'Minted:', fields };
+    fields.push({ name: "To", value: toValue });
+    return { title: "Minted:", fields };
   }
-  if (kind === 'burn') {
-    fields.push({ name: 'From', value: await username(from_address) });
-    return { title: 'Burned:', fields };
+  if (kind === "burn") {
+    fields.push({ name: "From", value: await username(from_address) });
+    return { title: "Burned:", fields };
   }
-  fields.push({ name: 'From', value: await username(from_address) });
-  fields.push({ name: 'To', value: await username(to_address) });
-  return { title: 'Transferred:', fields };
+  fields.push({ name: "From", value: await username(from_address) });
+  fields.push({ name: "To", value: await username(to_address) });
+  return { title: "Transferred:", fields };
 };
 
 const isOrderLikeType = (t: unknown): boolean => {
@@ -204,8 +204,8 @@ const isOrderLikeType = (t: unknown): boolean => {
   return (
     s === BotEvent.listing ||
     s === BotEvent.offer ||
-    s === 'trait_offer' ||
-    s === 'collection_offer'
+    s === "trait_offer" ||
+    s === "collection_offer"
   );
 };
 
@@ -226,7 +226,7 @@ const embed = async (event: AggregatorEvent) => {
     nft = asset;
   }
   let fields: Field[] = [];
-  let title = '';
+  let title = "";
   if (isOrderLikeType(event_type)) {
     ({ title, fields } = await buildOrderEmbed(event));
   } else if (event_type === EventType.sale) {
@@ -243,7 +243,7 @@ const embed = async (event: AggregatorEvent) => {
     .setColor(
       colorFor(
         event_type as EventType,
-        order_type ?? ''
+        order_type ?? ""
       ) as unknown as ColorResolvable
     )
     .setTitle(title)
@@ -280,11 +280,11 @@ const getGroupTitleAndActivityType = (
     purchase: `${count} items purchased`,
   };
   const activityTypeMap: Record<GroupKind, string> = {
-    burn: 'transfer',
-    mint: 'mint',
-    offer: 'offer',
-    listing: 'listing',
-    purchase: 'sale',
+    burn: "transfer",
+    mint: "mint",
+    offer: "offer",
+    listing: "listing",
+    purchase: "sale",
   };
   return {
     title: titleMap[kind],
@@ -295,11 +295,11 @@ const getGroupTitleAndActivityType = (
 // Helper to get actor label for group kind
 const getActorLabelForKind = (kind: GroupKind): string => {
   const labelMap: Record<GroupKind, string> = {
-    burn: 'By',
-    mint: 'Minter',
-    offer: 'Offerer',
-    listing: 'Lister',
-    purchase: 'Buyer',
+    burn: "By",
+    mint: "Minter",
+    offer: "Offerer",
+    listing: "Lister",
+    purchase: "Buyer",
   };
   return labelMap[kind];
 };
@@ -315,8 +315,8 @@ const buildGroupEmbed = async (group: GroupedEvent): Promise<EmbedBuilder> => {
   const { title, activityType } = getGroupTitleAndActivityType(kind, count);
   const fields: Field[] = [];
 
-  if (kind === 'purchase' && totalSpent) {
-    fields.push({ name: 'Total Spent', value: totalSpent, inline: true });
+  if (kind === "purchase" && totalSpent) {
+    fields.push({ name: "Total Spent", value: totalSpent, inline: true });
   }
 
   if (actorAddress) {
@@ -328,13 +328,13 @@ const buildGroupEmbed = async (group: GroupedEvent): Promise<EmbedBuilder> => {
   if (actorAddress) {
     // Use collection-filtered URL for mints and purchases, activity-filtered for others
     let url: string;
-    if (kind === 'mint' || kind === 'purchase') {
+    if (kind === "mint" || kind === "purchase") {
       url = openseaProfileCollectionUrl(actorAddress, getCollectionSlug());
     } else {
       url = openseaProfileActivityUrl(actorAddress, activityType);
     }
     fields.push({
-      name: 'Activity',
+      name: "Activity",
       value: `[View on OpenSea](${url})`,
       inline: true,
     });
@@ -344,7 +344,7 @@ const buildGroupEmbed = async (group: GroupedEvent): Promise<EmbedBuilder> => {
       activityType
     );
     fields.push({
-      name: 'Activity',
+      name: "Activity",
       value: `[View on OpenSea](${url})`,
       inline: true,
     });
@@ -360,9 +360,9 @@ const buildGroupEmbed = async (group: GroupedEvent): Promise<EmbedBuilder> => {
     const itemsList = topExpensiveItems
       .map((item, index) => {
         const { nft, price } = item;
-        const identifier = nft?.identifier ? `#${nft.identifier}` : '';
-        const name = nft?.name || 'Unknown';
-        const priceText = price ? ` - ${price}` : '';
+        const identifier = nft?.identifier ? `#${nft.identifier}` : "";
+        const name = nft?.name || "Unknown";
+        const priceText = price ? ` - ${price}` : "";
         const url = nft?.opensea_url;
 
         if (url) {
@@ -370,16 +370,16 @@ const buildGroupEmbed = async (group: GroupedEvent): Promise<EmbedBuilder> => {
         }
         return `${index + 1}. ${name} ${identifier}${priceText}`;
       })
-      .join('\n');
+      .join("\n");
 
     fields.push({
-      name: 'Top Items',
+      name: "Top Items",
       value: itemsList,
     });
   }
 
   const groupEmbed = new EmbedBuilder()
-    .setColor('#62b778') // Green color for event groups
+    .setColor("#62b778") // Green color for event groups
     .setTitle(title)
     .setFields(fields)
     .setURL(opensea.collectionURL());
@@ -408,22 +408,21 @@ const messagesForEvents = async (
   return messages;
 };
 
-const login = (client: Client): Promise<void> => {
-  return new Promise<void>((resolve) => {
-    client.on('ready', () => {
+const login = (client: Client): Promise<void> =>
+  new Promise<void>((resolve) => {
+    client.on("ready", () => {
       resolve();
     });
     client.login(process.env.DISCORD_TOKEN);
   });
-};
 
 const getChannels = async (
   client: Client,
   channelEvents: ChannelEvents
 ): Promise<Record<string, TextBasedChannel>> => {
   const channels: Record<string, TextBasedChannel> = {};
-  log.info('✅ Discord bot connected successfully');
-  log.info('📡 Active channels:');
+  log.info("✅ Discord bot connected successfully");
+  log.info("📡 Active channels:");
   for (const [channelId, events] of channelEvents) {
     const channel = await client.channels.fetch(channelId);
     channels[channelId] = channel as TextBasedChannel;
@@ -431,7 +430,7 @@ const getChannels = async (
       (channel as unknown as { name?: string; channelId?: string }).name ??
       (channel as unknown as { name?: string; channelId?: string }).channelId;
     log.info(`   • #${channelName}`);
-    log.info(`     └─ Events: ${events.join(', ')}`);
+    log.info(`     └─ Events: ${events.join(", ")}`);
   }
   return channels;
 };
@@ -445,12 +444,12 @@ const processGroupMessages = async (
     const refetchCount = await refetchMintMetadata(readyGroup.events);
     if (refetchCount > 0) {
       log.info(
-        `Refetched metadata for ${refetchCount} mint event${refetchCount === 1 ? '' : 's'}`
+        `Refetched metadata for ${refetchCount} mint event${refetchCount === 1 ? "" : "s"}`
       );
     }
 
     const group: GroupedEvent = {
-      kind: 'group',
+      kind: "group",
       txHash: readyGroup.tx,
       events: readyGroup.events,
     };
@@ -486,7 +485,7 @@ const processIndividualMessages = async (
   const refetchCount = await refetchMintMetadata(processableEvents);
   if (refetchCount > 0) {
     log.info(
-      `Refetched metadata for ${refetchCount} mint event${refetchCount === 1 ? '' : 's'}`
+      `Refetched metadata for ${refetchCount} mint event${refetchCount === 1 ? "" : "s"}`
     );
   }
 
@@ -505,7 +504,7 @@ const processIndividualMessages = async (
       continue;
     }
 
-    log.info('💬 Sending event notification');
+    log.info("💬 Sending event notification");
 
     for (const channel of channels) {
       if (!isSendableChannel(channel)) {
@@ -546,7 +545,7 @@ export async function messageEvents(events: AggregatorEvent[]) {
 
   if (filteredEvents.length > 0) {
     log.info(
-      `📊 Found ${filteredEvents.length} relevant event${filteredEvents.length === 1 ? '' : 's'} for Discord`
+      `📊 Found ${filteredEvents.length} relevant event${filteredEvents.length === 1 ? "" : "s"} for Discord`
     );
   }
 

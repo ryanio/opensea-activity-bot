@@ -1,6 +1,6 @@
-import { URLSearchParams } from 'node:url';
-import { FixedNumber } from 'ethers';
-import { channelsWithEvents } from './platforms/discord';
+import { URLSearchParams } from "node:url";
+import { FixedNumber } from "ethers";
+import { channelsWithEvents } from "./platforms/discord";
 import type {
   OpenSeaAccount,
   OpenSeaAssetEvent,
@@ -8,13 +8,13 @@ import type {
   OpenSeaEventsResponse,
   OpenSeaNFT,
   OpenSeaNFTResponse,
-} from './types';
-import { txHashFor } from './utils/aggregator';
-import { effectiveEventTypeFor } from './utils/event-types';
-import { parseEvents, wantsOpenSeaEventTypes } from './utils/events';
-import { logger } from './utils/logger';
-import { LRUCache } from './utils/lru-cache';
-import { chain, minOfferETH, shortAddr, unixTimestamp } from './utils/utils';
+} from "./types";
+import { txHashFor } from "./utils/aggregator";
+import { effectiveEventTypeFor } from "./utils/event-types";
+import { parseEvents, wantsOpenSeaEventTypes } from "./utils/events";
+import { logger } from "./utils/logger";
+import { LRUCache } from "./utils/lru-cache";
+import { chain, minOfferETH, shortAddr, unixTimestamp } from "./utils/utils";
 
 const {
   OPENSEA_API_TOKEN,
@@ -50,8 +50,62 @@ const EVENT_LAG_SAFETY_WINDOW_SECONDS = Number(
   OPENSEA_EVENT_LAG_WINDOW ?? DEFAULT_EVENT_LAG_SAFETY_WINDOW_SECONDS
 );
 
+type FetchSummaryStatus = "ok" | "noop" | "empty" | "error";
+
+type FetchSummary = {
+  status: FetchSummaryStatus;
+  fetched: number;
+  processed: number;
+  deduped: number;
+  filteredPrivate: number;
+  filteredLowOffers: number;
+  pages: number;
+  after: number;
+  limit: number;
+  eventTypes: EventType[];
+  oldestTimestamp?: number;
+  newestTimestamp?: number;
+  nextCursor?: string;
+  error?: string;
+};
+
+const logFetchSummary = (summary: FetchSummary, durationMs: number) => {
+  const parts = [
+    "[FetchSummary]",
+    `status=${summary.status}`,
+    `after=${summary.after}`,
+    `lag=${EVENT_LAG_SAFETY_WINDOW_SECONDS}s`,
+    `limit=${summary.limit}`,
+    `types=${summary.eventTypes.join("|")}`,
+    `pages=${summary.pages}`,
+    `fetched=${summary.fetched}`,
+    `processed=${summary.processed}`,
+    `deduped=${summary.deduped}`,
+    `filteredPrivate=${summary.filteredPrivate}`,
+    `filteredLow=${summary.filteredLowOffers}`,
+    `durationMs=${durationMs}`,
+  ];
+  if (summary.oldestTimestamp !== undefined) {
+    parts.push(`oldestTs=${summary.oldestTimestamp}`);
+  }
+  if (summary.newestTimestamp !== undefined) {
+    parts.push(`newestTs=${summary.newestTimestamp}`);
+  }
+  if (summary.nextCursor) {
+    const preview = summary.nextCursor.slice(
+      0,
+      SUBSTRING_LENGTH_FOR_CURSOR_LOG
+    );
+    parts.push(`nextCursor=${preview}…`);
+  }
+  if (summary.error) {
+    parts.push(`error=${summary.error}`);
+  }
+  logger.info(parts.join(" "));
+};
+
 export const opensea = {
-  api: 'https://api.opensea.io/api/v2/',
+  api: "https://api.opensea.io/api/v2/",
   collectionURL: () => `https://opensea.io/collection/${collectionSlug}`,
   getEvents: () => `${opensea.api}events/collection/${collectionSlug}`,
   getContract: () => `${opensea.api}chain/${chain}/contract/${TOKEN_ADDRESS}`,
@@ -59,10 +113,10 @@ export const opensea = {
   getNFT: (tokenId: number) =>
     `${opensea.api}chain/${chain}/contract/${TOKEN_ADDRESS}/nfts/${tokenId}`,
   GET_OPTS: {
-    method: 'GET',
+    method: "GET",
     headers: {
-      Accept: 'application/json',
-      'X-API-KEY': OPENSEA_API_TOKEN ?? '',
+      Accept: "application/json",
+      "X-API-KEY": OPENSEA_API_TOKEN ?? "",
     } as Record<string, string>,
   } as RequestInit,
 };
@@ -78,7 +132,7 @@ export const openseaGet = async <T = unknown>(
     if (!response.ok) {
       logger.error(
         `Fetch Error for ${url} - ${response.status}: ${response.statusText}`,
-        process.env.LOG_LEVEL === 'debug' ? await response.text() : undefined
+        process.env.LOG_LEVEL === "debug" ? await response.text() : undefined
       );
       return;
     }
@@ -86,7 +140,7 @@ export const openseaGet = async <T = unknown>(
     return result;
   } catch (error) {
     const message =
-      typeof (error as { message?: unknown })?.message === 'string'
+      typeof (error as { message?: unknown })?.message === "string"
         ? (error as { message: string }).message
         : String(error);
     logger.error(`Fetch Error for ${url}: ${message}`);
@@ -101,7 +155,7 @@ export const openseaGet = async <T = unknown>(
 const USERNAME_CACHE_CAPACITY = 100;
 const usernameCache = new LRUCache<string, string>(USERNAME_CACHE_CAPACITY);
 const formatUsername = (name: string, address: string) =>
-  name === '' ? shortAddr(address) : name;
+  name === "" ? shortAddr(address) : name;
 export const username = async (address: string) => {
   const cached = usernameCache.get(address);
   if (cached) {
@@ -109,7 +163,7 @@ export const username = async (address: string) => {
   }
 
   const account = await fetchAccount(address);
-  const fetchedName = account?.username ?? '';
+  const fetchedName = account?.username ?? "";
   usernameCache.put(address, fetchedName);
   return formatUsername(fetchedName, address);
 };
@@ -135,13 +189,13 @@ export const fetchNFT = async (
 };
 
 export const EventType = {
-  listing: 'listing',
-  offer: 'offer',
-  trait_offer: 'trait_offer',
-  collection_offer: 'collection_offer',
-  mint: 'mint',
-  sale: 'sale',
-  transfer: 'transfer',
+  listing: "listing",
+  offer: "offer",
+  trait_offer: "trait_offer",
+  collection_offer: "collection_offer",
+  mint: "mint",
+  sale: "sale",
+  transfer: "transfer",
 } as const;
 export type EventType = (typeof EventType)[keyof typeof EventType];
 
@@ -166,7 +220,7 @@ const enabledEventTypes = (): string[] => {
 
   if (eventTypes.size === 0) {
     throw new Error(
-      'No events enabled. Please specify DISCORD_EVENTS or TWITTER_EVENTS'
+      "No events enabled. Please specify DISCORD_EVENTS or TWITTER_EVENTS"
     );
   }
   return [...eventTypes];
@@ -189,19 +243,18 @@ const fetchCollectionSlug = async (address: string): Promise<string> => {
   return result.collection;
 };
 
-export const getCollectionSlug = (): string => {
-  return collectionSlug;
-};
+export const getCollectionSlug = (): string => collectionSlug;
 
 const filterPrivateListings = (
   events: OpenSeaAssetEvent[]
-): OpenSeaAssetEvent[] => {
-  return events.filter((event) => {
+): { filtered: OpenSeaAssetEvent[]; count: number } => {
+  const filtered = events.filter((event) => {
     if (event.order_type === EventType.listing && event.is_private_listing) {
       return false;
     }
     return true;
   });
+  return { filtered, count: events.length - filtered.length };
 };
 
 const filterLowValueOffers = (
@@ -213,8 +266,8 @@ const filterLowValueOffers = (
   const preFilter = events.length;
   const filtered = events.filter((event) => {
     if (
-      event.order_type?.includes('offer') &&
-      event.payment?.symbol === 'WETH'
+      event.order_type?.includes("offer") &&
+      event.payment?.symbol === "WETH"
     ) {
       const offerValue = FixedNumber.fromValue(
         event.payment.quantity,
@@ -243,7 +296,7 @@ const deduplicateEvents = (
           identifier?: string;
         }
       | undefined;
-    const tokenId = String(nft?.identifier ?? '');
+    const tokenId = String(nft?.identifier ?? "");
     const canonicalType = String(effectiveEventTypeFor(event));
     const txHash = txHashFor(event);
     const parts = [
@@ -254,7 +307,7 @@ const deduplicateEvents = (
     if (txHash) {
       parts.push(txHash);
     }
-    const eventKey = parts.join('|');
+    const eventKey = parts.join("|");
     if (fetchedEventsCache.get(eventKey)) {
       return false;
     }
@@ -273,7 +326,10 @@ const updateLastEventTimestamp = (events: OpenSeaAssetEvent[]): void => {
   }
 };
 
-const buildEventsUrl = (): string => {
+const buildEventsRequest = (): {
+  url: string;
+  params: { after: number; limit: number; eventTypes: EventType[] };
+} => {
   const eventTypes = enabledEventTypes();
   // Allow a small safety window behind the last seen timestamp so that
   // late-indexed events with older timestamps are still fetched. Rely on the
@@ -282,125 +338,215 @@ const buildEventsUrl = (): string => {
     0,
     lastEventTimestamp - EVENT_LAG_SAFETY_WINDOW_SECONDS
   );
+  const limit = OPENSEA_MAX_LIMIT;
   const params: Record<string, string> = {
-    limit: OPENSEA_MAX_LIMIT.toString(),
+    limit: limit.toString(),
     after: afterCursorBase.toString(),
   };
   const urlParams = new URLSearchParams(params);
   // Map internal/event selection to API-supported event_type filters
   // - "burn" is derived from "transfer" so request "transfer"
   // - "mint" is first-class and can be requested directly
-  const apiEventTypes = new Set<string>();
+  const apiEventTypes = new Set<EventType>();
   for (const eventType of eventTypes) {
-    if (eventType === 'burn') {
+    if (eventType === "burn") {
       apiEventTypes.add(EventType.transfer);
       continue;
     }
-    apiEventTypes.add(eventType);
+    apiEventTypes.add(eventType as EventType);
   }
   for (const apiType of apiEventTypes) {
-    urlParams.append('event_type', apiType);
+    urlParams.append("event_type", apiType);
   }
-  return `${opensea.getEvents()}?${urlParams}`;
+  return {
+    url: `${opensea.getEvents()}?${urlParams}`,
+    params: {
+      after: afterCursorBase,
+      limit,
+      eventTypes: [...apiEventTypes],
+    },
+  };
+};
+
+type FilterStats = {
+  privateFiltered: number;
+  lowValueFiltered: number;
+  deduped: number;
 };
 
 const processEventFilters = (
   events: OpenSeaAssetEvent[]
-): OpenSeaAssetEvent[] => {
-  let processed = filterPrivateListings(events);
+): {
+  events: OpenSeaAssetEvent[];
+  stats: FilterStats;
+} => {
+  let processed = events;
+  const stats: FilterStats = {
+    privateFiltered: 0,
+    lowValueFiltered: 0,
+    deduped: 0,
+  };
+
+  const { filtered: withoutPrivateListings, count: privateCount } =
+    filterPrivateListings(processed);
+  processed = withoutPrivateListings;
+  stats.privateFiltered = privateCount;
 
   const { filtered: afterOfferFilter, count: lowValueCount } =
     filterLowValueOffers(processed);
   processed = afterOfferFilter;
-
-  if (lowValueCount > 0) {
-    logger.info(
-      `🔽 Filtered ${lowValueCount} low-value offer${lowValueCount === 1 ? '' : 's'} (< ${minOfferETH} ETH)`
-    );
-  }
+  stats.lowValueFiltered = lowValueCount;
 
   const { deduplicated: finalEvents, count: dupeCount } =
     deduplicateEvents(processed);
   processed = finalEvents;
+  stats.deduped = dupeCount;
 
-  if (dupeCount > 0) {
-    logger.info(`Events deduplicated: ${dupeCount}`);
-  }
-
-  if (processed.length > 0) {
-    logger.info(
-      `✨ Processing ${processed.length} new event${processed.length === 1 ? '' : 's'}`
-    );
-  }
-
-  return processed;
+  return { events: processed, stats };
 };
 
-export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
-  await fetchCollectionSlug(TOKEN_ADDRESS ?? '');
+const isEmptyEventsResponse = (result?: OpenSeaEventsResponse): boolean =>
+  !result?.asset_events || result.asset_events.length === 0;
 
-  const url = buildEventsUrl();
-  logger.debug(`Events URL: ${url}`);
-  let result = await openseaGet<OpenSeaEventsResponse>(url);
+type PaginatedEventsResult = {
+  events: OpenSeaAssetEvent[];
+  fetched: number;
+  pages: number;
+  nextCursor?: string;
+  error?: string;
+};
 
-  if (!result?.asset_events) {
-    logger.warn('⚠️  No asset_events found in API response');
-    return [];
-  }
-
-  let allEvents = [...result.asset_events];
-  logger.info(`Fetched events: ${allEvents.length}`);
-
-  // Pagination: only paginate if first page returned events.
+const collectPaginatedEvents = async (
+  initialResult: OpenSeaEventsResponse
+): Promise<PaginatedEventsResult> => {
+  let currentResult: OpenSeaEventsResponse | undefined = initialResult;
+  let allEvents = [...initialResult.asset_events];
   let pagesFollowed = 0;
+  let lastBatchCount = initialResult.asset_events.length;
   let prevCursor: string | undefined;
-  let lastBatchCount = allEvents.length;
+  let nextCursor = initialResult.next;
+  let totalFetched = initialResult.asset_events.length;
 
   while (
-    result?.next &&
+    currentResult?.next &&
     pagesFollowed < MAX_PAGINATION_PAGES &&
     allEvents.length > 0 &&
     lastBatchCount >= OPENSEA_MAX_LIMIT
   ) {
-    // Guard against buggy cursors that repeat and could cause loops
-    if (prevCursor && result.next === prevCursor) {
+    if (prevCursor && currentResult.next === prevCursor) {
       logger.debug(
-        'Stopping pagination: repeated cursor indicates API bug or end of results'
+        "Stopping pagination: repeated cursor indicates API bug or end of results"
       );
       break;
     }
+
     pagesFollowed += 1;
-    const nextUrl = `${opensea.getEvents()}?${result.next}`;
-    prevCursor = result.next;
-    const cursorPreview = result.next.slice(0, SUBSTRING_LENGTH_FOR_CURSOR_LOG);
+    const nextUrl = `${opensea.getEvents()}?${currentResult.next}`;
+    prevCursor = currentResult.next;
+    const cursorPreview = currentResult.next.slice(
+      0,
+      SUBSTRING_LENGTH_FOR_CURSOR_LOG
+    );
     logger.debug(
       `Fetching page ${pagesFollowed + 1} (cursor: ${cursorPreview}...)`
     );
     logger.debug(`Next Events URL: ${nextUrl}`);
 
-    result = await openseaGet<OpenSeaEventsResponse>(nextUrl);
-
-    if (result?.asset_events && result.asset_events.length > 0) {
-      allEvents = [...allEvents, ...result.asset_events];
-      lastBatchCount = result.asset_events.length;
-      logger.info(
-        `Fetched events: ${result.asset_events.length} (total: ${allEvents.length})`
-      );
-    } else {
+    currentResult = await openseaGet<OpenSeaEventsResponse>(nextUrl);
+    if (!currentResult) {
+      return {
+        events: allEvents,
+        fetched: totalFetched,
+        pages: pagesFollowed + 1,
+        nextCursor,
+        error: "pagination_request_failed",
+      };
+    }
+    if (isEmptyEventsResponse(currentResult)) {
       break;
     }
+
+    const freshEvents = currentResult?.asset_events ?? [];
+    allEvents = [...allEvents, ...freshEvents];
+    lastBatchCount = freshEvents.length;
+    totalFetched += freshEvents.length;
+    nextCursor = currentResult?.next;
   }
 
+  const totalPages = pagesFollowed + 1;
   if (pagesFollowed > 0) {
-    const totalPages = pagesFollowed + 1;
-    const pluralSuffix = pagesFollowed > 0 ? 's' : '';
-    logger.info(
-      `📄 Fetched ${totalPages} page${pluralSuffix} (${allEvents.length} total events)`
+    const pluralSuffix = totalPages > 1 ? "s" : "";
+    logger.debug(
+      `Pagination summary: ${totalPages} page${pluralSuffix} (${allEvents.length} events)`
     );
   }
 
-  const events = allEvents.reverse();
-  updateLastEventTimestamp(events);
+  return {
+    events: allEvents,
+    fetched: totalFetched,
+    pages: totalPages,
+    nextCursor,
+  };
+};
 
-  return processEventFilters(events);
+export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
+  await fetchCollectionSlug(TOKEN_ADDRESS ?? "");
+
+  const request = buildEventsRequest();
+  logger.debug(`Events URL: ${request.url}`);
+  const summary: FetchSummary = {
+    status: "noop",
+    fetched: 0,
+    processed: 0,
+    deduped: 0,
+    filteredPrivate: 0,
+    filteredLowOffers: 0,
+    pages: 0,
+    after: request.params.after,
+    limit: request.params.limit,
+    eventTypes: request.params.eventTypes,
+  };
+  const startMs = Date.now();
+  let finalEvents: OpenSeaAssetEvent[] = [];
+
+  try {
+    const result = await openseaGet<OpenSeaEventsResponse>(request.url);
+
+    if (!result) {
+      summary.status = "error";
+      summary.error = "request_failed";
+      return finalEvents;
+    }
+
+    if (isEmptyEventsResponse(result)) {
+      summary.status = "empty";
+      logger.warn("⚠️  No asset_events found in API response");
+      return finalEvents;
+    }
+
+    const pagination = await collectPaginatedEvents(result);
+    summary.pages = pagination.pages;
+    summary.fetched = pagination.fetched;
+    summary.nextCursor = pagination.nextCursor;
+    if (pagination.error) {
+      summary.error = pagination.error;
+    }
+
+    const events = pagination.events.reverse();
+    summary.oldestTimestamp = events[0]?.event_timestamp;
+    summary.newestTimestamp = events.at(-1)?.event_timestamp;
+    updateLastEventTimestamp(events);
+
+    const { events: filteredEvents, stats } = processEventFilters(events);
+    summary.filteredPrivate = stats.privateFiltered;
+    summary.filteredLowOffers = stats.lowValueFiltered;
+    summary.deduped = stats.deduped;
+    summary.processed = filteredEvents.length;
+    summary.status = filteredEvents.length > 0 ? "ok" : "noop";
+    finalEvents = filteredEvents;
+
+    return filteredEvents;
+  } finally {
+    logFetchSummary(summary, Date.now() - startMs);
+  }
 };

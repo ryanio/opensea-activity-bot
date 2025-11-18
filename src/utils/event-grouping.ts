@@ -1,7 +1,10 @@
-import type { OpenSeaAssetEvent } from '../types';
-import { DEFAULT_SETTLE_MS, MIN_GROUP_SIZE } from './constants';
-import { LRUCache } from './lru-cache';
-import { classifyTransfer } from './utils';
+import type { OpenSeaAssetEvent } from "../types";
+import { DEFAULT_SETTLE_MS, MIN_GROUP_SIZE } from "./constants";
+import { LRUCache } from "./lru-cache";
+import { classifyTransfer } from "./utils";
+
+const PROCESSED_CACHE_CAPACITY = 2000;
+const ACTOR_GROUP_STALE_MULTIPLIER = 3;
 
 // Common event grouping configuration with environment variable support
 export type EventGroupConfig = {
@@ -10,7 +13,7 @@ export type EventGroupConfig = {
 };
 
 export const getDefaultEventGroupConfig = (
-  prefix: 'TWITTER' | 'DISCORD'
+  prefix: "TWITTER" | "DISCORD"
 ): EventGroupConfig => ({
   settleMs: Number(
     process.env[`${prefix}_EVENT_GROUP_SETTLE_MS`] ?? DEFAULT_SETTLE_MS
@@ -22,28 +25,25 @@ export const getDefaultEventGroupConfig = (
 
 // Common event key generation
 export const eventKeyFor = (event: OpenSeaAssetEvent): string => {
-  const ts = String(event?.event_timestamp ?? '');
+  const ts = String(event?.event_timestamp ?? "");
   const nft = event?.nft ?? event?.asset;
-  const tokenId = String(nft?.identifier ?? '');
-  const eventType = event?.event_type ?? '';
+  const tokenId = String(nft?.identifier ?? "");
+  const eventType = event?.event_type ?? "";
   return `${ts}|${tokenId}|${eventType}`;
 };
 
 // Grouped event type for shared use
 export type GroupedEvent = {
-  kind: 'group';
+  kind: "group";
   txHash: string;
   events: OpenSeaAssetEvent[];
 };
 
 export const isGroupedEvent = (
   event: OpenSeaAssetEvent | GroupedEvent
-): event is GroupedEvent => {
-  return (
-    (event as { kind?: string }).kind === 'group' &&
-    Array.isArray((event as { events?: unknown[] }).events)
-  );
-};
+): event is GroupedEvent =>
+  (event as { kind?: string }).kind === "group" &&
+  Array.isArray((event as { events?: unknown[] }).events);
 
 // Common event group aggregator management
 export class EventGroupManager {
@@ -60,12 +60,10 @@ export class EventGroupManager {
   > = new Map();
   private readonly settleMs: number;
   private readonly minGroupSize: number;
-  private static readonly ACTOR_GROUP_STALE_MULTIPLIER = 5;
-  private static readonly PROCESSED_CACHE_CAPACITY = 2000;
 
   constructor(config: EventGroupConfig) {
     this.processedCache = new LRUCache<string, boolean>(
-      EventGroupManager.PROCESSED_CACHE_CAPACITY
+      PROCESSED_CACHE_CAPACITY
     );
     this.settleMs = config.settleMs;
     this.minGroupSize = config.minGroupSize;
@@ -136,49 +134,49 @@ export class EventGroupManager {
   }
 
   private actorKeyForEvent(event: OpenSeaAssetEvent): string | undefined {
-    if (event.event_type === 'sale') {
+    if (event.event_type === "sale") {
       return this.actorKeyForSale(event);
     }
-    if (event.event_type === 'transfer') {
+    if (event.event_type === "transfer") {
       return this.actorKeyForTransfer(event);
     }
-    if (event.event_type === 'mint') {
+    if (event.event_type === "mint") {
       // Treat mint similarly to transfer-mint for actor grouping (group by recipient)
-      const to = (event.to_address ?? '').toLowerCase();
+      const to = (event.to_address ?? "").toLowerCase();
       return to ? `mint:${to}` : undefined;
     }
-    if (event.event_type === 'offer' || event.event_type === 'listing') {
+    if (event.event_type === "offer" || event.event_type === "listing") {
       return this.actorKeyForOrder(event);
     }
     return;
   }
 
   private actorKeyForSale(event: OpenSeaAssetEvent): string | undefined {
-    const buyer = (event.buyer ?? '').toLowerCase();
+    const buyer = (event.buyer ?? "").toLowerCase();
     return buyer ? `purchase:${buyer}` : undefined;
   }
 
   private actorKeyForTransfer(event: OpenSeaAssetEvent): string | undefined {
     const kind = classifyTransfer(event);
-    if (kind === 'mint') {
-      const to = (event.to_address ?? '').toLowerCase();
+    if (kind === "mint") {
+      const to = (event.to_address ?? "").toLowerCase();
       return to ? `mint:${to}` : undefined;
     }
-    if (kind === 'burn') {
-      const from = (event.from_address ?? '').toLowerCase();
+    if (kind === "burn") {
+      const from = (event.from_address ?? "").toLowerCase();
       return from ? `burn:${from}` : undefined;
     }
-    const from = (event.from_address ?? '').toLowerCase();
+    const from = (event.from_address ?? "").toLowerCase();
     return from ? `transfer:${from}` : undefined;
   }
 
   private actorKeyForOrder(event: OpenSeaAssetEvent): string | undefined {
-    const maker = (event.maker ?? '').toLowerCase();
+    const maker = (event.maker ?? "").toLowerCase();
     if (!maker) {
       return;
     }
-    const isOffer = (event.order_type ?? '').includes('offer');
-    const prefix = isOffer ? 'offer' : 'listing';
+    const isOffer = (event.order_type ?? "").includes("offer");
+    const prefix = isOffer ? "offer" : "listing";
     return `${prefix}:${maker}`;
   }
 
@@ -259,7 +257,7 @@ export class EventGroupManager {
   }
 
   private pruneStaleActorGroups(now: number): void {
-    const ttl = this.settleMs * EventGroupManager.ACTOR_GROUP_STALE_MULTIPLIER;
+    const ttl = this.settleMs * ACTOR_GROUP_STALE_MULTIPLIER;
     for (const [key, agg] of this.actorAgg.entries()) {
       if (now - agg.lastAddedMs >= ttl && agg.rawCount < this.minGroupSize) {
         this.actorAgg.delete(key);
@@ -270,62 +268,62 @@ export class EventGroupManager {
 
 // ---- Generic group helpers ----
 
-export type GroupKind = 'purchase' | 'burn' | 'mint' | 'offer' | 'listing';
+export type GroupKind = "purchase" | "burn" | "mint" | "offer" | "listing";
 
 export const groupKindForEvents = (events: OpenSeaAssetEvent[]): GroupKind => {
   if (events.length === 0) {
     // Empty groups shouldn't happen, but default to purchase
-    return 'purchase';
+    return "purchase";
   }
-  const allSales = events.every((e) => e.event_type === 'sale');
+  const allSales = events.every((e) => e.event_type === "sale");
   if (allSales) {
-    return 'purchase';
+    return "purchase";
   }
-  const allOffers = events.every((e) => e.event_type === 'offer');
+  const allOffers = events.every((e) => e.event_type === "offer");
   if (allOffers) {
-    return 'offer';
+    return "offer";
   }
-  const allListings = events.every((e) => e.event_type === 'listing');
+  const allListings = events.every((e) => e.event_type === "listing");
   if (allListings) {
-    return 'listing';
+    return "listing";
   }
   const allMintTransfers = events.every(
     (e) =>
-      e.event_type === 'mint' ||
-      (e.event_type === 'transfer' && classifyTransfer(e) === 'mint')
+      e.event_type === "mint" ||
+      (e.event_type === "transfer" && classifyTransfer(e) === "mint")
   );
   if (allMintTransfers) {
-    return 'mint';
+    return "mint";
   }
   const allBurnTransfers = events.every(
-    (e) => e.event_type === 'transfer' && classifyTransfer(e) === 'burn'
+    (e) => e.event_type === "transfer" && classifyTransfer(e) === "burn"
   );
   if (allBurnTransfers) {
-    return 'burn';
+    return "burn";
   }
   // Mixed groups shouldn't happen due to actor-based grouping keys,
   // but if they do, treat the first event's type as canonical
   const firstEvent = events[0];
   if (!firstEvent) {
-    return 'purchase';
+    return "purchase";
   }
-  if (firstEvent.event_type === 'sale') {
-    return 'purchase';
+  if (firstEvent.event_type === "sale") {
+    return "purchase";
   }
-  if (firstEvent.event_type === 'offer') {
-    return 'offer';
+  if (firstEvent.event_type === "offer") {
+    return "offer";
   }
-  if (firstEvent.event_type === 'listing') {
-    return 'listing';
+  if (firstEvent.event_type === "listing") {
+    return "listing";
   }
   const transferKind = classifyTransfer(firstEvent);
-  if (transferKind === 'mint') {
-    return 'mint';
+  if (transferKind === "mint") {
+    return "mint";
   }
-  if (transferKind === 'burn') {
-    return 'burn';
+  if (transferKind === "burn") {
+    return "burn";
   }
-  return 'purchase';
+  return "purchase";
 };
 
 export const primaryActorAddressForGroup = (
@@ -336,16 +334,16 @@ export const primaryActorAddressForGroup = (
   if (!first) {
     return;
   }
-  if (kind === 'purchase') {
+  if (kind === "purchase") {
     return first.buyer;
   }
-  if (kind === 'mint') {
+  if (kind === "mint") {
     return first.to_address;
   }
-  if (kind === 'burn') {
+  if (kind === "burn") {
     return first.from_address;
   }
-  if (kind === 'offer' || kind === 'listing') {
+  if (kind === "offer" || kind === "listing") {
     return first.maker;
   }
   return;
@@ -369,8 +367,8 @@ export const getPurchasePrice = (event: OpenSeaAssetEvent): bigint => {
 // Sort events by purchase price in descending order (highest first)
 export const sortEventsByPrice = (
   events: OpenSeaAssetEvent[]
-): OpenSeaAssetEvent[] => {
-  return [...events].sort((a, b) => {
+): OpenSeaAssetEvent[] =>
+  [...events].sort((a, b) => {
     const priceA = getPurchasePrice(a);
     const priceB = getPurchasePrice(b);
     if (priceA > priceB) {
@@ -381,7 +379,6 @@ export const sortEventsByPrice = (
     }
     return 0;
   });
-};
 
 // Get top N most expensive events with their details
 export const getTopExpensiveEvents = (
@@ -393,7 +390,7 @@ export const getTopExpensiveEvents = (
   nft: { identifier?: string; name?: string; opensea_url?: string } | undefined;
 }> => {
   const sortedEvents = sortEventsByPrice(events);
-  const { formatAmount } = require('./utils');
+  const { formatAmount } = require("./utils");
 
   return sortedEvents.slice(0, limit).map((event) => {
     const payment = event.payment;
@@ -412,16 +409,16 @@ export const getTopExpensiveEvents = (
 
 // Format group title based on count and kind
 export const formatGroupTitle = (count: number, kind: GroupKind): string => {
-  if (kind === 'burn') {
+  if (kind === "burn") {
     return `${count} burned`;
   }
-  if (kind === 'mint') {
+  if (kind === "mint") {
     return `${count} minted`;
   }
-  if (kind === 'offer') {
+  if (kind === "offer") {
     return `${count} offers`;
   }
-  if (kind === 'listing') {
+  if (kind === "listing") {
     return `${count} listings`;
   }
   return `${count} purchased`;
@@ -438,46 +435,46 @@ export const formatGroupActorInfo = async (
   actorLabel: string;
   actorUrl: string;
 }> => {
-  const { username } = require('../opensea');
+  const { username } = require("../opensea");
   const {
     openseaProfileCollectionUrl,
     openseaProfileActivityUrl,
     openseaCollectionActivityUrl,
-  } = require('./links');
+  } = require("./links");
 
   let actorLabel: string;
   let activityType: string | undefined;
 
-  if (kind === 'burn') {
-    actorLabel = 'By';
-    activityType = 'transfer';
-  } else if (kind === 'mint') {
-    actorLabel = 'Minter';
-    activityType = 'mint';
-  } else if (kind === 'offer') {
-    actorLabel = 'Offerer';
-    activityType = 'offer';
-  } else if (kind === 'listing') {
-    actorLabel = 'Lister';
-    activityType = 'listing';
+  if (kind === "burn") {
+    actorLabel = "By";
+    activityType = "transfer";
+  } else if (kind === "mint") {
+    actorLabel = "Minter";
+    activityType = "mint";
+  } else if (kind === "offer") {
+    actorLabel = "Offerer";
+    activityType = "offer";
+  } else if (kind === "listing") {
+    actorLabel = "Lister";
+    activityType = "listing";
   } else {
-    actorLabel = 'Buyer';
-    activityType = 'sale';
+    actorLabel = "Buyer";
+    activityType = "sale";
   }
 
   if (actorAddress) {
     const actorName = await username(actorAddress);
     let actorUrl: string;
-    if (kind === 'mint' || kind === 'purchase') {
+    if (kind === "mint" || kind === "purchase") {
       // For mints and purchases, show profile filtered by collection
       actorUrl = openseaProfileCollectionUrl(actorAddress, collectionSlug);
-    } else if (kind === 'offer') {
-      actorUrl = openseaProfileActivityUrl(actorAddress, 'offer');
-    } else if (kind === 'listing') {
-      actorUrl = openseaProfileActivityUrl(actorAddress, 'listing');
+    } else if (kind === "offer") {
+      actorUrl = openseaProfileActivityUrl(actorAddress, "offer");
+    } else if (kind === "listing") {
+      actorUrl = openseaProfileActivityUrl(actorAddress, "listing");
     } else {
       // For burns and other transfers
-      actorUrl = openseaProfileActivityUrl(actorAddress, 'transfer');
+      actorUrl = openseaProfileActivityUrl(actorAddress, "transfer");
     }
     return { actorName, actorLabel, actorUrl };
   }
@@ -503,7 +500,7 @@ export const formatGroupText = async (options: {
   const actorAddress = primaryActorAddressForGroup(group, kind);
   const title = formatGroupTitle(count, kind);
 
-  let text = '';
+  let text = "";
 
   if (actorAddress) {
     const actorInfo = await formatGroupActorInfo(
@@ -514,15 +511,15 @@ export const formatGroupText = async (options: {
     );
     // Twitter-specific formatting with @ for usernames
     const formattedName =
-      kind === 'burn' ? `@${actorInfo.actorName}` : actorInfo.actorName;
+      kind === "burn" ? `@${actorInfo.actorName}` : actorInfo.actorName;
     text += `${title} by ${formattedName}`;
-    if (kind === 'purchase' && totalSpent) {
+    if (kind === "purchase" && totalSpent) {
       text += ` for ${totalSpent}`;
     }
     text += ` ${actorInfo.actorUrl}`;
   } else {
     text += title;
-    if (kind === 'purchase' && totalSpent) {
+    if (kind === "purchase" && totalSpent) {
       text += ` for ${totalSpent}`;
     }
     const fallbackInfo = await formatGroupActorInfo(
@@ -546,7 +543,7 @@ export const calculateTotalSpent = (
     .filter(
       (payment) =>
         payment !== undefined &&
-        (payment.symbol === 'ETH' || payment.symbol === 'WETH')
+        (payment.symbol === "ETH" || payment.symbol === "WETH")
     );
 
   if (paymentsWithETH.length === 0) {
@@ -561,12 +558,13 @@ export const calculateTotalSpent = (
   const { decimals, symbol } = firstPayment;
 
   // Sum all quantities (as BigInt to avoid precision issues)
-  const totalQuantity = paymentsWithETH.reduce((sum, payment) => {
-    return sum + BigInt(payment?.quantity ?? '0');
-  }, BigInt(0));
+  const totalQuantity = paymentsWithETH.reduce(
+    (sum, payment) => sum + BigInt(payment?.quantity ?? "0"),
+    BigInt(0)
+  );
 
   // Import formatAmount from utils when needed
-  const { formatAmount } = require('./utils');
+  const { formatAmount } = require("./utils");
   return formatAmount(totalQuantity.toString(), decimals, symbol);
 };
 

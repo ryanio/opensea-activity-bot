@@ -1,10 +1,10 @@
-import { fetchImageBuffer } from '../src/utils/utils';
+import { fetchImageBuffer } from "../src/utils/utils";
 
 // Mock fetch to return AVIF content
 global.fetch = jest.fn();
 
 // Mock sharp
-jest.mock('sharp', () => {
+jest.mock("sharp", () => {
   const mockSharp = jest.fn().mockImplementation(() => {
     return {
       png: jest.fn().mockReturnThis(),
@@ -28,16 +28,16 @@ jest.mock('sharp', () => {
 // Create a mock AVIF buffer
 const createMockAvifBuffer = () => {
   const buffer = Buffer.alloc(100);
-  buffer.write('....ftypavif', 0); // Simplified AVIF marker
+  buffer.write("....ftypavif", 0); // Simplified AVIF marker
   return buffer;
 };
 
-describe('AVIF to PNG Conversion', () => {
+describe("AVIF to PNG Conversion", () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('should convert AVIF to PNG when content-type is image/avif', async () => {
+  it("should convert AVIF to PNG when content-type is image/avif", async () => {
     const mockAvifBuffer = createMockAvifBuffer();
 
     (fetch as jest.Mock).mockResolvedValueOnce({
@@ -45,8 +45,8 @@ describe('AVIF to PNG Conversion', () => {
       arrayBuffer: () => Promise.resolve(mockAvifBuffer.buffer),
       headers: {
         get: (header: string) => {
-          if (header === 'content-type') {
-            return 'image/avif';
+          if (header === "content-type") {
+            return "image/avif";
           }
           return null;
         },
@@ -54,18 +54,18 @@ describe('AVIF to PNG Conversion', () => {
     });
 
     const result = await fetchImageBuffer(
-      'https://i2.seadn.io/ethereum/0x7136496abfbab3d17c34a3cfc4cfbc68bfbccbcc/40f196698abaf81f2e7fb1f458d365/1b40f196698abaf81f2e7fb1f458d365.png?w=10000'
+      "https://i2.seadn.io/ethereum/0x7136496abfbab3d17c34a3cfc4cfbc68bfbccbcc/40f196698abaf81f2e7fb1f458d365/1b40f196698abaf81f2e7fb1f458d365.png?w=10000"
     );
 
-    expect(result.mimeType).toBe('image/png');
+    expect(result.mimeType).toBe("image/png");
     expect(result.buffer).toBeInstanceOf(Buffer);
     expect(result.buffer.length).toBeGreaterThan(0);
     expect(fetch).toHaveBeenCalledWith(
-      'https://i2.seadn.io/ethereum/0x7136496abfbab3d17c34a3cfc4cfbc68bfbccbcc/40f196698abaf81f2e7fb1f458d365/1b40f196698abaf81f2e7fb1f458d365.png?w=10000'
+      "https://i2.seadn.io/ethereum/0x7136496abfbab3d17c34a3cfc4cfbc68bfbccbcc/40f196698abaf81f2e7fb1f458d365/1b40f196698abaf81f2e7fb1f458d365.png?w=10000"
     );
   });
 
-  it('should handle AVIF conversion even when URL ends with .png', async () => {
+  it("should handle AVIF conversion even when URL ends with .png", async () => {
     const mockAvifBuffer = createMockAvifBuffer();
 
     (fetch as jest.Mock).mockResolvedValueOnce({
@@ -73,22 +73,22 @@ describe('AVIF to PNG Conversion', () => {
       arrayBuffer: () => Promise.resolve(mockAvifBuffer.buffer),
       headers: {
         get: (header: string) => {
-          if (header === 'content-type') {
-            return 'image/avif'; // Server returns AVIF despite .png extension
+          if (header === "content-type") {
+            return "image/avif"; // Server returns AVIF despite .png extension
           }
           return null;
         },
       },
     });
 
-    const result = await fetchImageBuffer('https://example.com/image.png');
+    const result = await fetchImageBuffer("https://example.com/image.png");
 
-    expect(result.mimeType).toBe('image/png');
+    expect(result.mimeType).toBe("image/png");
     expect(result.buffer).toBeInstanceOf(Buffer);
     expect(result.buffer.length).toBeGreaterThan(0);
   });
 
-  it('should not modify actual PNG files', async () => {
+  it("should not modify actual PNG files", async () => {
     // PNG file header signature
     const PNG_SIGNATURE_BYTE_1 = 0x89;
     const PNG_SIGNATURE_BYTE_2 = 0x50;
@@ -106,21 +106,21 @@ describe('AVIF to PNG Conversion', () => {
       arrayBuffer: () => Promise.resolve(pngBuffer.buffer),
       headers: {
         get: (header: string) => {
-          if (header === 'content-type') {
-            return 'image/png';
+          if (header === "content-type") {
+            return "image/png";
           }
           return null;
         },
       },
     });
 
-    const result = await fetchImageBuffer('https://example.com/image.png');
+    const result = await fetchImageBuffer("https://example.com/image.png");
 
-    expect(result.mimeType).toBe('image/png');
+    expect(result.mimeType).toBe("image/png");
     expect(result.buffer).toBeInstanceOf(Buffer);
   });
 
-  it('should not modify JPEG files', async () => {
+  it("should not modify JPEG files", async () => {
     // JPEG file header signature
     const JPEG_SIGNATURE_BYTE_1 = 0xff;
     const JPEG_SIGNATURE_BYTE_2 = 0xd8;
@@ -134,17 +134,17 @@ describe('AVIF to PNG Conversion', () => {
       arrayBuffer: () => Promise.resolve(jpegBuffer.buffer),
       headers: {
         get: (header: string) => {
-          if (header === 'content-type') {
-            return 'image/jpeg';
+          if (header === "content-type") {
+            return "image/jpeg";
           }
           return null;
         },
       },
     });
 
-    const result = await fetchImageBuffer('https://example.com/image.jpg');
+    const result = await fetchImageBuffer("https://example.com/image.jpg");
 
-    expect(result.mimeType).toBe('image/jpeg');
+    expect(result.mimeType).toBe("image/jpeg");
     expect(result.buffer).toBeInstanceOf(Buffer);
   });
 });
