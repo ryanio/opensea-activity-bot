@@ -1,10 +1,31 @@
 import type { OpenSeaAssetEvent } from "../src/types";
 
+jest.mock("../src/utils/logger", () => {
+  const base = {
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  };
+  return {
+    logger: base,
+    prefixedLogger: () => base,
+  };
+});
+
 describe("fetchEvents (OpenSea)", () => {
   const ORIGINAL_ENV = { ...process.env };
+  type MockedLogger = {
+    debug: jest.Mock;
+    info: jest.Mock;
+    warn: jest.Mock;
+    error: jest.Mock;
+  };
+  let loggerMock: MockedLogger;
 
   beforeEach(() => {
     jest.resetModules();
+    loggerMock = jest.requireMock("../src/utils/logger").logger as MockedLogger;
     process.env = { ...ORIGINAL_ENV };
     process.env.LOG_LEVEL = "error";
     process.env.TOKEN_ADDRESS = "0xTestToken";
@@ -14,6 +35,10 @@ describe("fetchEvents (OpenSea)", () => {
     process.env.TWITTER_EVENTS = "sale";
 
     (global.fetch as unknown as jest.Mock) = jest.fn();
+    loggerMock.info.mockReset();
+    loggerMock.debug.mockReset();
+    loggerMock.warn.mockReset();
+    loggerMock.error.mockReset();
   });
 
   afterEach(() => {
@@ -167,5 +192,98 @@ describe("fetchEvents (OpenSea)", () => {
     const txs = events.map((e) => e.transaction);
     expect(txs).toContain("0xsaleA");
     expect(txs).toContain("0xsaleB");
+  });
+
+  it("requests transfer events when mint tracking is enabled", async () => {
+    process.env.TWITTER_EVENTS = "mint";
+    const baseMint: OpenSeaAssetEvent = {
+      event_type: "transfer",
+      event_timestamp: 3000,
+      chain: "ethereum",
+      quantity: 1,
+      nft: {
+        identifier: "77",
+        collection: "glyphbots",
+        contract: "0xTestToken",
+        token_standard: "erc1155",
+        name: "Minted NFT",
+        description: "",
+        image_url: "",
+        display_image_url: "",
+        display_animation_url: null,
+        metadata_url: null,
+        opensea_url: "",
+        updated_at: "",
+        is_disabled: false,
+        is_nsfw: false,
+      },
+      payment: undefined,
+      transaction: "0xmintTx",
+      from_address: "0x0000000000000000000000000000000000000000",
+      to_address: "0xabc",
+    };
+
+    setupFetchMockForLagWindow([baseMint]);
+    const { fetchEvents } = await import("../src/opensea");
+    await fetchEvents();
+
+    const fetchCalls = (global.fetch as unknown as jest.Mock).mock.calls;
+    const eventsCall = fetchCalls.find(
+      ([url]) => typeof url === "string" && url.includes("/events/collection/")
+    ) as [string];
+    expect(eventsCall).toBeDefined();
+    expect(eventsCall[0]).toContain("event_type=mint");
+    expect(eventsCall[0]).toContain("event_type=transfer");
+  });
+
+  it("logs fetch summary stats showing deduped events when no new data arrives", async () => {
+    const baseEvent: OpenSeaAssetEvent = {
+      event_type: "sale",
+      event_timestamp: 4000,
+      chain: "ethereum",
+      quantity: 1,
+      nft: {
+        identifier: "99",
+        collection: "glyphbots",
+        contract: "0xTestToken",
+        token_standard: "erc721",
+        name: "Test NFT #99",
+        description: "",
+        image_url: "",
+        display_image_url: "",
+        display_animation_url: null,
+        metadata_url: null,
+        opensea_url: "",
+        updated_at: "",
+        is_disabled: false,
+        is_nsfw: false,
+      },
+      payment: {
+        quantity: "5000000000000000",
+        token_address: "0x0000000000000000000000000000000000000000",
+        decimals: 18,
+        symbol: "ETH",
+      },
+      transaction: "0xrepeat",
+    };
+
+    setupFetchMockForLagWindow([baseEvent]);
+    const { fetchEvents } = await import("../src/opensea");
+    await fetchEvents();
+    loggerMock.info.mockClear();
+
+    setupFetchMockForLagWindow([baseEvent]);
+    await fetchEvents();
+
+    const infoMessages = loggerMock.info.mock.calls.map((args) =>
+      args.filter((arg): arg is string => typeof arg === "string").join(" ")
+    );
+    const summaryLog = infoMessages.find((msg) =>
+      msg.includes("[FetchSummary]")
+    );
+
+    expect(summaryLog).toBeDefined();
+    expect(summaryLog).toContain("deduped=1");
+    expect(summaryLog).toContain("processed=0");
   });
 });
