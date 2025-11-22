@@ -9,8 +9,8 @@ import type {
   OpenSeaNFT,
   OpenSeaNFTResponse,
 } from "./types";
-import { txHashFor } from "./utils/aggregator";
-import { effectiveEventTypeFor } from "./utils/event-types";
+import { canonicalEventKeyFor } from "./utils/canonical-events";
+import { getDefaultEventStateStore } from "./utils/event-state";
 import { parseEvents, wantsOpenSeaEventTypes } from "./utils/events";
 import { logger } from "./utils/logger";
 import { LRUCache } from "./utils/lru-cache";
@@ -25,17 +25,8 @@ const {
   OPENSEA_MAX_PAGES,
 } = process.env;
 
-let lastEventTimestamp = unixTimestamp(new Date());
-if (LAST_EVENT_TIMESTAMP) {
-  logger.info(`Using LAST_EVENT_TIMESTAMP: ${LAST_EVENT_TIMESTAMP}`);
-  lastEventTimestamp = Number.parseInt(LAST_EVENT_TIMESTAMP, 10);
-}
-
-// Global event cache to prevent reprocessing the same events
-const FETCHED_EVENTS_CACHE_CAPACITY = 1000;
-const fetchedEventsCache = new LRUCache<string, boolean>(
-  FETCHED_EVENTS_CACHE_CAPACITY
-);
+const eventStateStore = getDefaultEventStateStore();
+let lastEventTimestamp: number | undefined;
 
 // Pagination and safety window constants
 const SUBSTRING_LENGTH_FOR_CURSOR_LOG = 20;
@@ -70,37 +61,52 @@ type FetchSummary = {
 };
 
 const logFetchSummary = (summary: FetchSummary, durationMs: number) => {
+  if (process.env.LOG_LEVEL === "debug") {
+    const debugParts = [
+      "[FetchSummaryDebug]",
+      `status=${summary.status}`,
+      `after=${summary.after}`,
+      `lag=${EVENT_LAG_SAFETY_WINDOW_SECONDS}s`,
+      `limit=${summary.limit}`,
+      `types=${summary.eventTypes.join("|")}`,
+      `pages=${summary.pages}`,
+      `fetched=${summary.fetched}`,
+      `processed=${summary.processed}`,
+      `deduped=${summary.deduped}`,
+      `filteredPrivate=${summary.filteredPrivate}`,
+      `filteredLow=${summary.filteredLowOffers}`,
+      `durationMs=${durationMs}`,
+    ];
+    if (summary.oldestTimestamp !== undefined) {
+      debugParts.push(`oldestTs=${summary.oldestTimestamp}`);
+    }
+    if (summary.newestTimestamp !== undefined) {
+      debugParts.push(`newestTs=${summary.newestTimestamp}`);
+    }
+    if (summary.nextCursor) {
+      const preview = summary.nextCursor.slice(
+        0,
+        SUBSTRING_LENGTH_FOR_CURSOR_LOG
+      );
+      debugParts.push(`nextCursor=${preview}…`);
+    }
+    if (summary.error) {
+      debugParts.push(`error=${summary.error}`);
+    }
+    logger.debug(debugParts.join(" "));
+    return;
+  }
+
   const parts = [
     "[FetchSummary]",
     `status=${summary.status}`,
-    `after=${summary.after}`,
-    `lag=${EVENT_LAG_SAFETY_WINDOW_SECONDS}s`,
-    `limit=${summary.limit}`,
-    `types=${summary.eventTypes.join("|")}`,
-    `pages=${summary.pages}`,
     `fetched=${summary.fetched}`,
     `processed=${summary.processed}`,
     `deduped=${summary.deduped}`,
-    `filteredPrivate=${summary.filteredPrivate}`,
-    `filteredLow=${summary.filteredLowOffers}`,
+    `pages=${summary.pages}`,
+    `types=${summary.eventTypes.join("|")}`,
     `durationMs=${durationMs}`,
   ];
-  if (summary.oldestTimestamp !== undefined) {
-    parts.push(`oldestTs=${summary.oldestTimestamp}`);
-  }
-  if (summary.newestTimestamp !== undefined) {
-    parts.push(`newestTs=${summary.newestTimestamp}`);
-  }
-  if (summary.nextCursor) {
-    const preview = summary.nextCursor.slice(
-      0,
-      SUBSTRING_LENGTH_FOR_CURSOR_LOG
-    );
-    parts.push(`nextCursor=${preview}…`);
-  }
-  if (summary.error) {
-    parts.push(`error=${summary.error}`);
-  }
   logger.info(parts.join(" "));
 };
 
@@ -280,63 +286,99 @@ const filterLowValueOffers = (
   return { filtered, count: preFilter - filtered.length };
 };
 
-const deduplicateEvents = (
-  events: OpenSeaAssetEvent[]
-): {
-  deduplicated: OpenSeaAssetEvent[];
-  count: number;
-} => {
-  const preDedup = events.length;
-  const deduplicated = events.filter((event) => {
-    // Use canonical event key so 'mint' and transfer-mint dedupe together.
-    // Include transaction hash when available so distinct txs at the same
-    // timestamp for the same token are not incorrectly deduped.
-    const nft = (event?.nft ?? event?.asset) as
-      | {
-          identifier?: string;
-        }
-      | undefined;
-    const tokenId = String(nft?.identifier ?? "");
-    const canonicalType = String(effectiveEventTypeFor(event));
-    const txHash = txHashFor(event);
-    const parts = [
-      String(event.event_timestamp),
-      tokenId,
-      canonicalType,
-    ] as string[];
-    if (txHash) {
-      parts.push(txHash);
-    }
-    const eventKey = parts.join("|");
-    if (fetchedEventsCache.get(eventKey)) {
-      return false;
-    }
-    fetchedEventsCache.put(eventKey, true);
-    return true;
-  });
-  return { deduplicated, count: preDedup - deduplicated.length };
+const updateLastEventTimestamp = (events: OpenSeaAssetEvent[]): void => {
+  if (events.length === 0) {
+    return;
+  }
+  const lastEvent = events.at(-1);
+  if (!lastEvent) {
+    return;
+  }
+  lastEventTimestamp = lastEvent.event_timestamp + 1;
 };
 
-const updateLastEventTimestamp = (events: OpenSeaAssetEvent[]): void => {
-  if (events.length > 0) {
-    const lastEvent = events.at(-1);
-    if (lastEvent) {
-      lastEventTimestamp = lastEvent.event_timestamp + 1;
+const timestampFromCursor = (): number | undefined => {
+  const cursor = eventStateStore.getCursor();
+  if (cursor?.lastTimestamp === null) {
+    return;
+  }
+  if (cursor?.lastTimestamp === undefined) {
+    return;
+  }
+  return cursor.lastTimestamp;
+};
+
+const timestampFromEnv = (): number | undefined => {
+  if (LAST_EVENT_TIMESTAMP === undefined) {
+    return;
+  }
+  const parsed = Number.parseInt(LAST_EVENT_TIMESTAMP, 10);
+  if (Number.isNaN(parsed)) {
+    return;
+  }
+  return parsed;
+};
+
+const timestampFromBackfillWindow = (): number => {
+  const now = unixTimestamp(new Date());
+  const DEFAULT_BACKFILL_HOURS = 24;
+  const backfillHoursEnv = process.env.EVENT_BACKFILL_HOURS;
+  const backfillHours = backfillHoursEnv
+    ? Number(backfillHoursEnv)
+    : DEFAULT_BACKFILL_HOURS;
+  const hours =
+    Number.isNaN(backfillHours) || backfillHours <= 0
+      ? DEFAULT_BACKFILL_HOURS
+      : backfillHours;
+  const backfillSeconds = hours * 60 * 60;
+  const initial = Math.max(0, now - backfillSeconds);
+  return initial;
+};
+
+const resolveLastEventTimestamp = (): number => {
+  if (lastEventTimestamp !== undefined) {
+    return lastEventTimestamp;
+  }
+  const fromCursor = timestampFromCursor();
+  if (fromCursor !== undefined) {
+    lastEventTimestamp = fromCursor;
+    return fromCursor;
+  }
+  const fromEnv = timestampFromEnv();
+  if (fromEnv !== undefined) {
+    lastEventTimestamp = fromEnv;
+    return fromEnv;
+  }
+  const fallback = timestampFromBackfillWindow();
+  lastEventTimestamp = fallback;
+  return fallback;
+};
+
+const mapToApiEventTypes = (eventTypes: string[]): Set<EventType> => {
+  const apiEventTypes = new Set<EventType>();
+  for (const eventType of eventTypes) {
+    if (eventType === "burn") {
+      apiEventTypes.add(EventType.transfer);
+    } else {
+      apiEventTypes.add(eventType as EventType);
     }
   }
+  return apiEventTypes;
 };
 
 const buildEventsRequest = (): {
   url: string;
   params: { after: number; limit: number; eventTypes: EventType[] };
 } => {
+  const effectiveLastTimestamp = resolveLastEventTimestamp();
+
   const eventTypes = enabledEventTypes();
   // Allow a small safety window behind the last seen timestamp so that
   // late-indexed events with older timestamps are still fetched. Rely on the
   // in-memory cache to prevent reprocessing duplicates.
   const afterCursorBase = Math.max(
     0,
-    lastEventTimestamp - EVENT_LAG_SAFETY_WINDOW_SECONDS
+    effectiveLastTimestamp - EVENT_LAG_SAFETY_WINDOW_SECONDS
   );
   const limit = OPENSEA_MAX_LIMIT;
   const params: Record<string, string> = {
@@ -344,17 +386,7 @@ const buildEventsRequest = (): {
     after: afterCursorBase.toString(),
   };
   const urlParams = new URLSearchParams(params);
-  // Map internal/event selection to API-supported event_type filters
-  // - "burn" is derived from "transfer" so request "transfer"
-  // - "mint" is first-class and can be requested directly
-  const apiEventTypes = new Set<EventType>();
-  for (const eventType of eventTypes) {
-    if (eventType === "burn") {
-      apiEventTypes.add(EventType.transfer);
-      continue;
-    }
-    apiEventTypes.add(eventType as EventType);
-  }
+  const apiEventTypes = mapToApiEventTypes(eventTypes);
   for (const apiType of apiEventTypes) {
     urlParams.append("event_type", apiType);
   }
@@ -397,10 +429,22 @@ const processEventFilters = (
   processed = afterOfferFilter;
   stats.lowValueFiltered = lowValueCount;
 
-  const { deduplicated: finalEvents, count: dupeCount } =
-    deduplicateEvents(processed);
-  processed = finalEvents;
-  stats.deduped = dupeCount;
+  const preDedup = processed.length;
+  const deduped: OpenSeaAssetEvent[] = [];
+  const newKeys: string[] = [];
+
+  for (const event of processed) {
+    const key = canonicalEventKeyFor(event);
+    if (eventStateStore.hasKey(key)) {
+      continue;
+    }
+    deduped.push(event);
+    newKeys.push(key);
+  }
+
+  eventStateStore.markProcessed(newKeys);
+  processed = deduped;
+  stats.deduped = preDedup - deduped.length;
 
   return { events: processed, stats };
 };
@@ -490,6 +534,7 @@ const collectPaginatedEvents = async (
 };
 
 export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
+  await eventStateStore.load();
   await fetchCollectionSlug(TOKEN_ADDRESS ?? "");
 
   const request = buildEventsRequest();
@@ -545,8 +590,18 @@ export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
     summary.status = filteredEvents.length > 0 ? "ok" : "noop";
     finalEvents = filteredEvents;
 
+    if (lastEventTimestamp !== undefined) {
+      eventStateStore.setCursor({
+        source: "opensea-v2",
+        next: pagination.nextCursor ?? null,
+        lastTimestamp: lastEventTimestamp,
+        lastId: null,
+      });
+    }
+
     return filteredEvents;
   } finally {
     logFetchSummary(summary, Date.now() - startMs);
+    await eventStateStore.flush();
   }
 };
