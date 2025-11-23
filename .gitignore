@@ -4,3 +4,4 @@ dist
 env.txt
 *.env
 coverage/
+.state

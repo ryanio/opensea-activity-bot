@@ -92,8 +92,8 @@ const logStartupConfiguration = () => {
   logger.info("┌─ 📋 CONFIGURATION");
   logger.info("│");
   logger.info(`│  📦  Collection Contract: ${fullTokenAddr}`);
-  logger.info(`│  ⛓️  Network Chain: ${chain}`);
-  logger.info(`│  ⏱️  Poll Interval: ${botInterval}s`);
+  logger.info(`│  ⛓️   Network Chain: ${chain}`);
+  logger.info(`│  ⏱️   Poll Interval: ${botInterval}s`);
   logger.info(`│  💰  Min Offer Filter: ${minOfferETH} ETH`);
   logger.info(`│  📝  Log Level: ${process.env.LOG_LEVEL ?? "info"}`);
   logger.info("│");

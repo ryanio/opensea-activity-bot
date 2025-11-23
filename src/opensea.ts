@@ -565,7 +565,6 @@ export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
 
     if (isEmptyEventsResponse(result)) {
       summary.status = "empty";
-      logger.warn("⚠️ No asset_events found in API response");
       return finalEvents;
     }
 
