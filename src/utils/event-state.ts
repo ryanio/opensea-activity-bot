@@ -221,7 +221,8 @@ const storeCache = new Map<string, EventStateStore>();
 
 export const getDefaultEventStateStore = (): EventStateStore => {
   // Read directly from env to ensure each process uses its own TOKEN_ADDRESS
-  const contractId = process.env.TOKEN_ADDRESS || "default";
+  // Lowercase to normalize address (handles checksummed vs lowercase addresses)
+  const contractId = process.env.TOKEN_ADDRESS?.toLowerCase() || "default";
 
   // Return cached store if it exists for this contract
   const cached = storeCache.get(contractId);
@@ -240,7 +241,7 @@ export const getDefaultEventStateStore = (): EventStateStore => {
   const rootDir = process.cwd();
   const stateDir = process.env.EVENT_STATE_DIR ?? ".state";
   // Include contract address in filename to segregate state per contract
-  // Keep 0x prefix and checksum (mixed case) for proper address format
+  // Lowercase normalized to handle checksummed vs lowercase addresses consistently
   const fileName = `opensea-events-state-${contractId}.json`;
   const filePath = join(rootDir, stateDir, fileName);
 
