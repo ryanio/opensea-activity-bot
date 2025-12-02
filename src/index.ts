@@ -1,4 +1,9 @@
-import { fetchEvents } from "./opensea";
+import {
+  type EventTimestampSource,
+  fetchCollectionSlug,
+  fetchEvents,
+  resolveLastEventTimestamp,
+} from "./opensea";
 import { messageEvents } from "./platforms/discord";
 import { tweetEvents } from "./platforms/twitter";
 import type { OpenSeaAssetEvent } from "./types";
@@ -65,7 +70,7 @@ const logEventGroupConfig = (
   }
 };
 
-const logStartupConfiguration = () => {
+const logStartupConfiguration = async () => {
   const asciiArt = `
 ╔═══════════════════════════════════════════════════════════════════════════╗
 ║                                                                           ║
@@ -88,12 +93,48 @@ const logStartupConfiguration = () => {
     }
   }
 
+  // Fetch collection slug and event timestamp for display
+  let collectionSlug: string | undefined;
+  let eventTimestampInfo:
+    | { timestamp: number; source: EventTimestampSource }
+    | undefined;
+  try {
+    if (process.env.TOKEN_ADDRESS) {
+      collectionSlug = await fetchCollectionSlug(process.env.TOKEN_ADDRESS);
+    }
+    eventTimestampInfo = await resolveLastEventTimestamp();
+  } catch (error) {
+    logger.debug("Error fetching startup info:", error);
+  }
+
+  const formatTimestampSource = (source: EventTimestampSource): string => {
+    switch (source) {
+      case "env":
+        return "environment variable";
+      case "state_file":
+        return "state file";
+      case "new":
+        return "new (starting from current time)";
+      default:
+        return String(source);
+    }
+  };
+
   logger.info("");
   logger.info("┌─ 📋 CONFIGURATION");
   logger.info("│");
   logger.info(`│  📦  Collection Contract: ${fullTokenAddr}`);
+  if (collectionSlug) {
+    logger.info(`│  🏷️   Collection Slug: ${collectionSlug}`);
+  }
   logger.info(`│  ⛓️   Network Chain: ${chain}`);
   logger.info(`│  ⏱️   Poll Interval: ${botInterval}s`);
+  if (eventTimestampInfo) {
+    logger.info(`│  🕐  Event Timestamp: ${eventTimestampInfo.timestamp}`);
+    logger.info(
+      `│      └─ Source: ${formatTimestampSource(eventTimestampInfo.source)}`
+    );
+  }
   logger.info(`│  💰  Min Offer Filter: ${minOfferETH} ETH`);
   logger.info(`│  📝  Log Level: ${process.env.LOG_LEVEL ?? "info"}`);
   logger.info("│");
@@ -108,7 +149,7 @@ const logStartupConfiguration = () => {
   logger.info("");
 };
 
-function main() {
+async function main() {
   const run = async () => {
     const events: OpenSeaAssetEvent[] = await fetchEvents();
 
@@ -122,7 +163,7 @@ function main() {
     tweetEvents(events);
   };
 
-  logStartupConfiguration();
+  await logStartupConfiguration();
   run();
 
   const MS_PER_SECOND = 1000;

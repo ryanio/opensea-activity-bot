@@ -28,6 +28,7 @@ const {
 
 const eventStateStore = getDefaultEventStateStore();
 let lastEventTimestamp: number | undefined;
+let lastEventTimestampSource: EventTimestampSource | undefined;
 
 // Pagination and safety window constants
 const SUBSTRING_LENGTH_FOR_CURSOR_LOG = 20;
@@ -247,7 +248,7 @@ const enabledEventTypes = (): string[] => {
   return [...eventTypes];
 };
 
-const fetchCollectionSlug = async (address: string): Promise<string> => {
+export const fetchCollectionSlug = async (address: string): Promise<string> => {
   const existing = collectionStore.getSlug();
   if (existing) {
     return existing;
@@ -311,6 +312,8 @@ const updateLastEventTimestamp = (events: OpenSeaAssetEvent[]): void => {
     return;
   }
   lastEventTimestamp = lastEvent.event_timestamp + 1;
+  // When updating from events, source is still from the original resolution
+  // (env, state_file, or new), so we don't change lastEventTimestampSource
 };
 
 const timestampFromCursor = (): number | undefined => {
@@ -335,35 +338,55 @@ const timestampFromEnv = (): number | undefined => {
   return parsed;
 };
 
-const resolveLastEventTimestamp = (): number => {
-  if (lastEventTimestamp !== undefined) {
-    return lastEventTimestamp;
-  }
-  // Check env var first - allows overriding persisted cursor
-  const fromEnv = timestampFromEnv();
-  if (fromEnv !== undefined) {
-    logger.info(
-      `[EventTimestamp] Using LAST_EVENT_TIMESTAMP from environment: ${fromEnv}`
-    );
-    lastEventTimestamp = fromEnv;
-    return fromEnv;
-  }
-  const fromCursor = timestampFromCursor();
-  if (fromCursor !== undefined) {
-    logger.debug(
-      `[EventTimestamp] Using timestamp from persisted cursor: ${fromCursor}`
-    );
-    lastEventTimestamp = fromCursor;
-    return fromCursor;
-  }
-  // No timestamp available - start from current time
-  const now = unixTimestamp(new Date());
-  logger.info(
-    `[EventTimestamp] No timestamp found, starting from current time: ${now}`
-  );
-  lastEventTimestamp = now;
-  return now;
+export type EventTimestampSource = "env" | "state_file" | "new";
+
+export type EventTimestampInfo = {
+  timestamp: number;
+  source: EventTimestampSource;
 };
+
+export const resolveLastEventTimestamp =
+  async (): Promise<EventTimestampInfo> => {
+    // Ensure event state store is loaded before checking cursor
+    await eventStateStore.load();
+
+    if (
+      lastEventTimestamp !== undefined &&
+      lastEventTimestampSource !== undefined
+    ) {
+      return {
+        timestamp: lastEventTimestamp,
+        source: lastEventTimestampSource,
+      };
+    }
+    // Check env var first - allows overriding persisted cursor
+    const fromEnv = timestampFromEnv();
+    if (fromEnv !== undefined) {
+      logger.info(
+        `[EventTimestamp] Using LAST_EVENT_TIMESTAMP from environment: ${fromEnv}`
+      );
+      lastEventTimestamp = fromEnv;
+      lastEventTimestampSource = "env";
+      return { timestamp: fromEnv, source: "env" };
+    }
+    const fromCursor = timestampFromCursor();
+    if (fromCursor !== undefined) {
+      logger.debug(
+        `[EventTimestamp] Using timestamp from persisted cursor: ${fromCursor}`
+      );
+      lastEventTimestamp = fromCursor;
+      lastEventTimestampSource = "state_file";
+      return { timestamp: fromCursor, source: "state_file" };
+    }
+    // No timestamp available - start from current time
+    const now = unixTimestamp(new Date());
+    logger.info(
+      `[EventTimestamp] No timestamp found, starting from current time: ${now}`
+    );
+    lastEventTimestamp = now;
+    lastEventTimestampSource = "new";
+    return { timestamp: now, source: "new" };
+  };
 
 const mapToApiEventTypes = (eventTypes: string[]): Set<EventType> => {
   const apiEventTypes = new Set<EventType>();
@@ -377,11 +400,12 @@ const mapToApiEventTypes = (eventTypes: string[]): Set<EventType> => {
   return apiEventTypes;
 };
 
-const buildEventsRequest = (): {
+const buildEventsRequest = async (): Promise<{
   url: string;
   params: { after: number; limit: number; eventTypes: EventType[] };
-} => {
-  const effectiveLastTimestamp = resolveLastEventTimestamp();
+}> => {
+  const timestampInfo = await resolveLastEventTimestamp();
+  const effectiveLastTimestamp = timestampInfo.timestamp;
 
   const eventTypes = enabledEventTypes();
   // Allow a small safety window behind the last seen timestamp so that
@@ -546,9 +570,10 @@ const collectPaginatedEvents = async (
 
 export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
   await eventStateStore.load();
+  await resolveLastEventTimestamp();
   await fetchCollectionSlug(TOKEN_ADDRESS ?? "");
 
-  const request = buildEventsRequest();
+  const request = await buildEventsRequest();
   logger.debug(`Events URL: ${request.url}`);
   const summary: FetchSummary = {
     status: "no_events_found",
