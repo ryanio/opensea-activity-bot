@@ -110,11 +110,11 @@ const logStartupConfiguration = async () => {
   logger.info("");
   logger.info("┌─ 📋 CONFIGURATION");
   logger.info("│");
-  logger.info(`│  📦  Collection Contract: ${fullTokenAddr}`);
+  logger.info(`│  📦  Contract: ${fullTokenAddr}`);
   if (collectionSlug) {
-    logger.info(`│  🏷️   Collection Slug: ${collectionSlug}`);
+    logger.info(`│  🏷️   Slug: ${collectionSlug}`);
   }
-  logger.info(`│  ⛓️   Network Chain: ${chain}`);
+  logger.info(`│  ⛓️   Chain: ${chain}`);
   logger.info(`│  ⏱️   Poll Interval: ${botInterval}s`);
   if (eventTimestampInfo) {
     logger.info(`│  🕐  Event Timestamp: ${eventTimestampInfo.timestamp}`);
