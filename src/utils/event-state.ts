@@ -1,7 +1,6 @@
 import { promises as fs } from "node:fs";
 import { dirname, join } from "node:path";
 import { logger } from "./logger";
-import { fullTokenAddr } from "./utils";
 
 const DEFAULT_DEDUPE_WINDOW_MINUTES = 60;
 const SECONDS_PER_MINUTE = 60;
@@ -217,11 +216,17 @@ class EventStateStore {
   }
 }
 
-let defaultStore: EventStateStore | undefined;
+// Cache stores per contract address to support multiple instances
+const storeCache = new Map<string, EventStateStore>();
 
 export const getDefaultEventStateStore = (): EventStateStore => {
-  if (defaultStore) {
-    return defaultStore;
+  // Read directly from env to ensure each process uses its own TOKEN_ADDRESS
+  const contractId = process.env.TOKEN_ADDRESS || "default";
+
+  // Return cached store if it exists for this contract
+  const cached = storeCache.get(contractId);
+  if (cached) {
+    return cached;
   }
 
   const minutes = Number(
@@ -236,16 +241,16 @@ export const getDefaultEventStateStore = (): EventStateStore => {
   const stateDir = process.env.EVENT_STATE_DIR ?? ".state";
   // Include contract address in filename to segregate state per contract
   // Keep 0x prefix and checksum (mixed case) for proper address format
-  const contractId = fullTokenAddr || "default";
   const fileName = `opensea-events-state-${contractId}.json`;
   const filePath = join(rootDir, stateDir, fileName);
 
   const enablePersistence = process.env.NODE_ENV !== "test";
 
-  defaultStore = new EventStateStore({
+  const store = new EventStateStore({
     filePath,
     windowSeconds,
     enablePersistence,
   });
-  return defaultStore;
+  storeCache.set(contractId, store);
+  return store;
 };
