@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import { dirname, join } from "node:path";
 import { logger } from "./logger";
+import { fullTokenAddr } from "./utils";
 
 const DEFAULT_DEDUPE_WINDOW_MINUTES = 60;
 const SECONDS_PER_MINUTE = 60;
@@ -233,7 +234,11 @@ export const getDefaultEventStateStore = (): EventStateStore => {
 
   const rootDir = process.cwd();
   const stateDir = process.env.EVENT_STATE_DIR ?? ".state";
-  const filePath = join(rootDir, stateDir, "opensea-events-state.json");
+  // Include contract address in filename to segregate state per contract
+  // Keep 0x prefix and checksum (mixed case) for proper address format
+  const contractId = fullTokenAddr || "default";
+  const fileName = `opensea-events-state-${contractId}.json`;
+  const filePath = join(rootDir, stateDir, fileName);
 
   const enablePersistence = process.env.NODE_ENV !== "test";
 

@@ -42,7 +42,12 @@ const EVENT_LAG_SAFETY_WINDOW_SECONDS = Number(
   OPENSEA_EVENT_LAG_WINDOW ?? DEFAULT_EVENT_LAG_SAFETY_WINDOW_SECONDS
 );
 
-type FetchSummaryStatus = "ok" | "noop" | "empty" | "error";
+type FetchSummaryStatus =
+  | "events_processed"
+  | "no_events_found"
+  | "all_events_filtered"
+  | "request_failed"
+  | "pagination_failed";
 
 type FetchSummary = {
   status: FetchSummaryStatus;
@@ -103,11 +108,18 @@ const logFetchSummary = (summary: FetchSummary, durationMs: number) => {
     `status=${summary.status}`,
     `fetched=${summary.fetched}`,
     `processed=${summary.processed}`,
-    `deduped=${summary.deduped}`,
-    `pages=${summary.pages}`,
-    `types=${summary.eventTypes.join("|")}`,
-    `durationMs=${durationMs}`,
   ];
+  if (summary.status === "all_events_filtered") {
+    const totalFiltered =
+      summary.filteredPrivate + summary.filteredLowOffers + summary.deduped;
+    parts.push(`filtered=${totalFiltered}`);
+  } else if (summary.status === "events_processed") {
+    parts.push(`deduped=${summary.deduped}`);
+  }
+  if (summary.error) {
+    parts.push(`error=${summary.error}`);
+  }
+  parts.push(`pages=${summary.pages}`, `durationMs=${durationMs}`);
   logger.info(parts.join(" "));
 };
 
@@ -343,15 +355,16 @@ const resolveLastEventTimestamp = (): number => {
   if (lastEventTimestamp !== undefined) {
     return lastEventTimestamp;
   }
-  const fromCursor = timestampFromCursor();
-  if (fromCursor !== undefined) {
-    lastEventTimestamp = fromCursor;
-    return fromCursor;
-  }
+  // Check env var first - allows overriding persisted cursor
   const fromEnv = timestampFromEnv();
   if (fromEnv !== undefined) {
     lastEventTimestamp = fromEnv;
     return fromEnv;
+  }
+  const fromCursor = timestampFromCursor();
+  if (fromCursor !== undefined) {
+    lastEventTimestamp = fromCursor;
+    return fromCursor;
   }
   const fallback = timestampFromBackfillWindow();
   lastEventTimestamp = fallback;
@@ -544,7 +557,7 @@ export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
   const request = buildEventsRequest();
   logger.debug(`Events URL: ${request.url}`);
   const summary: FetchSummary = {
-    status: "noop",
+    status: "no_events_found",
     fetched: 0,
     processed: 0,
     deduped: 0,
@@ -562,13 +575,13 @@ export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
     const result = await openseaGet<OpenSeaEventsResponse>(request.url);
 
     if (!result) {
-      summary.status = "error";
+      summary.status = "request_failed";
       summary.error = "request_failed";
       return finalEvents;
     }
 
     if (isEmptyEventsResponse(result)) {
-      summary.status = "empty";
+      summary.status = "no_events_found";
       return finalEvents;
     }
 
@@ -577,6 +590,7 @@ export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
     summary.fetched = pagination.fetched;
     summary.nextCursor = pagination.nextCursor;
     if (pagination.error) {
+      summary.status = "pagination_failed";
       summary.error = pagination.error;
     }
 
@@ -590,7 +604,15 @@ export const fetchEvents = async (): Promise<OpenSeaAssetEvent[]> => {
     summary.filteredLowOffers = stats.lowValueFiltered;
     summary.deduped = stats.deduped;
     summary.processed = filteredEvents.length;
-    summary.status = filteredEvents.length > 0 ? "ok" : "noop";
+    if (summary.status !== "pagination_failed") {
+      if (filteredEvents.length > 0) {
+        summary.status = "events_processed";
+      } else if (summary.fetched > 0) {
+        summary.status = "all_events_filtered";
+      } else {
+        summary.status = "no_events_found";
+      }
+    }
     finalEvents = filteredEvents;
 
     if (lastEventTimestamp !== undefined) {

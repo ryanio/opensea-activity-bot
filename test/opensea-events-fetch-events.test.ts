@@ -283,7 +283,8 @@ describe("fetchEvents (OpenSea)", () => {
     );
 
     expect(summaryLog).toBeDefined();
-    expect(summaryLog).toContain("deduped=1");
+    expect(summaryLog).toContain("status=all_events_filtered");
+    expect(summaryLog).toContain("filtered=1");
     expect(summaryLog).toContain("processed=0");
   });
 });
