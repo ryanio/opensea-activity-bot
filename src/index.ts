@@ -23,51 +23,38 @@ const logPlatformConfig = (
     `│  🐦 Twitter: ${twitterEnabled ? "✅ ENABLED" : "⭕ DISABLED"}`
   );
   if (twitterEnabled) {
-    logger.info(`│     ├─ Events: ${process.env.TWITTER_EVENTS}`);
+    const twitterEvents = process.env.TWITTER_EVENTS?.replace(/,/g, ", ") ?? "";
+    logger.info(`│     ├─ Events: ${twitterEvents}`);
     if (process.env.TWITTER_PREPEND_TWEET) {
       logger.info(`│     ├─ Prepend: "${process.env.TWITTER_PREPEND_TWEET}"`);
     }
     if (process.env.TWITTER_APPEND_TWEET) {
-      logger.info(`│     └─ Append: "${process.env.TWITTER_APPEND_TWEET}"`);
+      logger.info(`│     ├─ Append: "${process.env.TWITTER_APPEND_TWEET}"`);
     }
+    const config = getDefaultEventGroupConfig("TWITTER");
+    const hasPrependOrAppend =
+      process.env.TWITTER_PREPEND_TWEET || process.env.TWITTER_APPEND_TWEET;
+    logger.info(`│     ${hasPrependOrAppend ? "├─" : "└─"} Grouping`);
+    logger.info(`│        ├─ Min Group Size: ${config.minGroupSize} items`);
+    logger.info(
+      `│        └─ Settle Time: ${config.settleMs / MILLISECONDS_PER_SECOND}s`
+    );
   }
   logger.info("│");
   logger.info(
     `│  💬 Discord: ${discordEnabled ? "✅ ENABLED" : "⭕ DISABLED"}`
   );
   if (discordEnabled) {
-    logger.info(`│     └─ Events: ${process.env.DISCORD_EVENTS}`);
-  }
-  logger.info("│");
-};
-
-const logEventGroupConfig = (
-  twitterEnabled: boolean,
-  discordEnabled: boolean
-) => {
-  if (!(twitterEnabled || discordEnabled)) {
-    return;
-  }
-  logger.info("├─ 🧹 EVENT GROUPING");
-  logger.info("│");
-  if (twitterEnabled) {
-    const config = getDefaultEventGroupConfig("TWITTER");
-    logger.info("│  🐦 Twitter Event Groups:");
-    logger.info(`│     ├─ Min Group Size: ${config.minGroupSize} items`);
-    logger.info(
-      `│     └─ Settle Time: ${config.settleMs / MILLISECONDS_PER_SECOND}s`
-    );
-    logger.info("│");
-  }
-  if (discordEnabled) {
+    const discordEvents = process.env.DISCORD_EVENTS?.replace(/,/g, ", ") ?? "";
+    logger.info(`│     ├─ Events: ${discordEvents}`);
     const config = getDefaultEventGroupConfig("DISCORD");
-    logger.info("│  💬 Discord Event Groups:");
-    logger.info(`│     ├─ Min Group Size: ${config.minGroupSize} items`);
+    logger.info("│     └─ Grouping");
+    logger.info(`│        ├─ Min Group Size: ${config.minGroupSize} items`);
     logger.info(
-      `│     └─ Settle Time: ${config.settleMs / MILLISECONDS_PER_SECOND}s`
+      `│        └─ Settle Time: ${config.settleMs / MILLISECONDS_PER_SECOND}s`
     );
-    logger.info("│");
   }
+  logger.info("│");
 };
 
 const logStartupConfiguration = async () => {
@@ -143,7 +130,6 @@ const logStartupConfiguration = async () => {
   const discordEnabled = Boolean(process.env.DISCORD_EVENTS);
 
   logPlatformConfig(twitterEnabled, discordEnabled);
-  logEventGroupConfig(twitterEnabled, discordEnabled);
 
   logger.info("└─");
   logger.info("");
