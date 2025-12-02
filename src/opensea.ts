@@ -335,22 +335,6 @@ const timestampFromEnv = (): number | undefined => {
   return parsed;
 };
 
-const timestampFromBackfillWindow = (): number => {
-  const now = unixTimestamp(new Date());
-  const DEFAULT_BACKFILL_HOURS = 24;
-  const backfillHoursEnv = process.env.EVENT_BACKFILL_HOURS;
-  const backfillHours = backfillHoursEnv
-    ? Number(backfillHoursEnv)
-    : DEFAULT_BACKFILL_HOURS;
-  const hours =
-    Number.isNaN(backfillHours) || backfillHours <= 0
-      ? DEFAULT_BACKFILL_HOURS
-      : backfillHours;
-  const backfillSeconds = hours * 60 * 60;
-  const initial = Math.max(0, now - backfillSeconds);
-  return initial;
-};
-
 const resolveLastEventTimestamp = (): number => {
   if (lastEventTimestamp !== undefined) {
     return lastEventTimestamp;
@@ -358,17 +342,27 @@ const resolveLastEventTimestamp = (): number => {
   // Check env var first - allows overriding persisted cursor
   const fromEnv = timestampFromEnv();
   if (fromEnv !== undefined) {
+    logger.info(
+      `[EventTimestamp] Using LAST_EVENT_TIMESTAMP from environment: ${fromEnv}`
+    );
     lastEventTimestamp = fromEnv;
     return fromEnv;
   }
   const fromCursor = timestampFromCursor();
   if (fromCursor !== undefined) {
+    logger.debug(
+      `[EventTimestamp] Using timestamp from persisted cursor: ${fromCursor}`
+    );
     lastEventTimestamp = fromCursor;
     return fromCursor;
   }
-  const fallback = timestampFromBackfillWindow();
-  lastEventTimestamp = fallback;
-  return fallback;
+  // No timestamp available - start from current time
+  const now = unixTimestamp(new Date());
+  logger.info(
+    `[EventTimestamp] No timestamp found, starting from current time: ${now}`
+  );
+  lastEventTimestamp = now;
+  return now;
 };
 
 const mapToApiEventTypes = (eventTypes: string[]): Set<EventType> => {
