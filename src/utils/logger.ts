@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { inspect } from "node:util";
-import { shortTokenAddr } from "./utils";
+import { collectionStore } from "./collection-store";
 
 type Level = "debug" | "info" | "warn" | "error";
 
@@ -49,7 +49,7 @@ const serialize = (arg: unknown): string => {
 const write = (level: Level, parts: unknown[]) => {
   const ts = new Date().toISOString();
   const msg = parts.map(serialize).join(" ");
-  const line = `${ts} [${level.toUpperCase()}] [Activity] [${shortTokenAddr}] ${msg}\n`;
+  const line = `${ts} [${level.toUpperCase()}] [Activity] [${collectionStore.getIdentifier()}] ${msg}\n`;
   writeDebugFile(line);
   if (!shouldLog(level)) {
     return;

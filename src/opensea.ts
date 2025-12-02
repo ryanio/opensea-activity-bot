@@ -10,6 +10,7 @@ import type {
   OpenSeaNFTResponse,
 } from "./types";
 import { canonicalEventKeyFor } from "./utils/canonical-events";
+import { collectionStore } from "./utils/collection-store";
 import { getDefaultEventStateStore } from "./utils/event-state";
 import { parseEvents, wantsOpenSeaEventTypes } from "./utils/events";
 import { logger } from "./utils/logger";
@@ -112,8 +113,10 @@ const logFetchSummary = (summary: FetchSummary, durationMs: number) => {
 
 export const opensea = {
   api: "https://api.opensea.io/api/v2/",
-  collectionURL: () => `https://opensea.io/collection/${collectionSlug}`,
-  getEvents: () => `${opensea.api}events/collection/${collectionSlug}`,
+  collectionURL: () =>
+    `https://opensea.io/collection/${collectionStore.getSlug()}`,
+  getEvents: () =>
+    `${opensea.api}events/collection/${collectionStore.getSlug()}`,
   getContract: () => `${opensea.api}chain/${chain}/contract/${TOKEN_ADDRESS}`,
   getAccount: (address: string) => `${opensea.api}accounts/${address}`,
   getNFT: (tokenId: number) =>
@@ -232,10 +235,10 @@ const enabledEventTypes = (): string[] => {
   return [...eventTypes];
 };
 
-let collectionSlug: string;
 const fetchCollectionSlug = async (address: string): Promise<string> => {
-  if (collectionSlug) {
-    return collectionSlug;
+  const existing = collectionStore.getSlug();
+  if (existing) {
+    return existing;
   }
   logger.info(`🔍 Fetching collection metadata for ${address} on ${chain}...`);
   const url = opensea.getContract();
@@ -245,11 +248,12 @@ const fetchCollectionSlug = async (address: string): Promise<string> => {
     throw new Error(`No collection found for ${address} on chain ${chain}`);
   }
   logger.info(`✅ Collection identified: ${result.collection}`);
-  collectionSlug = result.collection;
+  collectionStore.setSlug(result.collection);
   return result.collection;
 };
 
-export const getCollectionSlug = (): string => collectionSlug;
+export const getCollectionSlug = (): string | undefined =>
+  collectionStore.getSlug();
 
 const filterPrivateListings = (
   events: OpenSeaAssetEvent[]

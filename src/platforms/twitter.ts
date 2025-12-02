@@ -42,9 +42,13 @@ const tweetedEventsCache = new LRUCache<string, boolean>(
 const DEFAULT_TWEET_DELAY_MS = 3000;
 const DEFAULT_BACKOFF_BASE_MS = 15_000;
 const MINUTES = 60;
+const SECONDS_PER_MINUTE = 60;
 const MS_PER_SECOND = 1000;
 const BACKOFF_MAX_MINUTES = 15;
 const DEFAULT_BACKOFF_MAX_MS = BACKOFF_MAX_MINUTES * MINUTES * MS_PER_SECOND;
+const DEFAULT_PROCESSING_TIMEOUT_MINUTES = 2;
+const DEFAULT_PROCESSING_TIMEOUT_MS =
+  DEFAULT_PROCESSING_TIMEOUT_MINUTES * SECONDS_PER_MINUTE * MS_PER_SECOND;
 const PER_TWEET_DELAY_MS = Number(
   process.env.TWITTER_QUEUE_DELAY_MS ?? DEFAULT_TWEET_DELAY_MS
 );
@@ -53,6 +57,9 @@ const BACKOFF_BASE_MS = Number(
 );
 const BACKOFF_MAX_MS = Number(
   process.env.TWITTER_BACKOFF_MAX_MS ?? DEFAULT_BACKOFF_MAX_MS
+);
+const PROCESSING_TIMEOUT_MS = Number(
+  process.env.TWITTER_PROCESSING_TIMEOUT_MS ?? DEFAULT_PROCESSING_TIMEOUT_MS
 );
 
 type MinimalTwitterClient = {
@@ -83,6 +90,7 @@ const tweetQueue = new AsyncQueue<TweetQueueItem>({
   perItemDelayMs: PER_TWEET_DELAY_MS,
   backoffBaseMs: BACKOFF_BASE_MS,
   backoffMaxMs: BACKOFF_MAX_MS,
+  processingTimeoutMs: PROCESSING_TIMEOUT_MS,
   debug: process.env.LOG_LEVEL === "debug",
   keyFor: (i) => keyForQueueItem(i),
   isAlreadyProcessed: (key) => tweetedEventsCache.get(key) === true,

@@ -429,7 +429,7 @@ export const formatGroupActorInfo = async (
   actorAddress: string | undefined,
   kind: GroupKind,
   collectionUrl: string,
-  collectionSlug: string
+  collectionSlug: string | undefined
 ): Promise<{
   actorName?: string;
   actorLabel: string;
@@ -492,7 +492,7 @@ export const formatGroupText = async (options: {
   count: number;
   kind: GroupKind;
   collectionUrl: string;
-  collectionSlug: string;
+  collectionSlug: string | undefined;
   totalSpent?: string | null;
 }): Promise<string> => {
   const { group, count, kind, collectionUrl, collectionSlug, totalSpent } =

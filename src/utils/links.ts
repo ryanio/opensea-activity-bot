@@ -2,9 +2,9 @@
 
 export const openseaProfileCollectionUrl = (
   address: string,
-  collectionSlug: string
+  collectionSlug: string | undefined
 ): string =>
-  `https://opensea.io/${address}/items?collectionSlugs=${collectionSlug}`;
+  `https://opensea.io/${address}/items?collectionSlugs=${collectionSlug ?? ""}`;
 
 export const openseaProfileActivityUrl = (
   address: string,

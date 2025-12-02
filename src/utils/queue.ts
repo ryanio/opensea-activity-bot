@@ -4,6 +4,34 @@ import { logger } from "./logger";
 const timeout = (ms: number) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
+// Creates a timeout promise with cleanup capability to prevent timer leaks
+const createTimeoutRace = <T>(
+  promise: Promise<T>,
+  ms: number,
+  message: string
+): Promise<T> =>
+  new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(message));
+    }, ms);
+    // Use unref() to prevent the timer from keeping the process alive
+    if (typeof timer.unref === "function") {
+      timer.unref();
+    }
+    promise
+      .then((result) => {
+        clearTimeout(timer);
+        resolve(result);
+      })
+      .catch((error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+
+// Default timeout for queue item processing (2 minutes)
+const DEFAULT_PROCESSING_TIMEOUT_MS = 120_000;
+
 export type QueueErrorClassification =
   | { type: "rate_limit"; pauseUntilMs: number }
   | { type: "transient" }
@@ -15,6 +43,7 @@ export type AsyncQueueOptions<T> = {
   perItemDelayMs: number;
   backoffBaseMs: number;
   backoffMaxMs: number;
+  processingTimeoutMs?: number;
   debug?: boolean;
   process: (item: T) => Promise<void>;
   keyFor: (item: T) => string;
@@ -111,7 +140,7 @@ export class AsyncQueue<T> {
         continue;
       }
 
-      this.handleSuccessfulProcess(key, next.item);
+      await this.handleSuccessfulProcess(key, next.item);
     }
   }
 
@@ -149,11 +178,46 @@ export class AsyncQueue<T> {
     return this.options.isAlreadyProcessed?.(key, item) === true;
   }
 
+  private getProcessingTimeoutMs(): number {
+    return this.options.processingTimeoutMs ?? DEFAULT_PROCESSING_TIMEOUT_MS;
+  }
+
   private async tryProcessNext(next: WorkItem<T>): Promise<boolean> {
+    const key = this.options.keyFor(next.item);
+    const timeoutMs = this.getProcessingTimeoutMs();
+
+    logger.info(`[Queue] Processing item: ${key}`);
+    const startTime = Date.now();
+
     try {
-      await this.options.process(next.item);
+      // Race between the actual processing and a timeout (with proper cleanup)
+      await createTimeoutRace(
+        this.options.process(next.item),
+        timeoutMs,
+        `Processing timed out after ${timeoutMs}ms for item: ${key}`
+      );
+      const durationMs = Date.now() - startTime;
+      logger.info(`[Queue] Completed item: ${key} (${durationMs}ms)`);
       return true;
     } catch (error: unknown) {
+      const durationMs = Date.now() - startTime;
+      const isTimeout =
+        error instanceof Error && error.message.includes("timed out");
+
+      if (isTimeout) {
+        logger.error(
+          `[Queue] Processing timeout after ${durationMs}ms for item: ${key}`
+        );
+        // Treat timeouts as transient errors - allow retry with backoff
+        next.attempts += 1;
+        const waitMs = this.calcBackoffMs(next.attempts);
+        logger.warn(
+          `[Queue] Will retry after ${waitMs}ms (attempt ${next.attempts})`
+        );
+        await timeout(waitMs);
+        return false;
+      }
+
       const classification = this.options.classifyError(error);
       if (classification.type === "rate_limit") {
         const waitMs = Math.max(
@@ -161,25 +225,26 @@ export class AsyncQueue<T> {
           this.options.backoffBaseMs
         );
         this.pauseUntilMs = Date.now() + waitMs;
-        if (this.options.debug) {
-          logger.debug(`[Queue] Rate limited, pausing for ${waitMs}ms`);
-        }
+        logger.warn(`[Queue] Rate limited, pausing for ${waitMs}ms`);
         return false; // retry same item after pause
       }
       if (classification.type === "transient") {
         next.attempts += 1;
         const waitMs = this.calcBackoffMs(next.attempts);
+        logger.warn(
+          `[Queue] Transient error (attempt ${next.attempts}), backing off for ${waitMs}ms`
+        );
         if (this.options.debug) {
-          logger.debug(
-            `[Queue] Transient error (attempt ${next.attempts}), backing off for ${waitMs}ms:`,
-            error
-          );
+          logger.debug("[Queue] Error details:", error);
         }
         await timeout(waitMs);
         return false; // retry same item after backoff
       }
       // fatal
-      logger.error("[Queue] Fatal error processing item, dropping:", error);
+      logger.error(
+        `[Queue] Fatal error processing item (${durationMs}ms), dropping:`,
+        error
+      );
       this.list.shift();
       return false;
     }
