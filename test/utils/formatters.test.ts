@@ -6,11 +6,20 @@ import {
 } from "../../src/utils/utils";
 
 describe("formatAmount", () => {
-  test("trims to 4 decimals", () => {
-    expect(formatAmount("123456", 5, "ETH")).toBe("1.2345 ETH");
+  test("rounds to 4 decimals", () => {
+    expect(formatAmount("123456", 5, "ETH")).toBe("1.2346 ETH");
   });
   test("removes .0 for whole numbers", () => {
     expect(formatAmount("100000", 5, "ETH")).toBe("1 ETH");
+  });
+  test("rounds up seller net amount to match buyer gross amount", () => {
+    // 0.0003 ETH sale with ~3% fees = seller gets 0.000291 ETH
+    // Should round to 0.0003 to match what OpenSea UI displays
+    expect(formatAmount("291000000000000", 18, "ETH")).toBe("0.0003 ETH");
+  });
+  test("handles exact amounts correctly", () => {
+    expect(formatAmount("300000000000000", 18, "ETH")).toBe("0.0003 ETH");
+    expect(formatAmount("200000000000000", 18, "ETH")).toBe("0.0002 ETH");
   });
 });
 

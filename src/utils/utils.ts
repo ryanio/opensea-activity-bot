@@ -40,6 +40,10 @@ export const shortTokenAddr = shortAddr(fullTokenAddr);
 
 export type TransferKind = "mint" | "burn" | "transfer";
 
+// Regex patterns for formatAmount (moved to top level for performance)
+const TRAILING_ZEROS_REGEX = /(\.\d*?)0+$/;
+const TRAILING_DOT_REGEX = /\.$/;
+
 export const classifyTransfer = (event: {
   event_type?: string;
   from_address?: string;
@@ -64,22 +68,29 @@ export const classifyTransfer = (event: {
 
 /**
  * Formats amount, decimals, and symbols to final string output.
+ * Rounds to MAX_DECIMALS places (instead of truncating).
  */
 export const formatAmount = (
   amount: BigNumberish,
   decimals: number,
   symbol: string
 ) => {
-  let value = formatUnits(amount, decimals);
-  const split = value.split(".");
+  const raw = formatUnits(amount, decimals);
   const MAX_DECIMALS = 4;
-  if ((split[1] ?? "").length > MAX_DECIMALS) {
-    // Trim to 4 decimals max
-    value = `${split[0]}.${split[1].slice(0, MAX_DECIMALS)}`;
-  } else if (split[1] === "0") {
-    // If whole number remove '.0'
-    value = split[0];
-  }
+
+  // Parse and round to avoid truncation issues
+  const parsed = Number.parseFloat(raw);
+  const multiplier = 10 ** MAX_DECIMALS;
+  const rounded = Math.round(parsed * multiplier) / multiplier;
+
+  // Format the rounded value, removing unnecessary trailing zeros
+  let value = rounded.toFixed(MAX_DECIMALS);
+
+  // Remove trailing zeros after decimal point
+  value = value
+    .replace(TRAILING_ZEROS_REGEX, "$1")
+    .replace(TRAILING_DOT_REGEX, "");
+
   return `${value} ${symbol}`;
 };
 
