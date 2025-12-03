@@ -63,7 +63,12 @@ export class AsyncQueue<T> {
   }
 
   enqueue(item: T) {
-    this.list.push({ item, attempts: 0 });
+    const workItem: WorkItem<T> = { item, attempts: 0 };
+    this.list.push(workItem);
+    if (this.options.debug) {
+      const key = this.options.keyFor(item);
+      logger.debug(`[Queue] Enqueued item: ${key} size=${this.list.length}`);
+    }
 
     // Auto-start the queue if it's idle
     if (!this.isProcessing) {
@@ -169,8 +174,14 @@ export class AsyncQueue<T> {
   private async pauseIfNeeded(now: number) {
     if (this.pauseUntilMs > now) {
       const waitMs = this.pauseUntilMs - now;
+      if (this.options.debug) {
+        logger.debug(`[Queue] Pause in effect for ${waitMs}ms`);
+      }
       await timeout(waitMs);
       this.pauseUntilMs = 0;
+      if (this.options.debug) {
+        logger.debug("[Queue] Pause complete, resuming processing");
+      }
     }
   }
 
@@ -186,7 +197,8 @@ export class AsyncQueue<T> {
     const key = this.options.keyFor(next.item);
     const timeoutMs = this.getProcessingTimeoutMs();
 
-    logger.info(`[Queue] Processing item: ${key}`);
+    const attemptNumber = next.attempts + 1;
+    logger.info(`[Queue] Processing item: ${key} (attempt ${attemptNumber})`);
     const startTime = Date.now();
 
     try {
@@ -197,7 +209,9 @@ export class AsyncQueue<T> {
         `Processing timed out after ${timeoutMs}ms for item: ${key}`
       );
       const durationMs = Date.now() - startTime;
-      logger.info(`[Queue] Completed item: ${key} (${durationMs}ms)`);
+      logger.info(
+        `[Queue] Completed item: ${key} (${durationMs}ms, attempt ${attemptNumber})`
+      );
       return true;
     } catch (error: unknown) {
       const durationMs = Date.now() - startTime;
@@ -225,14 +239,19 @@ export class AsyncQueue<T> {
           this.options.backoffBaseMs
         );
         this.pauseUntilMs = Date.now() + waitMs;
-        logger.warn(`[Queue] Rate limited, pausing for ${waitMs}ms`);
+        logger.warn(
+          `[Queue] Rate limited for item: ${key}, pausing for ${waitMs}ms`
+        );
+        if (this.options.debug) {
+          logger.debug("[Queue] Rate limit error details:", error);
+        }
         return false; // retry same item after pause
       }
       if (classification.type === "transient") {
         next.attempts += 1;
         const waitMs = this.calcBackoffMs(next.attempts);
         logger.warn(
-          `[Queue] Transient error (attempt ${next.attempts}), backing off for ${waitMs}ms`
+          `[Queue] Transient error for item: ${key} (attempt ${next.attempts}), backing off for ${waitMs}ms`
         );
         if (this.options.debug) {
           logger.debug("[Queue] Error details:", error);
@@ -242,7 +261,7 @@ export class AsyncQueue<T> {
       }
       // fatal
       logger.error(
-        `[Queue] Fatal error processing item (${durationMs}ms), dropping:`,
+        `[Queue] Fatal error processing item ${key} (${durationMs}ms), dropping:`,
         error
       );
       this.list.shift();

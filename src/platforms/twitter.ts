@@ -86,6 +86,10 @@ const groupConfig = getDefaultEventGroupConfig("TWITTER");
 const groupManager = new EventGroupManager(groupConfig);
 
 // Generic async queue for tweeting
+logger.debug(
+  `${logStart} Queue config: delay=${PER_TWEET_DELAY_MS}ms backoffBase=${BACKOFF_BASE_MS}ms backoffMax=${BACKOFF_MAX_MS}ms timeout=${PROCESSING_TIMEOUT_MS}ms`
+);
+
 const tweetQueue = new AsyncQueue<TweetQueueItem>({
   perItemDelayMs: PER_TWEET_DELAY_MS,
   backoffBaseMs: BACKOFF_BASE_MS,
@@ -133,12 +137,20 @@ const tweetQueue = new AsyncQueue<TweetQueueItem>({
       const dayRemaining = rateLimit?.day?.remaining;
       const dayReset = rateLimit?.day?.reset;
       if (dayRemaining === 0 && typeof dayReset === "number") {
-        return {
+        const classification = {
           type: "rate_limit",
           pauseUntilMs: (dayReset as number) * MS_PER_SECOND,
         } as const;
+        logger.debug(
+          `${logStart} classifyError: code=${errCode} remaining=${dayRemaining} reset=${dayReset} type=${classification.type}`
+        );
+        return classification;
       }
-      return { type: "transient" } as const;
+      const classification = { type: "transient" } as const;
+      logger.debug(
+        `${logStart} classifyError: code=${errCode} remaining=${dayRemaining} type=${classification.type}`
+      );
+      return classification;
     }
     const status =
       (error as { data?: { status?: number }; status?: number })?.data
@@ -149,16 +161,45 @@ const tweetQueue = new AsyncQueue<TweetQueueItem>({
       status === 0 ||
       (error as { name?: string })?.name === "FetchError"
     ) {
-      return { type: "transient" } as const;
+      const classification = { type: "transient" } as const;
+      logger.debug(
+        `${logStart} classifyError: status=${status ?? "unknown"} type=${classification.type}`
+      );
+      return classification;
     }
-    return { type: "fatal" } as const;
+    const classification = { type: "fatal" } as const;
+    logger.debug(
+      `${logStart} classifyError: status=${status ?? "unknown"} type=${classification.type}`
+    );
+    return classification;
   },
 });
 
 const keyForQueueItem = (item: TweetQueueItem): string => {
   const ev = item.event;
   if (isGroupedEvent(ev)) {
+    // For transaction-based groups, we want a stable key per tx hash so that
+    // repeated polling doesn't enqueue duplicate work for the same on-chain tx.
     const tx = ev.txHash ?? txHashFor(ev.events?.[0]) ?? "unknown";
+
+    if (typeof tx === "string" && tx.startsWith("actor:")) {
+      // Actor-based groups reuse a synthetic "actor:<kind>:<address>" tx hash.
+      // If we keyed only on this value, we'd permanently suppress future groups
+      // for the same actor after the first tweet.
+      //
+      // To allow multiple distinct actor groups over time while still deduping
+      // true duplicates, incorporate the time window of the grouped events
+      // into the queue key. This keeps keys stable for the same group across
+      // retries, but different once new events arrive.
+      const firstTs = ev.events[0]?.event_timestamp;
+      const lastTs = ev.events.at(-1)?.event_timestamp ?? firstTs;
+      const window =
+        firstTs !== undefined && lastTs !== undefined
+          ? `${firstTs}-${lastTs}`
+          : "unknown-window";
+      return `group:${tx}|${window}`;
+    }
+
     return `group:${tx}`;
   }
   return eventKeyFor(item.event as OpenSeaAssetEvent);
@@ -560,6 +601,18 @@ const enqueueIndividualEvents = (
 ): void => {
   for (const event of processableEvents) {
     tweetQueue.enqueue({ event });
+  }
+
+  if (processableEvents.length > 0) {
+    const MAX_SAMPLE = 5;
+    const sampleKeys = processableEvents
+      .slice(0, MAX_SAMPLE)
+      .map((e) => eventKeyFor(e));
+    logger.debug(
+      `${logStart} Enqueued ${processableEvents.length} single event(s) for tweeting, sampleKeys=[${sampleKeys.join(
+        ", "
+      )}] queue=${tweetQueue.size()}`
+    );
   }
 };
 

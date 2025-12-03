@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { jest } from "@jest/globals";
+import { createMintBatch, TEST_MINTER_1 } from "../helpers";
 
 // Mock env
 process.env.TWITTER_EVENTS = "sale,listing,offer,transfer,burn";
@@ -351,6 +352,191 @@ describe("twitter flows", () => {
         (t) => t.toLowerCase().includes("burn") && TEN_BURNED_REGEX.test(t)
       )
     ).toBe(true);
+  });
+
+  it("retries on 429 rate limit errors from Twitter and eventually tweets", async () => {
+    const originalEventsEnv = process.env.TWITTER_EVENTS;
+    try {
+      process.env.TWITTER_EVENTS = "mint";
+      process.env.TWITTER_QUEUE_DELAY_MS = "0";
+      process.env.TWITTER_BACKOFF_BASE_MS = "1";
+      process.env.TWITTER_BACKOFF_MAX_MS = "5";
+
+      const baseTimestamp = 3_000_000_000;
+      const [mintEvent] = createMintBatch(1, TEST_MINTER_1, baseTimestamp);
+
+      const m = require("twitter-api-v2") as {
+        __mockReadWrite: { v2: { tweet: jest.Mock } };
+      };
+      const tweetMock = m.__mockReadWrite.v2.tweet as jest.Mock;
+
+      let firstCall = true;
+      tweetMock.mockImplementation(() => {
+        if (firstCall) {
+          firstCall = false;
+          const error = {
+            code: 429,
+            rateLimit: {
+              day: {
+                remaining: 0,
+                reset: Math.floor(Date.now() / 1000),
+              },
+            },
+          };
+          throw error;
+        }
+        return Promise.resolve({ data: { id: "1", text: "ok" } });
+      });
+
+      const { tweetEvents } = await import("../../src/platforms/twitter");
+      tweetEvents([
+        mintEvent,
+      ] as unknown as import("../../src/types").OpenSeaAssetEvent[]);
+
+      await jest.runAllTimersAsync();
+      expect(tweetMock).toHaveBeenCalledTimes(2);
+    } finally {
+      process.env.TWITTER_EVENTS = originalEventsEnv;
+    }
+  });
+
+  it("retries transient 5xx errors from Twitter and eventually tweets", async () => {
+    const originalEventsEnv = process.env.TWITTER_EVENTS;
+    try {
+      process.env.TWITTER_EVENTS = "mint";
+      process.env.TWITTER_QUEUE_DELAY_MS = "0";
+      process.env.TWITTER_BACKOFF_BASE_MS = "1";
+      process.env.TWITTER_BACKOFF_MAX_MS = "5";
+
+      const baseTimestamp = 3_100_000_000;
+      const [mintEvent] = createMintBatch(1, TEST_MINTER_1, baseTimestamp);
+
+      const m = require("twitter-api-v2") as {
+        __mockReadWrite: { v2: { tweet: jest.Mock } };
+      };
+      const tweetMock = m.__mockReadWrite.v2.tweet as jest.Mock;
+
+      let attempts = 0;
+      tweetMock.mockImplementation(() => {
+        attempts += 1;
+        if (attempts < 3) {
+          const error = { status: 503 };
+          throw error;
+        }
+        return Promise.resolve({ data: { id: "1", text: "ok" } });
+      });
+
+      const { tweetEvents } = await import("../../src/platforms/twitter");
+      tweetEvents([
+        mintEvent,
+      ] as unknown as import("../../src/types").OpenSeaAssetEvent[]);
+
+      await jest.runAllTimersAsync();
+      expect(tweetMock).toHaveBeenCalledTimes(3);
+    } finally {
+      process.env.TWITTER_EVENTS = originalEventsEnv;
+    }
+  });
+
+  it("drops fatal 4xx errors from Twitter without infinite retries", async () => {
+    const originalEventsEnv = process.env.TWITTER_EVENTS;
+    try {
+      process.env.TWITTER_EVENTS = "mint";
+      process.env.TWITTER_QUEUE_DELAY_MS = "0";
+      process.env.TWITTER_BACKOFF_BASE_MS = "1";
+      process.env.TWITTER_BACKOFF_MAX_MS = "5";
+
+      const baseTimestamp = 3_200_000_000;
+      const [mintEvent] = createMintBatch(1, TEST_MINTER_1, baseTimestamp);
+
+      const m = require("twitter-api-v2") as {
+        __mockReadWrite: { v2: { tweet: jest.Mock } };
+      };
+      const tweetMock = m.__mockReadWrite.v2.tweet as jest.Mock;
+
+      tweetMock.mockImplementation(() => {
+        const error = { status: 400 };
+        throw error;
+      });
+
+      const { tweetEvents } = await import("../../src/platforms/twitter");
+      tweetEvents([
+        mintEvent,
+      ] as unknown as import("../../src/types").OpenSeaAssetEvent[]);
+
+      await jest.runAllTimersAsync();
+      expect(tweetMock).toHaveBeenCalledTimes(1);
+    } finally {
+      process.env.TWITTER_EVENTS = originalEventsEnv;
+    }
+  });
+
+  it("tweets single mint events when below group size threshold", async () => {
+    const originalEventsEnv = process.env.TWITTER_EVENTS;
+    try {
+      process.env.TWITTER_EVENTS = "mint";
+      process.env.TWITTER_EVENT_GROUP_SETTLE_MS = "60000";
+      process.env.TWITTER_EVENT_GROUP_MIN_GROUP_SIZE = "3";
+      process.env.TWITTER_QUEUE_DELAY_MS = "0";
+
+      const baseTimestamp = 1_234_567_890;
+      const mintEvents = createMintBatch(2, TEST_MINTER_1, baseTimestamp);
+
+      const { tweetEvents } = await import("../../src/platforms/twitter");
+      tweetEvents(mintEvents);
+
+      const m = require("twitter-api-v2") as {
+        __mockReadWrite: { v2: { tweet: jest.Mock } };
+      };
+
+      await jest.runAllTimersAsync();
+      const calls = (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls;
+
+      // Below minGroupSize, mints should be tweeted individually
+      expect(calls.length).toBe(2);
+    } finally {
+      process.env.TWITTER_EVENTS = originalEventsEnv;
+    }
+  });
+
+  it("tweets multiple actor-based mint groups for the same minter over time", async () => {
+    const originalEventsEnv = process.env.TWITTER_EVENTS;
+    try {
+      process.env.TWITTER_EVENTS = "mint";
+      process.env.TWITTER_EVENT_GROUP_SETTLE_MS = "0";
+      process.env.TWITTER_EVENT_GROUP_MIN_GROUP_SIZE = "2";
+      process.env.TWITTER_QUEUE_DELAY_MS = "0";
+
+      const baseTimestamp = 2_000_000_000;
+      const firstBatch = createMintBatch(2, TEST_MINTER_1, baseTimestamp);
+      const secondBatch = createMintBatch(
+        2,
+        TEST_MINTER_1,
+        baseTimestamp + 100
+      );
+
+      const { tweetEvents } = await import("../../src/platforms/twitter");
+
+      // First group for this minter
+      tweetEvents(firstBatch);
+      const m = require("twitter-api-v2") as {
+        __mockReadWrite: { v2: { tweet: jest.Mock } };
+      };
+      await jest.runAllTimersAsync();
+      let calls = (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls;
+      expect(calls.length).toBe(1);
+
+      // Second independent group for the same minter should also tweet
+      tweetEvents(secondBatch);
+      await jest.runAllTimersAsync();
+      calls = (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls;
+
+      // Previously this would stay at 1 due to actor-based queue key dedupe.
+      // With the updated keying (including timestamp window), we expect 2.
+      expect(calls.length).toBe(2);
+    } finally {
+      process.env.TWITTER_EVENTS = originalEventsEnv;
+    }
   });
 });
 

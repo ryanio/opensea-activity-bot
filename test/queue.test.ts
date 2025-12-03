@@ -70,6 +70,31 @@ describe("AsyncQueue", () => {
       q.enqueue(2);
       expect(q.size()).toBe(2);
     });
+
+    it("allows start() to be called safely while processing", async () => {
+      const processed: number[] = [];
+      const q = new AsyncQueue<number>({
+        perItemDelayMs: 1,
+        backoffBaseMs: 1,
+        backoffMaxMs: 10,
+        debug: true,
+        process: (n) => {
+          processed.push(n);
+          return Promise.resolve();
+        },
+        keyFor: (n) => String(n),
+        classifyError: () => ({ type: "fatal" }),
+      });
+
+      q.enqueue(1);
+      // Queue auto-starts on enqueue, but explicit calls to start() while
+      // processing should be safe no-ops.
+      q.start();
+      q.start();
+
+      await sleep(50);
+      expect(processed).toEqual([1]);
+    });
   });
 
   describe("Error Handling", () => {
@@ -171,6 +196,40 @@ describe("AsyncQueue", () => {
       // Both should eventually process after rate limit
       expect(processed).toContain(1);
       expect(processed).toContain(2);
+    });
+
+    it("retries items that hit the processing timeout and eventually succeeds", async () => {
+      const processed: number[] = [];
+      let attempts = 0;
+      const PROCESSING_TIMEOUT_MS = 5;
+      const SLOW_MS = 50;
+
+      const q = new AsyncQueue<number>({
+        perItemDelayMs: 0,
+        backoffBaseMs: 5,
+        backoffMaxMs: 20,
+        processingTimeoutMs: PROCESSING_TIMEOUT_MS,
+        process: async (n) => {
+          attempts += 1;
+          if (attempts === 1) {
+            // First attempt runs longer than the timeout to trigger the
+            // internal timeout handling path.
+            await sleep(SLOW_MS);
+            return;
+          }
+          processed.push(n);
+        },
+        keyFor: (n) => String(n),
+        classifyError: () => ({ type: "transient" }),
+      });
+
+      q.enqueue(7);
+
+      // Allow enough time for one timed-out attempt, backoff, and a successful retry.
+      await sleep(SLOW_MS * 3);
+
+      expect(processed).toEqual([7]);
+      expect(attempts).toBeGreaterThanOrEqual(2);
     });
   });
 
