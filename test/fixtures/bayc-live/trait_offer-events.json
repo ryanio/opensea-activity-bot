@@ -1,0 +1,404 @@
+{
+  "asset_events": [
+    {
+      "event_type": "order",
+      "event_timestamp": 1764868313,
+      "order_hash": "0xc8e5a174568e332ddd26cd8fa78eeccf48a92582c76ef31b2e4a599193c1e02a",
+      "protocol_address": "0x0000000000000068f116a894984e2db1123eb395",
+      "chain": "ethereum",
+      "payment": {
+        "quantity": "5620000000000000000",
+        "token_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "decimals": 18,
+        "symbol": "WETH"
+      },
+      "order_type": "trait_offer",
+      "start_date": 1764868313,
+      "expiration_date": 1764868973,
+      "asset": null,
+      "quantity": 1,
+      "maker": "0xf15c93562bc3944a68e938ef75d2a3360d98ca57",
+      "taker": "",
+      "criteria": {
+        "collection": {
+          "slug": "boredapeyachtclub"
+        },
+        "contract": {
+          "address": "0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d"
+        },
+        "trait": {
+          "type": "Mouth",
+          "value": "Bored Unshaven Dagger"
+        },
+        "traits": [
+          {
+            "type": "Mouth",
+            "value": "Bored Unshaven Dagger"
+          }
+        ],
+        "encoded_token_ids": null
+      },
+      "is_private_listing": false
+    },
+    {
+      "event_type": "order",
+      "event_timestamp": 1764868312,
+      "order_hash": "0xa9851fc6b5676aac4089a805742e989e6f219c5d39693355a300804921ce2592",
+      "protocol_address": "0x0000000000000068f116a894984e2db1123eb395",
+      "chain": "ethereum",
+      "payment": {
+        "quantity": "5610000000000000000",
+        "token_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "decimals": 18,
+        "symbol": "WETH"
+      },
+      "order_type": "trait_offer",
+      "start_date": 1764868312,
+      "expiration_date": 1764868972,
+      "asset": null,
+      "quantity": 1,
+      "maker": "0xf76246b0842c92ad5bd745973ca9eb85b937b126",
+      "taker": "",
+      "criteria": {
+        "collection": {
+          "slug": "boredapeyachtclub"
+        },
+        "contract": {
+          "address": "0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d"
+        },
+        "trait": {
+          "type": "Mouth",
+          "value": "Bored Unshaven Dagger"
+        },
+        "traits": [
+          {
+            "type": "Mouth",
+            "value": "Bored Unshaven Dagger"
+          }
+        ],
+        "encoded_token_ids": null
+      },
+      "is_private_listing": false
+    },
+    {
+      "event_type": "order",
+      "event_timestamp": 1764868312,
+      "order_hash": "0x52d0ed1b50373f72bc5c2eaf1b2fff1e9e12a287c071bda2e73f7766dad8f09c",
+      "protocol_address": "0x0000000000000068f116a894984e2db1123eb395",
+      "chain": "ethereum",
+      "payment": {
+        "quantity": "10000000000000000",
+        "token_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "decimals": 18,
+        "symbol": "WETH"
+      },
+      "order_type": "trait_offer",
+      "start_date": 1764868305,
+      "expiration_date": 1764869205,
+      "asset": null,
+      "quantity": 1,
+      "maker": "0xbf6cb5594a8fdf23c9ddcdd911ed8e2751b59cf6",
+      "taker": "",
+      "criteria": {
+        "collection": {
+          "slug": "boredapeyachtclub"
+        },
+        "contract": {
+          "address": "0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d"
+        },
+        "trait": {
+          "type": "Mouth",
+          "value": "Bored"
+        },
+        "traits": [
+          {
+            "type": "Mouth",
+            "value": "Bored"
+          }
+        ],
+        "encoded_token_ids": null
+      },
+      "is_private_listing": false
+    },
+    {
+      "event_type": "order",
+      "event_timestamp": 1764868311,
+      "order_hash": "0xa5b9113fc992ec70479b13b94af22117add22eda71016f2071d4be88008d8db4",
+      "protocol_address": "0x0000000000000068f116a894984e2db1123eb395",
+      "chain": "ethereum",
+      "payment": {
+        "quantity": "5620000000000000000",
+        "token_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "decimals": 18,
+        "symbol": "WETH"
+      },
+      "order_type": "trait_offer",
+      "start_date": 1764868311,
+      "expiration_date": 1764868971,
+      "asset": null,
+      "quantity": 1,
+      "maker": "0xf76246b0842c92ad5bd745973ca9eb85b937b126",
+      "taker": "",
+      "criteria": {
+        "collection": {
+          "slug": "boredapeyachtclub"
+        },
+        "contract": {
+          "address": "0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d"
+        },
+        "trait": {
+          "type": "Hat",
+          "value": "Bayc Flipped Brim"
+        },
+        "traits": [
+          {
+            "type": "Hat",
+            "value": "Bayc Flipped Brim"
+          }
+        ],
+        "encoded_token_ids": null
+      },
+      "is_private_listing": false
+    },
+    {
+      "event_type": "order",
+      "event_timestamp": 1764868311,
+      "order_hash": "0x21e5cfea926102c926fbce0dc58de6ce3d533f59e471e413a194a44ba9e723c7",
+      "protocol_address": "0x0000000000000068f116a894984e2db1123eb395",
+      "chain": "ethereum",
+      "payment": {
+        "quantity": "10000000000000000",
+        "token_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "decimals": 18,
+        "symbol": "WETH"
+      },
+      "order_type": "trait_offer",
+      "start_date": 1764868305,
+      "expiration_date": 1764869205,
+      "asset": null,
+      "quantity": 1,
+      "maker": "0xbf6cb5594a8fdf23c9ddcdd911ed8e2751b59cf6",
+      "taker": "",
+      "criteria": {
+        "collection": {
+          "slug": "boredapeyachtclub"
+        },
+        "contract": {
+          "address": "0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d"
+        },
+        "trait": {
+          "type": "Mouth",
+          "value": "Bored Unshaven"
+        },
+        "traits": [
+          {
+            "type": "Mouth",
+            "value": "Bored Unshaven"
+          }
+        ],
+        "encoded_token_ids": null
+      },
+      "is_private_listing": false
+    },
+    {
+      "event_type": "order",
+      "event_timestamp": 1764868311,
+      "order_hash": "0x55f0d9632c1be005f78a1c4b1cad23792a29fba5cf158f082ac1ec116fa58067",
+      "protocol_address": "0x0000000000000068f116a894984e2db1123eb395",
+      "chain": "ethereum",
+      "payment": {
+        "quantity": "5670000000000000000",
+        "token_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "decimals": 18,
+        "symbol": "WETH"
+      },
+      "order_type": "trait_offer",
+      "start_date": 1764868311,
+      "expiration_date": 1764868971,
+      "asset": null,
+      "quantity": 1,
+      "maker": "0xf76246b0842c92ad5bd745973ca9eb85b937b126",
+      "taker": "",
+      "criteria": {
+        "collection": {
+          "slug": "boredapeyachtclub"
+        },
+        "contract": {
+          "address": "0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d"
+        },
+        "trait": {
+          "type": "Eyes",
+          "value": "Cyborg"
+        },
+        "traits": [
+          {
+            "type": "Eyes",
+            "value": "Cyborg"
+          }
+        ],
+        "encoded_token_ids": null
+      },
+      "is_private_listing": false
+    },
+    {
+      "event_type": "order",
+      "event_timestamp": 1764868311,
+      "order_hash": "0x3515fce029118fe40ac7c8941fdc4d8bc2defdd8fa86ef374722b5b989d4365b",
+      "protocol_address": "0x0000000000000068f116a894984e2db1123eb395",
+      "chain": "ethereum",
+      "payment": {
+        "quantity": "5620000000000000000",
+        "token_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "decimals": 18,
+        "symbol": "WETH"
+      },
+      "order_type": "trait_offer",
+      "start_date": 1764868311,
+      "expiration_date": 1764868971,
+      "asset": null,
+      "quantity": 1,
+      "maker": "0xf15c93562bc3944a68e938ef75d2a3360d98ca57",
+      "taker": "",
+      "criteria": {
+        "collection": {
+          "slug": "boredapeyachtclub"
+        },
+        "contract": {
+          "address": "0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d"
+        },
+        "trait": {
+          "type": "Hat",
+          "value": "King's Crown"
+        },
+        "traits": [
+          {
+            "type": "Hat",
+            "value": "King's Crown"
+          }
+        ],
+        "encoded_token_ids": null
+      },
+      "is_private_listing": false
+    },
+    {
+      "event_type": "order",
+      "event_timestamp": 1764868311,
+      "order_hash": "0x4ada479cb783ed5a0324fd69ffcb454033536fc0063370fa37f92df781143074",
+      "protocol_address": "0x0000000000000068f116a894984e2db1123eb395",
+      "chain": "ethereum",
+      "payment": {
+        "quantity": "5650000000000000000",
+        "token_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "decimals": 18,
+        "symbol": "WETH"
+      },
+      "order_type": "trait_offer",
+      "start_date": 1764868311,
+      "expiration_date": 1764868971,
+      "asset": null,
+      "quantity": 1,
+      "maker": "0xf15c93562bc3944a68e938ef75d2a3360d98ca57",
+      "taker": "",
+      "criteria": {
+        "collection": {
+          "slug": "boredapeyachtclub"
+        },
+        "contract": {
+          "address": "0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d"
+        },
+        "trait": {
+          "type": "Eyes",
+          "value": "Cyborg"
+        },
+        "traits": [
+          {
+            "type": "Eyes",
+            "value": "Cyborg"
+          }
+        ],
+        "encoded_token_ids": null
+      },
+      "is_private_listing": false
+    },
+    {
+      "event_type": "order",
+      "event_timestamp": 1764868311,
+      "order_hash": "0x9c4522fe9a6f3c047c3bb9deaffc15ab51e56fb062a6187511811a8179fa91bc",
+      "protocol_address": "0x0000000000000068f116a894984e2db1123eb395",
+      "chain": "ethereum",
+      "payment": {
+        "quantity": "5610000000000000000",
+        "token_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "decimals": 18,
+        "symbol": "WETH"
+      },
+      "order_type": "trait_offer",
+      "start_date": 1764868310,
+      "expiration_date": 1764868970,
+      "asset": null,
+      "quantity": 1,
+      "maker": "0xf76246b0842c92ad5bd745973ca9eb85b937b126",
+      "taker": "",
+      "criteria": {
+        "collection": {
+          "slug": "boredapeyachtclub"
+        },
+        "contract": {
+          "address": "0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d"
+        },
+        "trait": {
+          "type": "Hat",
+          "value": "King's Crown"
+        },
+        "traits": [
+          {
+            "type": "Hat",
+            "value": "King's Crown"
+          }
+        ],
+        "encoded_token_ids": null
+      },
+      "is_private_listing": false
+    },
+    {
+      "event_type": "order",
+      "event_timestamp": 1764868311,
+      "order_hash": "0x536e0f9db27a226b83516767656f0a0ae5b2da64f90623b7ce84ded695a4a10a",
+      "protocol_address": "0x0000000000000068f116a894984e2db1123eb395",
+      "chain": "ethereum",
+      "payment": {
+        "quantity": "10000000000000000",
+        "token_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "decimals": 18,
+        "symbol": "WETH"
+      },
+      "order_type": "trait_offer",
+      "start_date": 1764868304,
+      "expiration_date": 1764869204,
+      "asset": null,
+      "quantity": 1,
+      "maker": "0xbf6cb5594a8fdf23c9ddcdd911ed8e2751b59cf6",
+      "taker": "",
+      "criteria": {
+        "collection": {
+          "slug": "boredapeyachtclub"
+        },
+        "contract": {
+          "address": "0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d"
+        },
+        "trait": {
+          "type": "Mouth",
+          "value": "Grin"
+        },
+        "traits": [
+          {
+            "type": "Mouth",
+            "value": "Grin"
+          }
+        ],
+        "encoded_token_ids": null
+      },
+      "is_private_listing": false
+    }
+  ]
+}

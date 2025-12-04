@@ -40,6 +40,13 @@ import {
 
 const log = prefixedLogger("Discord");
 
+/**
+ * Escapes Discord markdown special characters to prevent formatting issues.
+ * Characters escaped: _ * ~ ` | >
+ */
+const escapeMarkdown = (text: string): string =>
+  text.replace(/(?<special>[_*~`|>])/g, "\\$<special>");
+
 // Initialize event group manager for Discord
 const groupConfig = getDefaultEventGroupConfig("DISCORD");
 const groupManager = new EventGroupManager(groupConfig);
@@ -99,25 +106,40 @@ const buildOrderEmbed = async (
     order_type: string;
     expiration_date: number;
     maker: string;
-    criteria: { trait: { type: string; value: string } };
+    criteria: {
+      trait?: { type: string; value: string };
+      traits?: Array<{ type: string; value: string }>;
+    };
   };
   const fields: Field[] = [];
   let title = "";
-  const { quantity, decimals, symbol } = payment;
-  const inTime = format(new Date(expiration_date * MS_PER_SECOND));
+  const { quantity, decimals, symbol } = payment ?? {
+    quantity: "0",
+    decimals: 18,
+    symbol: "ETH",
+  };
+  const inTime = expiration_date
+    ? format(new Date(expiration_date * MS_PER_SECOND))
+    : "Unknown";
   if (order_type === "auction") {
     title += "Auction:";
     const price = formatAmount(quantity, decimals, symbol);
     fields.push({ name: "Starting Price", value: price });
     fields.push({ name: "Ends", value: inTime });
   } else if (order_type === "trait_offer") {
-    const traitType = criteria.trait.type;
-    const traitValue = criteria.trait.value;
+    // Get trait info from criteria - can be in trait or traits array
+    const traitInfo = criteria?.trait ?? criteria?.traits?.[0];
+    const traitType = traitInfo?.type ?? "Unknown";
+    const traitValue = traitInfo?.value ?? "Unknown";
     title += `Trait offer: ${traitType} -> ${traitValue}`;
     const price = formatAmount(quantity, decimals, symbol);
     fields.push({ name: "Price", value: price });
     fields.push({ name: "Expires", value: inTime });
-  } else if (order_type === "item_offer") {
+  } else if (
+    order_type === "item_offer" ||
+    order_type === "offer" ||
+    order_type === "criteria_offer"
+  ) {
     title += "Item offer:";
     const price = formatAmount(quantity, decimals, symbol);
     fields.push({ name: "Price", value: price });
@@ -128,12 +150,15 @@ const buildOrderEmbed = async (
     fields.push({ name: "Price", value: price });
     fields.push({ name: "Expires", value: inTime });
   } else {
+    // Default to listing
     title += "Listed for sale:";
     const price = formatAmount(quantity, decimals, symbol);
     fields.push({ name: "Price", value: price });
     fields.push({ name: "Expires", value: inTime });
   }
-  fields.push({ name: "By", value: await username(maker) });
+  if (maker) {
+    fields.push({ name: "By", value: escapeMarkdown(await username(maker)) });
+  }
   return { title, fields };
 };
 
@@ -148,7 +173,7 @@ const buildSaleEmbed = async (
   const { quantity, decimals, symbol } = payment;
   const price = formatAmount(quantity, decimals, symbol);
   fields.push({ name: "Price", value: price });
-  fields.push({ name: "By", value: await username(buyer) });
+  fields.push({ name: "By", value: escapeMarkdown(await username(buyer)) });
   return { title: "Purchased:", fields };
 };
 
@@ -174,27 +199,48 @@ const buildTransferEmbed = async (
       (event as unknown as { asset?: { token_standard?: string } })?.asset
         ?.token_standard;
 
-    const toName = await username(to_address);
+    const toName = escapeMarkdown(await username(to_address));
     const toValue = formatEditionsText(toName, tokenStandard, quantity);
     fields.push({ name: "To", value: toValue });
     return { title: "Minted:", fields };
   }
   if (kind === "burn") {
-    fields.push({ name: "From", value: await username(from_address) });
+    fields.push({
+      name: "From",
+      value: escapeMarkdown(await username(from_address)),
+    });
     return { title: "Burned:", fields };
   }
-  fields.push({ name: "From", value: await username(from_address) });
-  fields.push({ name: "To", value: await username(to_address) });
+  fields.push({
+    name: "From",
+    value: escapeMarkdown(await username(from_address)),
+  });
+  fields.push({
+    name: "To",
+    value: escapeMarkdown(await username(to_address)),
+  });
   return { title: "Transferred:", fields };
 };
 
-const isOrderLikeType = (t: unknown): boolean => {
+const isOrderLikeType = (t: unknown, orderType?: string): boolean => {
   const s = String(t);
+  // Check order_type for "order" events
+  if (s === "order" && orderType) {
+    return (
+      orderType === "listing" ||
+      orderType === "item_offer" ||
+      orderType === "trait_offer" ||
+      orderType === "collection_offer" ||
+      orderType === "auction"
+    );
+  }
+  // Legacy event_type handling
   return (
     s === BotEvent.listing ||
     s === BotEvent.offer ||
     s === "trait_offer" ||
-    s === "collection_offer"
+    s === "collection_offer" ||
+    s === "listing"
   );
 };
 
@@ -216,7 +262,7 @@ const embed = async (event: AggregatorEvent) => {
   }
   let fields: Field[] = [];
   let title = "";
-  if (isOrderLikeType(event_type)) {
+  if (isOrderLikeType(event_type, order_type)) {
     ({ title, fields } = await buildOrderEmbed(event));
   } else if (event_type === EventType.sale) {
     ({ title, fields } = await buildSaleEmbed(event));
@@ -310,7 +356,7 @@ const buildGroupEmbed = async (group: GroupedEvent): Promise<EmbedBuilder> => {
 
   if (actorAddress) {
     const label = getActorLabelForKind(kind);
-    const actorName = await username(actorAddress);
+    const actorName = escapeMarkdown(await username(actorAddress));
     fields.push({ name: label, value: actorName, inline: true });
   }
 

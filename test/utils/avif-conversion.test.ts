@@ -1,4 +1,4 @@
-import { fetchImageBuffer } from "../src/utils/utils";
+import { fetchImageBuffer } from "../../src/utils/utils";
 
 // Mock fetch to return AVIF content
 global.fetch = jest.fn();

@@ -1,6 +1,10 @@
 import { EventType } from "../opensea";
 import { BotEvent, botEventSet, type OpenSeaAssetEvent } from "../types";
-import { effectiveEventTypeFor } from "./event-types";
+import {
+  effectiveEventTypeFor,
+  isListingType,
+  isOfferType,
+} from "./event-types";
 
 export const parseEvents = (raw: string | undefined): Set<BotEvent> => {
   const parts = (raw ?? "")
@@ -50,24 +54,37 @@ export const isEventWanted = (
   event: OpenSeaAssetEvent,
   selection: Set<BotEvent>
 ): boolean => {
-  const type = event.event_type as EventType;
-  if (type === EventType.listing) {
+  const type = event.event_type;
+
+  // Handle "order" event type - check order_type for the actual type
+  if (type === "order") {
+    if (isListingType(event)) {
+      return selection.has(BotEvent.listing);
+    }
+    if (isOfferType(event)) {
+      return selection.has(BotEvent.offer);
+    }
+    return false;
+  }
+
+  // Legacy event_type handling (for backwards compatibility)
+  if (type === "listing") {
     return selection.has(BotEvent.listing);
   }
   if (
-    type === EventType.offer ||
-    type === EventType.trait_offer ||
-    type === EventType.collection_offer
+    type === "offer" ||
+    type === "trait_offer" ||
+    type === "collection_offer"
   ) {
     return selection.has(BotEvent.offer);
   }
-  if (type === EventType.mint) {
+  if (type === "mint") {
     return selection.has(BotEvent.mint);
   }
-  if (type === EventType.sale) {
+  if (type === "sale") {
     return selection.has(BotEvent.sale);
   }
-  if (type === EventType.transfer) {
+  if (type === "transfer") {
     const eff = String(effectiveEventTypeFor(event));
     if (eff === BotEvent.mint) {
       return selection.has(BotEvent.mint);

@@ -1,4 +1,4 @@
-import { fetchNFT } from "../src/opensea";
+import { fetchNFT } from "../../src/opensea";
 
 // Mock the fetch function
 global.fetch = jest.fn();

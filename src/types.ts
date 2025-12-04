@@ -72,15 +72,31 @@ export type OpenSeaNFT = {
   rarity?: OpenSeaRarity;
 };
 
+// OpenSea API event_type values
+// Note: The API returns "order" for listings and all offer types
+// The actual distinction is made via the order_type field
+export type OpenSeaEventType =
+  | "sale"
+  | "transfer"
+  | "mint"
+  | "order" // Used for listings and offers - check order_type for specifics
+  // Legacy values (for backwards compatibility with existing code/tests)
+  | "listing"
+  | "offer"
+  | "trait_offer"
+  | "collection_offer";
+
+// OpenSea API order_type values (when event_type is "order")
+export type OpenSeaOrderType =
+  | "listing"
+  | "item_offer"
+  | "trait_offer"
+  | "collection_offer"
+  | "auction"
+  | "criteria_offer"; // Legacy value
+
 export type OpenSeaAssetEvent = {
-  event_type:
-    | "sale"
-    | "transfer"
-    | "mint"
-    | "listing"
-    | "offer"
-    | "trait_offer"
-    | "collection_offer";
+  event_type: OpenSeaEventType;
   event_timestamp: number;
   transaction?: string;
   order_hash?: string;
@@ -92,16 +108,25 @@ export type OpenSeaAssetEvent = {
   buyer?: string;
   quantity: number;
   nft?: OpenSeaNFT;
-  asset?: OpenSeaNFT;
-  order_type?: string;
-  start_date?: number;
+  asset?: OpenSeaNFT | null; // Can be null for trait/collection offers
+  order_type?: OpenSeaOrderType;
+  start_date?: number | null;
   expiration_date?: number;
   maker?: string;
   taker?: string;
-  criteria?: unknown;
+  criteria?: OpenSeaCriteria | null; // Can be null for collection offers and listings
   is_private_listing?: boolean;
   from_address?: string;
   to_address?: string;
+};
+
+// Criteria for trait offers
+export type OpenSeaCriteria = {
+  collection?: { slug: string };
+  contract?: { address: string };
+  trait?: { type: string; value: string };
+  traits?: Array<{ type: string; value: string }>;
+  encoded_token_ids?: string | null;
 };
 
 export type OpenSeaEventsResponse = {

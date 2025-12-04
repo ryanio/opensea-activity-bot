@@ -1,4 +1,4 @@
-import { EventGroupAggregator } from "../src/utils/aggregator";
+import { EventGroupAggregator } from "../../src/utils/aggregator";
 
 const mk = (tx: string, id: number) => ({
   transaction_hash: tx,

@@ -1,5 +1,5 @@
 import { TwitterApi } from "twitter-api-v2";
-import { EventType, getCollectionSlug, opensea, username } from "../opensea";
+import { getCollectionSlug, opensea, username } from "../opensea";
 import type { BotEvent, OpenSeaAssetEvent, OpenSeaPayment } from "../types";
 import { txHashFor } from "../utils/aggregator";
 import { MS_PER_SECOND, SECONDS_PER_MINUTE } from "../utils/constants";
@@ -250,7 +250,11 @@ const formatOrderText = async (
   if (order_type === "listing") {
     return `listed on sale for ${price} by ${name}`;
   }
-  if (order_type === "item_offer") {
+  if (
+    order_type === "item_offer" ||
+    order_type === "offer" ||
+    order_type === "criteria_offer"
+  ) {
     return `has a new offer for ${price} by ${name}`;
   }
   if (order_type === "collection_offer") {
@@ -258,6 +262,9 @@ const formatOrderText = async (
   }
   if (order_type === "trait_offer") {
     return `has a new trait offer for ${price} by ${name}`;
+  }
+  if (order_type === "auction") {
+    return `has a new auction starting at ${price} by ${name}`;
   }
   return "";
 };
@@ -345,6 +352,16 @@ const textForTransfer = async (
   return text;
 };
 
+// Helper sets for event type classification
+const ORDER_EVENT_TYPES = new Set([
+  "order",
+  "listing",
+  "offer",
+  "trait_offer",
+  "collection_offer",
+]);
+const TRANSFER_EVENT_TYPES = new Set(["transfer", "mint"]);
+
 export const textForTweet = async (event: OpenSeaAssetEvent) => {
   const ev = event;
   const {
@@ -356,32 +373,28 @@ export const textForTweet = async (event: OpenSeaAssetEvent) => {
     buyer,
     expiration_date,
   } = ev;
-  const nft = ev.nft ?? asset;
+  // Handle null asset from trait/collection offers by converting to undefined
+  const nft = ev.nft ?? (asset === null ? undefined : asset);
   let text = "";
 
-  if (
-    (event_type === "listing" ||
-      event_type === "offer" ||
-      event_type === "trait_offer" ||
-      event_type === "collection_offer") &&
-    payment &&
-    maker &&
-    order_type &&
-    typeof expiration_date === "number"
-  ) {
+  // Handle "order" event type - the API returns this for listings and offers
+  // The actual type is determined by order_type
+  const isListingOrOfferEvent = ORDER_EVENT_TYPES.has(event_type);
+  const isTransferOrMintEvent = TRANSFER_EVENT_TYPES.has(event_type);
+
+  if (isListingOrOfferEvent && payment && maker && order_type) {
+    // Use expiration_date if available, default to 0 if not
+    const expDate = typeof expiration_date === "number" ? expiration_date : 0;
     text += await textForOrder({
       nft,
       payment,
       maker,
       order_type,
-      expiration_date,
+      expiration_date: expDate,
     });
-  } else if (event_type === EventType.sale && payment && buyer) {
+  } else if (event_type === "sale" && payment && buyer) {
     text += await textForSale({ nft, payment, buyer });
-  } else if (
-    event_type === EventType.transfer ||
-    event_type === EventType.mint
-  ) {
+  } else if (isTransferOrMintEvent) {
     text += await textForTransfer(nft, ev);
   }
   if (nft?.identifier) {
@@ -407,7 +420,9 @@ const uploadImagesForGroup = async (
 
   const images: string[] = [];
   for (const e of sortedGroup) {
-    const url = imageForNFT(e.nft ?? e.asset);
+    // Handle null asset from trait/collection offers
+    const nft = e.nft ?? (e.asset === null ? undefined : e.asset);
+    const url = imageForNFT(nft);
     if (url) {
       images.push(url);
     }
@@ -479,7 +494,10 @@ const tweetSingle = async (
   await refetchMintMetadataForEvent(event);
 
   let mediaId: string | undefined;
-  const image = imageForNFT(event.nft ?? event.asset);
+  // Handle null asset from trait/collection offers
+  const nftForImage =
+    event.nft ?? (event.asset === null ? undefined : event.asset);
+  const image = imageForNFT(nftForImage);
   if (image) {
     try {
       const { buffer, mimeType } = await fetchImageBuffer(image);

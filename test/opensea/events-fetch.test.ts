@@ -1,6 +1,6 @@
-import type { OpenSeaAssetEvent } from "../src/types";
+import type { OpenSeaAssetEvent } from "../../src/types";
 
-jest.mock("../src/utils/logger", () => {
+jest.mock("../../src/utils/logger", () => {
   const base = {
     debug: jest.fn(),
     info: jest.fn(),
@@ -25,7 +25,8 @@ describe("fetchEvents (OpenSea)", () => {
 
   beforeEach(() => {
     jest.resetModules();
-    loggerMock = jest.requireMock("../src/utils/logger").logger as MockedLogger;
+    loggerMock = jest.requireMock("../../src/utils/logger")
+      .logger as MockedLogger;
     process.env = { ...ORIGINAL_ENV };
     process.env.LOG_LEVEL = "error";
     process.env.TOKEN_ADDRESS = "0xTestToken";
@@ -125,7 +126,7 @@ describe("fetchEvents (OpenSea)", () => {
     let eventsDb: OpenSeaAssetEvent[] = [firstEvent];
     setupFetchMockForLagWindow(eventsDb);
 
-    const { fetchEvents } = await import("../src/opensea");
+    const { fetchEvents } = await import("../../src/opensea");
 
     const firstFetch = await fetchEvents();
     expect(firstFetch).toHaveLength(1);
@@ -185,7 +186,7 @@ describe("fetchEvents (OpenSea)", () => {
     const eventsDb: OpenSeaAssetEvent[] = [saleA, saleB];
     setupFetchMockForLagWindow(eventsDb);
 
-    const { fetchEvents } = await import("../src/opensea");
+    const { fetchEvents } = await import("../../src/opensea");
 
     const events = await fetchEvents();
     expect(events).toHaveLength(2);
@@ -224,7 +225,7 @@ describe("fetchEvents (OpenSea)", () => {
     };
 
     setupFetchMockForLagWindow([baseMint]);
-    const { fetchEvents } = await import("../src/opensea");
+    const { fetchEvents } = await import("../../src/opensea");
     await fetchEvents();
 
     const fetchCalls = (global.fetch as unknown as jest.Mock).mock.calls;
@@ -268,7 +269,7 @@ describe("fetchEvents (OpenSea)", () => {
     };
 
     setupFetchMockForLagWindow([baseEvent]);
-    const { fetchEvents } = await import("../src/opensea");
+    const { fetchEvents } = await import("../../src/opensea");
     await fetchEvents();
     loggerMock.info.mockClear();
 

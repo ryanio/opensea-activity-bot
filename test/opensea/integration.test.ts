@@ -1,9 +1,9 @@
-import type { OpenSeaAssetEvent } from "../src/types";
-import { eventKeyFor } from "../src/utils/event-grouping";
-import { LRUCache } from "../src/utils/lru-cache";
+import type { OpenSeaAssetEvent } from "../../src/types";
+import { eventKeyFor } from "../../src/utils/event-grouping";
+import { LRUCache } from "../../src/utils/lru-cache";
 
 // Import JSON fixture
-const salesFixture = require("./fixtures/opensea/events-sales.json");
+const salesFixture = require("../fixtures/opensea/events-sales.json");
 
 describe("OpenSea Fetching Integration", () => {
   const CACHE_SIZE = 1000;

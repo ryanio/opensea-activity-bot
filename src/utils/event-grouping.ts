@@ -397,7 +397,8 @@ export const getTopExpensiveEvents = (
     const price = payment
       ? formatAmount(payment.quantity, payment.decimals, payment.symbol)
       : null;
-    const nft = event.nft ?? event.asset;
+    // Handle null asset from trait/collection offers
+    const nft = event.nft ?? (event.asset === null ? undefined : event.asset);
 
     return {
       event,

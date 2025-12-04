@@ -1,4 +1,4 @@
-import { fetchImageBuffer } from "../src/utils/utils";
+import { fetchImageBuffer } from "../../src/utils/utils";
 
 // Mock fetch to return the actual SVG content
 global.fetch = jest.fn();
@@ -33,7 +33,7 @@ describe("Unicode SVG Character Encoding", () => {
 
   it("should handle the real GlyphBot weapon SVG with unicode character", async () => {
     // Use the fixture data
-    const { asset_events } = require("./fixtures/unicode-svg.json");
+    const { asset_events } = require("../fixtures/unicode-svg.json");
     const svgUrl = asset_events[0].nft.image_url;
 
     // Mock the actual response from the SVG URL

@@ -13,7 +13,7 @@ export type AggregatorEvent = {
   hash?: string;
   event_timestamp?: number | string;
   nft?: NFTLike;
-  asset?: NFTLike;
+  asset?: NFTLike | null; // Can be null for trait/collection offers
   event_type?: string;
   order_type?: string;
 };

@@ -1,6 +1,45 @@
-# Test Helpers and Fixtures
+# Test Suite
 
-This directory contains shared test utilities, helpers, and fixtures for the OpenSea Activity Bot test suite.
+This directory contains the test suite for the OpenSea Activity Bot, organized by domain.
+
+## Structure
+
+```
+test/
+├── fixtures/           # JSON fixtures from real API responses
+│   ├── bayc-live/      # Live BAYC collection fixtures
+│   └── opensea/        # OpenSea API response fixtures
+├── opensea/            # OpenSea API integration tests
+│   ├── deduplication.test.ts
+│   ├── events-fetch.test.ts
+│   ├── fetch-nft.test.ts
+│   ├── integration.test.ts
+│   └── live-event-types.test.ts
+├── platforms/          # Platform output tests (Discord, Twitter)
+│   ├── discord.test.ts
+│   ├── platform-event-selection.test.ts
+│   ├── twitter-text.test.ts
+│   └── twitter.test.ts
+├── utils/              # Utility function tests
+│   ├── aggregator.test.ts
+│   ├── avif-conversion.test.ts
+│   ├── cache-separation.test.ts
+│   ├── classify-transfer.test.ts
+│   ├── event-grouping.test.ts
+│   ├── event-types.test.ts
+│   ├── events-utils.test.ts
+│   ├── formatters.test.ts
+│   ├── logger.test.ts
+│   ├── queue.test.ts
+│   └── unicode-svg.test.ts
+├── helpers.ts          # Shared test helpers and event builders
+├── setup.ts            # Jest setup configuration
+└── README.md           # This file
+```
+
+## Test Helpers (`helpers.ts`)
+
+The `helpers.ts` file provides reusable event builders and fixtures to make tests more consistent and maintainable.
 
 ## Test Helpers (`helpers.ts`)
 
@@ -140,10 +179,59 @@ The `fixtures/` directory contains JSON files with real OpenSea API responses:
 - `get-events-by-nft.json` - Events for a specific NFT
 - Other OpenSea API response fixtures
 
+### `fixtures/bayc-live/`
+
+Live API fixtures from the Bored Ape Yacht Club collection:
+
+- `listing-events.json` - Listing order events
+- `offer-events.json` - Item offer events
+- `trait_offer-events.json` - Trait offer events
+- `collection_offer-events.json` - Collection offer events
+- `sale-events.json` - Sale events
+- `transfer-events.json` - Transfer events
+- `all-events.json` - All event types combined
+
 ### Other Fixtures
 
 - `unicode-svg.json` - NFT with Unicode SVG image
 - `svg-image.json` - NFT with SVG image
+
+## Test Directories
+
+### `opensea/`
+
+Tests for OpenSea API integration:
+
+- **deduplication.test.ts** - Event deduplication and caching
+- **events-fetch.test.ts** - Event fetching with lag windows
+- **fetch-nft.test.ts** - NFT metadata fetching
+- **integration.test.ts** - End-to-end fetching integration
+- **live-event-types.test.ts** - Event type detection with live fixtures
+
+### `platforms/`
+
+Tests for platform outputs (Discord and Twitter):
+
+- **discord.test.ts** - Discord embed building
+- **twitter.test.ts** - Twitter tweet posting
+- **twitter-text.test.ts** - Tweet text formatting
+- **platform-event-selection.test.ts** - Event filtering for platforms
+
+### `utils/`
+
+Tests for utility functions:
+
+- **aggregator.test.ts** - Event group aggregation
+- **queue.test.ts** - Async queue processing
+- **event-grouping.test.ts** - Event grouping logic
+- **event-types.test.ts** - Event type classification
+- **events-utils.test.ts** - Event utility functions
+- **cache-separation.test.ts** - Cache architecture validation
+- **classify-transfer.test.ts** - Mint/burn/transfer classification
+- **formatters.test.ts** - Amount and text formatting
+- **logger.test.ts** - Logging utilities
+- **avif-conversion.test.ts** - AVIF to PNG conversion
+- **unicode-svg.test.ts** - Unicode SVG rendering
 
 ## Usage Example
 

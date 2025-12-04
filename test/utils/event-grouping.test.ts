@@ -1,4 +1,4 @@
-import type { OpenSeaAssetEvent } from "../src/types";
+import type { OpenSeaAssetEvent } from "../../src/types";
 import {
   calculateTotalSpent,
   EventGroupManager,
@@ -11,13 +11,13 @@ import {
   isGroupedEvent,
   processEventsWithAggregator,
   sortEventsByPrice,
-} from "../src/utils/event-grouping";
+} from "../../src/utils/event-grouping";
 import {
   createBurnEvent,
   createListingEvent,
   createMintEvent,
   createOfferEvent,
-} from "./helpers";
+} from "../helpers";
 
 // Mock the utils module
 function mockFormatAmount(quantity: string, decimals: number, symbol: string) {
@@ -40,7 +40,7 @@ function mockClassifyTransfer(
   return "transfer";
 }
 
-jest.mock("../src/utils/utils", () => ({
+jest.mock("../../src/utils/utils", () => ({
   formatAmount: jest.fn(mockFormatAmount),
   classifyTransfer: jest.fn(mockClassifyTransfer),
 }));

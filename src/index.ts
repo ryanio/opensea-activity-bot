@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { Client, Events, type TextBasedChannel } from "discord.js";
 import {
   type EventTimestampSource,

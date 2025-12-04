@@ -1,9 +1,9 @@
-import type { OpenSeaAssetEvent } from "../src/types";
-import { eventKeyFor } from "../src/utils/event-grouping";
-import { LRUCache } from "../src/utils/lru-cache";
+import type { OpenSeaAssetEvent } from "../../src/types";
+import { eventKeyFor } from "../../src/utils/event-grouping";
+import { LRUCache } from "../../src/utils/lru-cache";
 
 // Import JSON fixture
-const salesFixture = require("./fixtures/opensea/events-sales.json");
+const salesFixture = require("../fixtures/opensea/events-sales.json");
 
 describe("Cache Separation - Why Both Caches Are Needed", () => {
   const FETCH_CACHE_SIZE = 1000;
