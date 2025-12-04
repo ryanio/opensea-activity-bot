@@ -1,10 +1,11 @@
+import { Client, type TextBasedChannel } from "discord.js";
 import {
   type EventTimestampSource,
   fetchCollectionSlug,
   fetchEvents,
   resolveLastEventTimestamp,
 } from "./opensea";
-import { messageEvents } from "./platforms/discord";
+import { channelsWithEvents, messageEvents } from "./platforms/discord";
 import { tweetEvents } from "./platforms/twitter";
 import type { OpenSeaAssetEvent } from "./types";
 import { MS_PER_SECOND } from "./utils/constants";
@@ -19,7 +20,78 @@ import {
   minOfferETH,
 } from "./utils/utils";
 
-const logPlatformConfig = (
+const fetchDiscordChannelNames = async (): Promise<Map<string, string>> => {
+  const channelNames = new Map<string, string>();
+
+  if (!(process.env.DISCORD_TOKEN && process.env.DISCORD_EVENTS)) {
+    return channelNames;
+  }
+
+  const client = new Client({ intents: [] });
+
+  try {
+    await new Promise<void>((resolve) => {
+      client.on("ready", () => resolve());
+      client.login(process.env.DISCORD_TOKEN);
+    });
+
+    const channelEvents = channelsWithEvents();
+    for (const [channelId] of channelEvents) {
+      try {
+        const channel = await client.channels.fetch(channelId);
+        const name = (channel as TextBasedChannel & { name?: string }).name;
+        if (name) {
+          channelNames.set(channelId, name);
+        }
+      } catch {
+        // Channel might not be accessible
+      }
+    }
+  } catch {
+    // Discord connection failed
+  } finally {
+    client.destroy();
+  }
+
+  return channelNames;
+};
+
+const logTwitterConfig = () => {
+  const twitterEvents = process.env.TWITTER_EVENTS?.replace(/,/g, ", ") ?? "";
+  logger.info(`│     ├─ Events: ${twitterEvents}`);
+  if (process.env.TWITTER_PREPEND_TWEET) {
+    logger.info(`│     ├─ Prepend: "${process.env.TWITTER_PREPEND_TWEET}"`);
+  }
+  if (process.env.TWITTER_APPEND_TWEET) {
+    logger.info(`│     ├─ Append: "${process.env.TWITTER_APPEND_TWEET}"`);
+  }
+  const config = getDefaultEventGroupConfig("TWITTER");
+  const hasPrependOrAppend =
+    process.env.TWITTER_PREPEND_TWEET || process.env.TWITTER_APPEND_TWEET;
+  logger.info(`│     ${hasPrependOrAppend ? "├─" : "└─"} Grouping`);
+  logger.info(`│        ├─ Min Group Size: ${config.minGroupSize} items`);
+  logger.info(`│        └─ Settle Time: ${config.settleMs / MS_PER_SECOND}s`);
+};
+
+const logDiscordConfig = async () => {
+  const channelNames = await fetchDiscordChannelNames();
+  const channelEvents = channelsWithEvents();
+  const config = getDefaultEventGroupConfig("DISCORD");
+
+  for (const [channelId, events] of channelEvents) {
+    const channelName = channelNames.get(channelId);
+    const channelDisplay = channelName
+      ? `#${channelName} (${channelId})`
+      : channelId;
+    logger.info(`│     ├─ ${channelDisplay} = ${events.join(", ")}`);
+  }
+
+  logger.info("│     └─ Grouping");
+  logger.info(`│        ├─ Min Group Size: ${config.minGroupSize} items`);
+  logger.info(`│        └─ Settle Time: ${config.settleMs / MS_PER_SECOND}s`);
+};
+
+const logPlatformConfig = async (
   twitterEnabled: boolean,
   discordEnabled: boolean
 ) => {
@@ -29,32 +101,14 @@ const logPlatformConfig = (
     `│  🐦 Twitter: ${twitterEnabled ? "✅ ENABLED" : "⭕ DISABLED"}`
   );
   if (twitterEnabled) {
-    const twitterEvents = process.env.TWITTER_EVENTS?.replace(/,/g, ", ") ?? "";
-    logger.info(`│     ├─ Events: ${twitterEvents}`);
-    if (process.env.TWITTER_PREPEND_TWEET) {
-      logger.info(`│     ├─ Prepend: "${process.env.TWITTER_PREPEND_TWEET}"`);
-    }
-    if (process.env.TWITTER_APPEND_TWEET) {
-      logger.info(`│     ├─ Append: "${process.env.TWITTER_APPEND_TWEET}"`);
-    }
-    const config = getDefaultEventGroupConfig("TWITTER");
-    const hasPrependOrAppend =
-      process.env.TWITTER_PREPEND_TWEET || process.env.TWITTER_APPEND_TWEET;
-    logger.info(`│     ${hasPrependOrAppend ? "├─" : "└─"} Grouping`);
-    logger.info(`│        ├─ Min Group Size: ${config.minGroupSize} items`);
-    logger.info(`│        └─ Settle Time: ${config.settleMs / MS_PER_SECOND}s`);
+    logTwitterConfig();
   }
   logger.info("│");
   logger.info(
     `│  💬 Discord: ${discordEnabled ? "✅ ENABLED" : "⭕ DISABLED"}`
   );
   if (discordEnabled) {
-    const discordEvents = process.env.DISCORD_EVENTS?.replace(/,/g, ", ") ?? "";
-    logger.info(`│     ├─ Events: ${discordEvents}`);
-    const config = getDefaultEventGroupConfig("DISCORD");
-    logger.info("│     └─ Grouping");
-    logger.info(`│        ├─ Min Group Size: ${config.minGroupSize} items`);
-    logger.info(`│        └─ Settle Time: ${config.settleMs / MS_PER_SECOND}s`);
+    await logDiscordConfig();
   }
   logger.info("│");
 };
@@ -134,7 +188,7 @@ const logStartupConfiguration = async () => {
   const twitterEnabled = Boolean(process.env.TWITTER_EVENTS);
   const discordEnabled = Boolean(process.env.DISCORD_EVENTS);
 
-  logPlatformConfig(twitterEnabled, discordEnabled);
+  await logPlatformConfig(twitterEnabled, discordEnabled);
 
   logger.info("└─");
   logger.info("");

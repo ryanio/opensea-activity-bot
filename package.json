@@ -1,6 +1,6 @@
 {
   "name": "opensea-activity-bot",
-  "version": "3.5.1",
+  "version": "3.5.3",
   "description": "A bot that shares new OpenSea events for a collection to Discord and Twitter.",
   "author": "Ryan Ghods <ryan@ryanio.com>",
   "license": "MIT",
@@ -19,8 +19,8 @@
     "lint": "ultracite lint && npx tsc --noEmit -p tsconfig.build.json"
   },
   "dependencies": {
-    "discord.js": "^14.14.1",
-    "ethers": "^6.9.0",
+    "discord.js": "^14.25.1",
+    "ethers": "^6.16.0",
     "sharp": "^0.33.5",
     "timeago.js": "^4.0.2",
     "twitter-api-v2": "^1.25.0"
