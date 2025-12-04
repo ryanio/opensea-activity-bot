@@ -23,7 +23,7 @@ import type { OpenSeaAssetEvent } from "../../src/types";
 
 describe("twitter text generation", () => {
   test('mint text includes name and "minted by"', async () => {
-    const mod = await import("../../src/platforms/twitter");
+    const mod = await import("../../src/platforms/twitter/utils");
     const e = {
       event_type: EventType.transfer,
       event_timestamp: 1,
@@ -38,7 +38,7 @@ describe("twitter text generation", () => {
   });
 
   test("erc1155 mint includes editions count when quantity > 1", async () => {
-    const mod = await import("../../src/platforms/twitter");
+    const mod = await import("../../src/platforms/twitter/utils");
     const e = {
       event_type: EventType.transfer,
       event_timestamp: 1,
@@ -58,7 +58,7 @@ describe("twitter text generation", () => {
   });
 
   test('burn text includes name and "burned by"', async () => {
-    const mod = await import("../../src/platforms/twitter");
+    const mod = await import("../../src/platforms/twitter/utils");
     const e = {
       event_type: EventType.transfer,
       event_timestamp: 1,
@@ -79,7 +79,7 @@ describe("twitter text generation", () => {
 
     // Re-import module to pick up new env var
     jest.resetModules();
-    const mod = await import("../../src/platforms/twitter");
+    const mod = await import("../../src/platforms/twitter/utils");
     const e = {
       event_type: EventType.transfer,
       event_timestamp: 1,
@@ -104,7 +104,7 @@ describe("twitter text generation", () => {
   });
 
   test("transfer text includes from/to usernames", async () => {
-    const mod = await import("../../src/platforms/twitter");
+    const mod = await import("../../src/platforms/twitter/utils");
     const e = {
       event_type: EventType.transfer,
       event_timestamp: 1,

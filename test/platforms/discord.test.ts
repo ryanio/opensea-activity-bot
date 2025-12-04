@@ -85,7 +85,7 @@ jest.mock("../../src/utils/utils", () => {
   };
 });
 
-import { messageEvents } from "../../src/platforms/discord";
+import { messageEvents } from "../../src/platforms/discord/discord";
 import type { OpenSeaAssetEvent } from "../../src/types";
 
 describe("discord routing", () => {

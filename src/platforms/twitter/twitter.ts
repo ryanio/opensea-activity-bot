@@ -1,8 +1,8 @@
 import { TwitterApi } from "twitter-api-v2";
-import { getCollectionSlug, opensea, username } from "../opensea";
-import type { BotEvent, OpenSeaAssetEvent, OpenSeaPayment } from "../types";
-import { txHashFor } from "../utils/aggregator";
-import { MS_PER_SECOND, SECONDS_PER_MINUTE } from "../utils/constants";
+import { getCollectionSlug, opensea } from "../../opensea";
+import type { BotEvent, OpenSeaAssetEvent } from "../../types";
+import { txHashFor } from "../../utils/aggregator";
+import { MS_PER_SECOND, SECONDS_PER_MINUTE } from "../../utils/constants";
 import {
   calculateTotalSpent,
   EventGroupManager,
@@ -14,22 +14,17 @@ import {
   isGroupedEvent,
   processEventsWithAggregator,
   sortEventsByPrice,
-} from "../utils/event-grouping";
-import { isEventWanted, parseEvents } from "../utils/events";
-import { logger } from "../utils/logger";
-import { LRUCache } from "../utils/lru-cache";
+} from "../../utils/event-grouping";
+import { isEventWanted, parseEvents } from "../../utils/events";
+import { logger } from "../../utils/logger";
+import { LRUCache } from "../../utils/lru-cache";
 import {
   refetchMintMetadata,
   refetchMintMetadataForEvent,
-} from "../utils/metadata";
-import { AsyncQueue } from "../utils/queue";
-import {
-  classifyTransfer,
-  fetchImageBuffer,
-  formatAmount,
-  formatEditionsText,
-  imageForNFT,
-} from "../utils/utils";
+} from "../../utils/metadata";
+import { AsyncQueue } from "../../utils/queue";
+import { fetchImageBuffer, imageForNFT } from "../../utils/utils";
+import { getTransferKind, textForTweet, wrapTweetText } from "./utils";
 
 const logStart = "[Twitter]";
 
@@ -88,6 +83,44 @@ const groupManager = new EventGroupManager(groupConfig);
 logger.debug(
   `${logStart} Queue config: delay=${PER_TWEET_DELAY_MS}ms backoffBase=${BACKOFF_BASE_MS}ms backoffMax=${BACKOFF_MAX_MS}ms timeout=${PROCESSING_TIMEOUT_MS}ms`
 );
+
+const keyForQueueItem = (item: TweetQueueItem): string => {
+  const ev = item.event;
+  if (isGroupedEvent(ev)) {
+    // For transaction-based groups, we want a stable key per tx hash so that
+    // repeated polling doesn't enqueue duplicate work for the same on-chain tx.
+    const tx = ev.txHash ?? txHashFor(ev.events?.[0]) ?? "unknown";
+
+    if (typeof tx === "string" && tx.startsWith("actor:")) {
+      // Actor-based groups reuse a synthetic "actor:<kind>:<address>" tx hash.
+      // If we keyed only on this value, we'd permanently suppress future groups
+      // for the same actor after the first tweet.
+      //
+      // To allow multiple distinct actor groups over time while still deduping
+      // true duplicates, incorporate the time window of the grouped events
+      // into the queue key. This keeps keys stable for the same group across
+      // retries, but different once new events arrive.
+      const firstTs = ev.events[0]?.event_timestamp;
+      const lastTs = ev.events.at(-1)?.event_timestamp ?? firstTs;
+      const window =
+        firstTs !== undefined && lastTs !== undefined
+          ? `${firstTs}-${lastTs}`
+          : "unknown-window";
+      return `group:${tx}|${window}`;
+    }
+
+    return `group:${tx}`;
+  }
+  return eventKeyFor(item.event as OpenSeaAssetEvent);
+};
+
+const tweetEvent = async (client: MinimalTwitterClient, event: TweetEvent) => {
+  if (isGroupedEvent(event)) {
+    await tweetGroup(client, event.events);
+    return;
+  }
+  await tweetSingle(client, event as OpenSeaAssetEvent);
+};
 
 const tweetQueue = new AsyncQueue<TweetQueueItem>({
   perItemDelayMs: PER_TWEET_DELAY_MS,
@@ -174,242 +207,7 @@ const tweetQueue = new AsyncQueue<TweetQueueItem>({
   },
 });
 
-const keyForQueueItem = (item: TweetQueueItem): string => {
-  const ev = item.event;
-  if (isGroupedEvent(ev)) {
-    // For transaction-based groups, we want a stable key per tx hash so that
-    // repeated polling doesn't enqueue duplicate work for the same on-chain tx.
-    const tx = ev.txHash ?? txHashFor(ev.events?.[0]) ?? "unknown";
-
-    if (typeof tx === "string" && tx.startsWith("actor:")) {
-      // Actor-based groups reuse a synthetic "actor:<kind>:<address>" tx hash.
-      // If we keyed only on this value, we'd permanently suppress future groups
-      // for the same actor after the first tweet.
-      //
-      // To allow multiple distinct actor groups over time while still deduping
-      // true duplicates, incorporate the time window of the grouped events
-      // into the queue key. This keeps keys stable for the same group across
-      // retries, but different once new events arrive.
-      const firstTs = ev.events[0]?.event_timestamp;
-      const lastTs = ev.events.at(-1)?.event_timestamp ?? firstTs;
-      const window =
-        firstTs !== undefined && lastTs !== undefined
-          ? `${firstTs}-${lastTs}`
-          : "unknown-window";
-      return `group:${tx}|${window}`;
-    }
-
-    return `group:${tx}`;
-  }
-  return eventKeyFor(item.event as OpenSeaAssetEvent);
-};
-
-const wrapTweetText = (text: string): string => {
-  let wrapped = text;
-  if (process.env.TWITTER_PREPEND_TWEET) {
-    wrapped = `${process.env.TWITTER_PREPEND_TWEET} ${wrapped}`;
-  }
-  if (process.env.TWITTER_APPEND_TWEET) {
-    wrapped = `${wrapped} ${process.env.TWITTER_APPEND_TWEET}`;
-  }
-  return wrapped;
-};
-
-const formatNftName = (
-  nft: { name?: string; identifier?: string | number } | undefined
-): string => {
-  if (!nft) {
-    return "";
-  }
-  const GLYPHBOTS_CONTRACT_ADDRESS =
-    "0xb6c2c2d2999c1b532e089a7ad4cb7f8c91cf5075";
-  const specialContract =
-    process.env.TOKEN_ADDRESS?.toLowerCase() === GLYPHBOTS_CONTRACT_ADDRESS;
-  if (specialContract && nft.name && nft.identifier !== undefined) {
-    const nameParts = String(nft.name).split(" - ");
-    const suffix = nameParts.length > 1 ? nameParts[1].trim() : undefined;
-    const idStr = String(nft.identifier);
-    return suffix ? `${suffix} #${idStr} ` : `#${idStr} `;
-  }
-  // For regular NFTs, return the name if available, otherwise the identifier
-  return nft.name ? `${nft.name} ` : `#${String(nft.identifier)} `;
-};
-
-const formatOrderText = async (
-  payment: OpenSeaPayment,
-  maker: string,
-  order_type: string,
-  _expiration_date: number
-) => {
-  const name = await username(maker);
-  const price = formatAmount(
-    payment.quantity,
-    payment.decimals,
-    payment.symbol
-  );
-  if (order_type === "listing") {
-    return `listed on sale for ${price} by ${name}`;
-  }
-  if (
-    order_type === "item_offer" ||
-    order_type === "offer" ||
-    order_type === "criteria_offer"
-  ) {
-    return `has a new offer for ${price} by ${name}`;
-  }
-  if (order_type === "collection_offer") {
-    return `has a new collection offer for ${price} by ${name}`;
-  }
-  if (order_type === "trait_offer") {
-    return `has a new trait offer for ${price} by ${name}`;
-  }
-  if (order_type === "auction") {
-    return `has a new auction starting at ${price} by ${name}`;
-  }
-  return "";
-};
-
-const formatSaleText = async (payment: OpenSeaPayment, buyer: string) => {
-  const amount = formatAmount(
-    payment.quantity,
-    payment.decimals,
-    payment.symbol
-  );
-  const name = await username(buyer);
-  return `purchased for ${amount} by ${name}`;
-};
-
-const formatTransferText = async (event: OpenSeaAssetEvent) => {
-  const kind = classifyTransfer(event);
-  const from = event.from_address ?? "";
-  const to = event.to_address ?? "";
-  if (kind === "mint") {
-    const toName = await username(to);
-    return `minted by ${toName}`;
-  }
-  if (kind === "burn") {
-    const fromName = await username(from);
-    return `burned by ${fromName}`;
-  }
-  const fromName = await username(from);
-  const toName = await username(to);
-  return `transferred from ${fromName} to ${toName}`;
-};
-
-const textForOrder = async (params: {
-  nft: { name?: string; identifier?: string | number } | undefined;
-  payment: OpenSeaPayment;
-  maker: string;
-  order_type: string;
-  expiration_date: number;
-}): Promise<string> => {
-  const { nft, payment, maker, order_type, expiration_date } = params;
-  let text = "";
-  if (nft) {
-    text += formatNftName(nft);
-  }
-  text += await formatOrderText(payment, maker, order_type, expiration_date);
-  return text;
-};
-
-const textForSale = async (params: {
-  nft: { name?: string; identifier?: string | number } | undefined;
-  payment: OpenSeaPayment;
-  buyer: string;
-}): Promise<string> => {
-  const { nft, payment, buyer } = params;
-  let text = "";
-  if (nft) {
-    text += formatNftName(nft);
-  }
-  text += await formatSaleText(payment, buyer);
-  return text;
-};
-
-const textForTransfer = async (
-  nft:
-    | { name?: string; identifier?: string | number; opensea_url?: string }
-    | undefined,
-  ev: OpenSeaAssetEvent
-): Promise<string> => {
-  const kind = classifyTransfer(ev);
-  if (kind === "mint" || kind === "burn") {
-    // Use formatNftName to get the properly formatted name for special collections like glyphbots
-    let name = formatNftName(nft).trim();
-    if (kind === "mint") {
-      const tokenStandard = (nft as { token_standard?: string } | undefined)
-        ?.token_standard;
-      name = formatEditionsText(name, tokenStandard, ev.quantity);
-    }
-    const phrase = await formatTransferText(ev);
-    return `${name} ${phrase}`;
-  }
-  let text = "";
-  if (nft) {
-    text += formatNftName(nft);
-  }
-  text += await formatTransferText(ev);
-  return text;
-};
-
-// Helper sets for event type classification
-const ORDER_EVENT_TYPES = new Set([
-  "order",
-  "listing",
-  "offer",
-  "trait_offer",
-  "collection_offer",
-]);
-const TRANSFER_EVENT_TYPES = new Set(["transfer", "mint"]);
-
-export const textForTweet = async (event: OpenSeaAssetEvent) => {
-  const ev = event;
-  const {
-    asset,
-    event_type,
-    payment,
-    order_type,
-    maker,
-    buyer,
-    expiration_date,
-  } = ev;
-  // Handle null asset from trait/collection offers by converting to undefined
-  const nft = ev.nft ?? (asset === null ? undefined : asset);
-  let text = "";
-
-  // Handle "order" event type - the API returns this for listings and offers
-  // The actual type is determined by order_type
-  const isListingOrOfferEvent = ORDER_EVENT_TYPES.has(event_type);
-  const isTransferOrMintEvent = TRANSFER_EVENT_TYPES.has(event_type);
-
-  if (isListingOrOfferEvent && payment && maker && order_type) {
-    // Use expiration_date if available, default to 0 if not
-    const expDate = typeof expiration_date === "number" ? expiration_date : 0;
-    text += await textForOrder({
-      nft,
-      payment,
-      maker,
-      order_type,
-      expiration_date: expDate,
-    });
-  } else if (event_type === "sale" && payment && buyer) {
-    text += await textForSale({ nft, payment, buyer });
-  } else if (isTransferOrMintEvent) {
-    text += await textForTransfer(nft, ev);
-  }
-  if (nft?.identifier) {
-    text += ` ${nft.opensea_url}`;
-  }
-
-  return wrapTweetText(text);
-};
-
-// fetchImageBuffer moved to utils
-
 const MAX_MEDIA_IMAGES = 4;
-
-// getPurchasePrice is now imported from event-grouping
-// Metadata refetching is now imported from utils/metadata
 
 const uploadImagesForGroup = async (
   client: MinimalTwitterClient,
@@ -445,8 +243,6 @@ const uploadImagesForGroup = async (
   }
   return mediaIds;
 };
-
-// calculateTotalSpent is now imported from event-grouping
 
 const tweetGroup = async (
   client: MinimalTwitterClient,
@@ -529,14 +325,6 @@ const tweetSingle = async (
   tweetedEventsCache.put(key, true);
 };
 
-const tweetEvent = async (client: MinimalTwitterClient, event: TweetEvent) => {
-  if (isGroupedEvent(event)) {
-    await tweetGroup(client, event.events);
-    return;
-  }
-  await tweetSingle(client, event as OpenSeaAssetEvent);
-};
-
 const hasTwitterCreds = (): boolean =>
   Boolean(
     process.env.TWITTER_CONSUMER_KEY &&
@@ -566,17 +354,6 @@ export const matchesSelection = (
   ev: OpenSeaAssetEvent,
   selectionSet: Set<BotEvent>
 ): boolean => isEventWanted(ev, selectionSet);
-
-const getTransferKind = (event: OpenSeaAssetEvent): string => {
-  const kind = classifyTransfer(event);
-  if (kind === "burn") {
-    return "burn";
-  }
-  if (kind === "mint") {
-    return "mint";
-  }
-  return "transfer";
-};
 
 const logEventBreakdown = (filteredEvents: OpenSeaAssetEvent[]): void => {
   const eventTypeBreakdown = new Map<string, number>();

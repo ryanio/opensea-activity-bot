@@ -96,7 +96,7 @@ const OFFER_ORDER_TYPES = new Set([
   "criteria_offer",
 ]);
 
-const LISTING_ORDER_TYPES = new Set(["listing", "auction"]);
+const LISTING_ORDER_TYPES = new Set(["listing"]);
 
 // Helper set for legacy offer event types
 const LEGACY_OFFER_TYPES = new Set([

@@ -4,7 +4,7 @@
  * work correctly with real OpenSea API responses.
  */
 
-import { textForTweet } from "../../src/platforms/twitter";
+import { textForTweet } from "../../src/platforms/twitter/utils";
 import { BotEvent, type OpenSeaAssetEvent } from "../../src/types";
 import {
   colorForEvent,

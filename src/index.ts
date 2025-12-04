@@ -6,8 +6,8 @@ import {
   fetchEvents,
   resolveLastEventTimestamp,
 } from "./opensea";
-import { channelsWithEvents, messageEvents } from "./platforms/discord";
-import { tweetEvents } from "./platforms/twitter";
+import { channelsWithEvents, messageEvents } from "./platforms/discord/discord";
+import { tweetEvents } from "./platforms/twitter/twitter";
 import type { OpenSeaAssetEvent } from "./types";
 import { MS_PER_SECOND } from "./utils/constants";
 import { getDefaultEventGroupConfig } from "./utils/event-grouping";

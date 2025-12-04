@@ -92,7 +92,6 @@ export type OpenSeaOrderType =
   | "item_offer"
   | "trait_offer"
   | "collection_offer"
-  | "auction"
   | "criteria_offer"; // Legacy value
 
 export type OpenSeaAssetEvent = {

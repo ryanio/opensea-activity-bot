@@ -109,7 +109,7 @@ describe("twitter flows", () => {
 
   it("tweets a group for grouped sales", async () => {
     const { asset_events } = loadFixture("opensea/events-sales-group.json");
-    const { tweetEvents } = await import("../../src/platforms/twitter");
+    const { tweetEvents } = await import("../../src/platforms/twitter/twitter");
     tweetEvents(asset_events);
     const m = require("twitter-api-v2") as {
       __mockReadWrite: {
@@ -152,7 +152,7 @@ describe("twitter flows", () => {
         },
       ],
     };
-    const { tweetEvents } = await import("../../src/platforms/twitter");
+    const { tweetEvents } = await import("../../src/platforms/twitter/twitter");
     tweetEvents(
       burnBatch.asset_events as unknown as import("../../src/types").OpenSeaAssetEvent[]
     );
@@ -169,7 +169,7 @@ describe("twitter flows", () => {
 
   it("only tweets one group per tx across repeated runs", async () => {
     const { asset_events } = loadFixture("opensea/events-sales-group.json");
-    const { tweetEvents } = await import("../../src/platforms/twitter");
+    const { tweetEvents } = await import("../../src/platforms/twitter/twitter");
     // Simulate polling loop invoking with same batch repeatedly
     tweetEvents(asset_events);
     tweetEvents(asset_events);
@@ -189,7 +189,7 @@ describe("twitter flows", () => {
 
   it("converts SVG to PNG when tweeting single image", async () => {
     const { asset_events } = loadFixture("svg-image.json");
-    const { tweetEvents } = await import("../../src/platforms/twitter");
+    const { tweetEvents } = await import("../../src/platforms/twitter/twitter");
     tweetEvents(asset_events);
     const m = require("twitter-api-v2") as {
       __mockReadWrite: {
@@ -207,7 +207,7 @@ describe("twitter flows", () => {
 
   it("tweets a single sale event with correct text", async () => {
     const { asset_events } = loadFixture("opensea/events-sales.json");
-    const { tweetEvents } = await import("../../src/platforms/twitter");
+    const { tweetEvents } = await import("../../src/platforms/twitter/twitter");
     tweetEvents(asset_events);
     const m = require("twitter-api-v2") as {
       __mockReadWrite: {
@@ -227,7 +227,7 @@ describe("twitter flows", () => {
 
   it("tweets a listing event with correct text", async () => {
     const listings = loadFixture("opensea/get-listings.json");
-    const { tweetEvents } = await import("../../src/platforms/twitter");
+    const { tweetEvents } = await import("../../src/platforms/twitter/twitter");
     tweetEvents(listings.asset_events ?? []);
     expect(true).toBe(true);
   });
@@ -235,7 +235,7 @@ describe("twitter flows", () => {
   it("sorts group images by purchase price descending", async () => {
     // Load batch events with different prices to test sorting
     const batchSales = loadFixture("opensea/events-sales-batch.json");
-    const { tweetEvents } = await import("../../src/platforms/twitter");
+    const { tweetEvents } = await import("../../src/platforms/twitter/twitter");
 
     // Check that we have events with different prices
     const events = batchSales.asset_events ?? [];
@@ -280,7 +280,7 @@ describe("twitter flows", () => {
     });
     const batch = Array.from({ length: 5 }, (_, i) => makeBurn(i + 1));
 
-    const { tweetEvents } = await import("../../src/platforms/twitter");
+    const { tweetEvents } = await import("../../src/platforms/twitter/twitter");
     tweetEvents(
       batch as unknown as import("../../src/types").OpenSeaAssetEvent[]
     );
@@ -319,7 +319,7 @@ describe("twitter flows", () => {
       makeBurn("0xbbb", i + 6, i + 6)
     );
 
-    const { tweetEvents } = await import("../../src/platforms/twitter");
+    const { tweetEvents } = await import("../../src/platforms/twitter/twitter");
     // Simulate repeated polling of the same first 5 (duplicates should not reset settle window)
     tweetEvents(
       firstFive as unknown as import("../../src/types").OpenSeaAssetEvent[]
@@ -388,7 +388,9 @@ describe("twitter flows", () => {
         return Promise.resolve({ data: { id: "1", text: "ok" } });
       });
 
-      const { tweetEvents } = await import("../../src/platforms/twitter");
+      const { tweetEvents } = await import(
+        "../../src/platforms/twitter/twitter"
+      );
       tweetEvents([
         mintEvent,
       ] as unknown as import("../../src/types").OpenSeaAssetEvent[]);
@@ -426,7 +428,9 @@ describe("twitter flows", () => {
         return Promise.resolve({ data: { id: "1", text: "ok" } });
       });
 
-      const { tweetEvents } = await import("../../src/platforms/twitter");
+      const { tweetEvents } = await import(
+        "../../src/platforms/twitter/twitter"
+      );
       tweetEvents([
         mintEvent,
       ] as unknown as import("../../src/types").OpenSeaAssetEvent[]);
@@ -459,7 +463,9 @@ describe("twitter flows", () => {
         throw error;
       });
 
-      const { tweetEvents } = await import("../../src/platforms/twitter");
+      const { tweetEvents } = await import(
+        "../../src/platforms/twitter/twitter"
+      );
       tweetEvents([
         mintEvent,
       ] as unknown as import("../../src/types").OpenSeaAssetEvent[]);
@@ -482,7 +488,9 @@ describe("twitter flows", () => {
       const baseTimestamp = 1_234_567_890;
       const mintEvents = createMintBatch(2, TEST_MINTER_1, baseTimestamp);
 
-      const { tweetEvents } = await import("../../src/platforms/twitter");
+      const { tweetEvents } = await import(
+        "../../src/platforms/twitter/twitter"
+      );
       tweetEvents(mintEvents);
 
       const m = require("twitter-api-v2") as {
@@ -515,7 +523,9 @@ describe("twitter flows", () => {
         baseTimestamp + 100
       );
 
-      const { tweetEvents } = await import("../../src/platforms/twitter");
+      const { tweetEvents } = await import(
+        "../../src/platforms/twitter/twitter"
+      );
 
       // First group for this minter
       tweetEvents(firstBatch);
@@ -544,7 +554,7 @@ describe("twitter flows", () => {
 import {
   matchesSelection,
   parseRequestedEvents,
-} from "../../src/platforms/twitter";
+} from "../../src/platforms/twitter/twitter";
 import type { OpenSeaAssetEvent } from "../../src/types";
 
 // Hoisted for performance per linter guidance

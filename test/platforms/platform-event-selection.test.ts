@@ -164,8 +164,10 @@ describe("platform event selection independence", () => {
       },
     } as unknown as OpenSeaAssetEvent;
 
-    const { messageEvents } = await import("../../src/platforms/discord");
-    const { tweetEvents } = await import("../../src/platforms/twitter");
+    const { messageEvents } = await import(
+      "../../src/platforms/discord/discord"
+    );
+    const { tweetEvents } = await import("../../src/platforms/twitter/twitter");
 
     const events = [mintEvent, saleEvent] as OpenSeaAssetEvent[];
 

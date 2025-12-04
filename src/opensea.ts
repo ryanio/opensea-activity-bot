@@ -1,6 +1,6 @@
 import { URLSearchParams } from "node:url";
 import { FixedNumber } from "ethers";
-import { channelsWithEvents } from "./platforms/discord";
+import { channelsWithEvents } from "./platforms/discord/discord";
 import type {
   OpenSeaAccount,
   OpenSeaAssetEvent,
