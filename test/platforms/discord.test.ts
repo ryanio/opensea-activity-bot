@@ -4,7 +4,15 @@ import { jest } from "@jest/globals";
 process.env.DISCORD_TOKEN = "x";
 
 // Mock discord.js runtime API minimally
-const channelsMap: Record<string, { send: jest.Mock; id: string }> = {};
+const channelsMap: Record<
+  string,
+  {
+    send: jest.Mock;
+    id: string;
+    isTextBased: () => boolean;
+    isSendable: () => boolean;
+  }
+> = {};
 const setColorArgs: Record<string, string[]> = {};
 
 jest.mock("discord.js", () => {
@@ -22,7 +30,12 @@ jest.mock("discord.js", () => {
       channels: {
         fetch: (id: string) => {
           if (!channelsMap[id]) {
-            channelsMap[id] = { send: jest.fn(), id };
+            channelsMap[id] = {
+              send: jest.fn(),
+              id,
+              isTextBased: () => true,
+              isSendable: () => true,
+            };
           }
           return Promise.resolve(channelsMap[id]);
         },

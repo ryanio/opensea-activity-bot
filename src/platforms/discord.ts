@@ -44,18 +44,6 @@ const log = prefixedLogger("Discord");
 const groupConfig = getDefaultEventGroupConfig("DISCORD");
 const groupManager = new EventGroupManager(groupConfig);
 
-// Type guard for sendable channels
-const isSendableChannel = (
-  ch: TextBasedChannel
-): ch is TextBasedChannel & {
-  send: (options: MessageCreateOptions) => Promise<unknown>;
-} => {
-  const maybe = ch as unknown as {
-    send?: (options: MessageCreateOptions) => Promise<unknown>;
-  };
-  return typeof maybe.send === "function";
-};
-
 type ChannelEvents = [
   channelId: string,
   eventTypes: (EventType | BotEvent)[],
@@ -417,6 +405,15 @@ const login = (client: Client): Promise<void> =>
     client.login(process.env.DISCORD_TOKEN);
   });
 
+// Helper to get channel name using proper type guards
+const getChannelName = (channel: TextBasedChannel): string => {
+  // Guild channels have names, DMs don't
+  if ("name" in channel && channel.name) {
+    return channel.name;
+  }
+  return channel.id;
+};
+
 const getChannels = async (
   client: Client,
   channelEvents: ChannelEvents
@@ -426,10 +423,12 @@ const getChannels = async (
   log.info("📡 Active channels:");
   for (const [channelId, events] of channelEvents) {
     const channel = await client.channels.fetch(channelId);
-    channels[channelId] = channel as TextBasedChannel;
-    const channelName =
-      (channel as unknown as { name?: string; channelId?: string }).name ??
-      (channel as unknown as { name?: string; channelId?: string }).channelId;
+    if (!channel?.isTextBased()) {
+      log.warn(`Channel ${channelId} is not a text channel, skipping`);
+      continue;
+    }
+    channels[channelId] = channel;
+    const channelName = getChannelName(channel);
     log.info(`   • #${channelName}`);
     log.info(`     └─ Events: ${events.join(", ")}`);
   }
@@ -461,7 +460,7 @@ const processGroupMessages = async (
     const allChannels = Object.values(discordChannels);
 
     for (const channel of allChannels) {
-      if (!isSendableChannel(channel)) {
+      if (!channel.isSendable()) {
         continue;
       }
       await channel.send(message);
@@ -508,7 +507,7 @@ const processIndividualMessages = async (
     log.info("💬 Sending event notification");
 
     for (const channel of channels) {
-      if (!isSendableChannel(channel)) {
+      if (!channel.isSendable()) {
         continue;
       }
       await channel.send(message);
