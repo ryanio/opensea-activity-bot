@@ -35,7 +35,7 @@ describe("fetchEvents (OpenSea)", () => {
     process.env.OPENSEA_API_TOKEN = "test";
     process.env.TWITTER_EVENTS = "sale";
 
-    (global.fetch as unknown as jest.Mock) = jest.fn();
+    global.fetch = jest.fn() as typeof global.fetch;
     loggerMock.info.mockReset();
     loggerMock.debug.mockReset();
     loggerMock.warn.mockReset();
@@ -47,7 +47,7 @@ describe("fetchEvents (OpenSea)", () => {
   });
 
   const setupFetchMockForLagWindow = (eventsDb: OpenSeaAssetEvent[]) => {
-    (global.fetch as unknown as jest.Mock).mockImplementation((url: string) => {
+    jest.mocked(global.fetch).mockImplementation((url: string) => {
       if (url.includes("/chain/") && url.includes("/contract/")) {
         return Promise.resolve({
           ok: true,
@@ -228,7 +228,7 @@ describe("fetchEvents (OpenSea)", () => {
     const { fetchEvents } = await import("../../src/opensea");
     await fetchEvents();
 
-    const fetchCalls = (global.fetch as unknown as jest.Mock).mock.calls;
+    const fetchCalls = jest.mocked(global.fetch).mock.calls;
     const eventsCall = fetchCalls.find(
       ([url]) => typeof url === "string" && url.includes("/events/collection/")
     ) as [string];

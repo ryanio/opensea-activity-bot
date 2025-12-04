@@ -2,7 +2,8 @@ import { EventType } from "../opensea";
 import {
   BotEvent,
   type OpenSeaAssetEvent,
-  type OpenSeaEventType,
+  OpenSeaEventType,
+  OpenSeaOrderType,
 } from "../types";
 import { classifyTransfer } from "./utils";
 
@@ -11,10 +12,12 @@ import { classifyTransfer } from "./utils";
  * Handles the API quirk where order events have event_type="order"
  * with the actual type in order_type.
  */
-export const getEffectiveOrderType = (event: OpenSeaAssetEvent): string => {
+export const getEffectiveOrderType = (
+  event: OpenSeaAssetEvent
+): OpenSeaOrderType | OpenSeaEventType => {
   // If event_type is "order", use order_type for the actual type
-  if (event.event_type === "order") {
-    return event.order_type ?? "listing";
+  if (event.event_type === OpenSeaEventType.order) {
+    return event.order_type ?? OpenSeaOrderType.listing;
   }
   // Otherwise use event_type directly (for sale, transfer, mint, etc.)
   return event.event_type;
@@ -26,11 +29,11 @@ export const getEffectiveOrderType = (event: OpenSeaAssetEvent): string => {
 export const isOfferType = (event: OpenSeaAssetEvent): boolean => {
   const effectiveType = getEffectiveOrderType(event);
   return (
-    effectiveType === "item_offer" ||
-    effectiveType === "trait_offer" ||
-    effectiveType === "collection_offer" ||
-    effectiveType === "offer" || // Legacy value
-    effectiveType === "criteria_offer" // Legacy value
+    effectiveType === OpenSeaOrderType.item_offer ||
+    effectiveType === OpenSeaOrderType.trait_offer ||
+    effectiveType === OpenSeaOrderType.collection_offer ||
+    effectiveType === OpenSeaEventType.offer || // Legacy value
+    effectiveType === OpenSeaOrderType.criteria_offer // Legacy value
   );
 };
 
@@ -39,47 +42,72 @@ export const isOfferType = (event: OpenSeaAssetEvent): boolean => {
  */
 export const isListingType = (event: OpenSeaAssetEvent): boolean => {
   const effectiveType = getEffectiveOrderType(event);
-  return effectiveType === "listing";
+  return effectiveType === OpenSeaOrderType.listing;
+};
+
+const isOfferOrderType = (orderType: OpenSeaOrderType): boolean =>
+  orderType === OpenSeaOrderType.item_offer ||
+  orderType === OpenSeaOrderType.trait_offer ||
+  orderType === OpenSeaOrderType.collection_offer ||
+  orderType === OpenSeaOrderType.criteria_offer;
+
+const isOfferEventType = (
+  eventType: EventType | BotEvent | OpenSeaEventType
+): boolean => {
+  // Convert to string first to avoid type narrowing issues with union types
+  const eventTypeStr = String(eventType);
+  // Compare against enum values using string comparison
+  return (
+    eventTypeStr === BotEvent.offer ||
+    eventTypeStr === EventType.offer ||
+    eventTypeStr === EventType.trait_offer ||
+    eventTypeStr === EventType.collection_offer ||
+    eventTypeStr === OpenSeaEventType.offer ||
+    eventTypeStr === OpenSeaEventType.trait_offer ||
+    eventTypeStr === OpenSeaEventType.collection_offer
+  );
+};
+
+const isListingEventType = (
+  eventType: EventType | BotEvent | OpenSeaEventType
+): boolean => {
+  // Convert to string first to avoid type narrowing issues with union types
+  const eventTypeStr = String(eventType);
+  // Compare against enum values using string comparison
+  return (
+    eventTypeStr === BotEvent.listing ||
+    eventTypeStr === EventType.listing ||
+    eventTypeStr === OpenSeaEventType.listing
+  );
 };
 
 export const colorForEvent = (
   eventType: EventType | BotEvent | OpenSeaEventType,
-  orderType: string
+  orderType: OpenSeaOrderType | undefined
 ): string => {
   // Handle order type for "order" events
-  if (
-    orderType === "item_offer" ||
-    orderType === "trait_offer" ||
-    orderType === "collection_offer" ||
-    orderType === "criteria_offer"
-  ) {
-    return "#d63864";
-  }
-  if (orderType === "listing") {
-    return "#66dcf0";
+  if (orderType) {
+    if (isOfferOrderType(orderType)) {
+      return "#d63864";
+    }
+    if (orderType === OpenSeaOrderType.listing) {
+      return "#66dcf0";
+    }
   }
   // Handle event type directly
-  if (
-    (eventType as unknown as string) === BotEvent.offer ||
-    eventType === "offer" ||
-    eventType === "trait_offer" ||
-    eventType === "collection_offer"
-  ) {
+  if (isOfferEventType(eventType)) {
     return "#d63864";
   }
-  if (
-    (eventType as unknown as string) === BotEvent.listing ||
-    eventType === "listing"
-  ) {
+  if (isListingEventType(eventType)) {
     return "#66dcf0";
   }
   if (eventType === EventType.sale) {
     return "#62b778";
   }
-  if ((eventType as unknown as string) === BotEvent.mint) {
+  if (eventType === BotEvent.mint) {
     return "#2ecc71";
   }
-  if ((eventType as unknown as string) === BotEvent.burn) {
+  if (eventType === BotEvent.burn) {
     return "#e74c3c";
   }
   if (eventType === EventType.transfer) {
@@ -89,30 +117,32 @@ export const colorForEvent = (
 };
 
 // Helper sets for offer and listing order types
-const OFFER_ORDER_TYPES = new Set([
-  "item_offer",
-  "trait_offer",
-  "collection_offer",
-  "criteria_offer",
+const OFFER_ORDER_TYPES = new Set<OpenSeaOrderType>([
+  OpenSeaOrderType.item_offer,
+  OpenSeaOrderType.trait_offer,
+  OpenSeaOrderType.collection_offer,
+  OpenSeaOrderType.criteria_offer,
 ]);
 
-const LISTING_ORDER_TYPES = new Set(["listing"]);
+const LISTING_ORDER_TYPES = new Set<OpenSeaOrderType>([
+  OpenSeaOrderType.listing,
+]);
 
 // Helper set for legacy offer event types
-const LEGACY_OFFER_TYPES = new Set([
-  "trait_offer",
-  "collection_offer",
-  "offer",
+const LEGACY_OFFER_TYPES = new Set<OpenSeaEventType>([
+  OpenSeaEventType.trait_offer,
+  OpenSeaEventType.collection_offer,
+  OpenSeaEventType.offer,
 ]);
 
 const handleOrderEventType = (
-  orderType: string | undefined
+  orderType: OpenSeaOrderType | undefined
 ): EventType | BotEvent | undefined => {
   if (orderType && OFFER_ORDER_TYPES.has(orderType)) {
-    return BotEvent.offer as unknown as EventType;
+    return BotEvent.offer;
   }
   if (orderType && LISTING_ORDER_TYPES.has(orderType)) {
-    return BotEvent.listing as unknown as EventType;
+    return BotEvent.listing;
   }
   return;
 };
@@ -122,12 +152,12 @@ const handleTransferEventType = (
 ): EventType | BotEvent => {
   const kind = classifyTransfer(event);
   if (kind === "mint") {
-    return BotEvent.mint as unknown as EventType;
+    return BotEvent.mint;
   }
   if (kind === "burn") {
-    return BotEvent.burn as unknown as EventType;
+    return BotEvent.burn;
   }
-  return EventType.transfer as EventType;
+  return EventType.transfer;
 };
 
 export const effectiveEventTypeFor = (
@@ -136,7 +166,7 @@ export const effectiveEventTypeFor = (
   const baseType = event.event_type;
 
   // Handle "order" event type - use order_type to determine actual type
-  if (baseType === "order") {
+  if (baseType === OpenSeaEventType.order) {
     const result = handleOrderEventType(event.order_type);
     if (result) {
       return result;
@@ -145,17 +175,22 @@ export const effectiveEventTypeFor = (
 
   // Handle legacy event_type values (for backwards compatibility)
   if (LEGACY_OFFER_TYPES.has(baseType)) {
-    return BotEvent.offer as unknown as EventType;
+    return BotEvent.offer;
   }
-  if (baseType === "listing") {
-    return BotEvent.listing as unknown as EventType;
+  if (baseType === OpenSeaEventType.listing) {
+    return BotEvent.listing;
   }
-  if (baseType === "transfer") {
+  if (baseType === OpenSeaEventType.transfer) {
     return handleTransferEventType(event);
   }
-  if (baseType === "mint") {
-    return BotEvent.mint as unknown as EventType;
+  if (baseType === OpenSeaEventType.mint) {
+    return BotEvent.mint;
+  }
+  if (baseType === OpenSeaEventType.sale) {
+    return EventType.sale;
   }
 
-  return baseType as EventType;
+  // baseType should be one of: sale, transfer, mint, order (already handled)
+  // If it's something else, cast it (shouldn't happen in practice)
+  return baseType as EventType | BotEvent;
 };

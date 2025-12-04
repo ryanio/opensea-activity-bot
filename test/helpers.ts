@@ -1,8 +1,9 @@
 import type { OpenSeaAssetEvent } from "../src/types";
 
 // ============================================================================
-// Test Event Builders
+// Full Test Event Builders (complete NFT metadata)
 // Based on fixture data from OpenSea API in `test/fixtures/opensea`
+// For quick/minimal test events, see fixtures.ts
 // ============================================================================
 
 /**

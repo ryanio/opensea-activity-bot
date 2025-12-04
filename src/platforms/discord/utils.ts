@@ -5,7 +5,12 @@ import {
 } from "discord.js";
 import { format } from "timeago.js";
 import { EventType, getCollectionSlug, opensea, username } from "../../opensea";
-import { BotEvent, type OpenSeaAssetEvent } from "../../types";
+import {
+  BotEvent,
+  type OpenSeaAssetEvent,
+  type OpenSeaEventType,
+  type OpenSeaOrderType,
+} from "../../types";
 import type { AggregatorEvent } from "../../utils/aggregator";
 import { MS_PER_SECOND } from "../../utils/constants";
 import {
@@ -42,8 +47,10 @@ export const escapeMarkdown = (text: string): string =>
 
 export type Field = { name: string; value: string; inline?: true };
 
-const colorFor = (eventType: EventType | BotEvent, orderType: string) =>
-  colorForEvent(eventType, orderType);
+const colorFor = (
+  eventType: EventType | BotEvent,
+  orderType: OpenSeaOrderType | undefined
+) => colorForEvent(eventType, orderType);
 
 // ---- Order/Sale/Transfer embed builders ----
 
@@ -52,7 +59,7 @@ export const buildOrderEmbed = async (
 ): Promise<{ title: string; fields: Field[] }> => {
   const { payment, order_type, expiration_date, maker, criteria } = event as {
     payment: { quantity: string; decimals: number; symbol: string };
-    order_type: string;
+    order_type: OpenSeaOrderType | string;
     expiration_date: number;
     maker: string;
     criteria: {
@@ -70,7 +77,7 @@ export const buildOrderEmbed = async (
   const inTime = expiration_date
     ? format(new Date(expiration_date * MS_PER_SECOND))
     : "Unknown";
-  if (order_type === "trait_offer") {
+  if (order_type === ("trait_offer" satisfies OpenSeaOrderType)) {
     // Get trait info from criteria - can be in trait or traits array
     const traitInfo = criteria?.trait ?? criteria?.traits?.[0];
     const traitType = traitInfo?.type ?? "Unknown";
@@ -80,7 +87,7 @@ export const buildOrderEmbed = async (
     fields.push({ name: "Price", value: price });
     fields.push({ name: "Expires", value: inTime });
   } else if (
-    order_type === "item_offer" ||
+    order_type === ("item_offer" satisfies OpenSeaOrderType) ||
     order_type === "offer" ||
     order_type === "criteria_offer"
   ) {
@@ -88,7 +95,7 @@ export const buildOrderEmbed = async (
     const price = formatAmount(quantity, decimals, symbol);
     fields.push({ name: "Price", value: price });
     fields.push({ name: "Expires", value: inTime });
-  } else if (order_type === "collection_offer") {
+  } else if (order_type === ("collection_offer" satisfies OpenSeaOrderType)) {
     title += "Collection offer";
     const price = formatAmount(quantity, decimals, symbol);
     fields.push({ name: "Price", value: price });
@@ -132,15 +139,12 @@ export const buildTransferEmbed = async (
   const fields: Field[] = [];
   if (kind === "mint") {
     // Include editions for ERC1155 mints if quantity > 1
-    const quantity = (event as unknown as { quantity?: number })?.quantity;
+    const openSeaEvent = event as OpenSeaAssetEvent;
+    const quantity = openSeaEvent.quantity;
     const tokenStandard =
-      (
-        event as unknown as {
-          nft?: { token_standard?: string };
-          asset?: { token_standard?: string };
-        }
-      )?.nft?.token_standard ??
-      (event as unknown as { asset?: { token_standard?: string } })?.asset
+      (openSeaEvent.nft as { token_standard?: string } | undefined)
+        ?.token_standard ??
+      (openSeaEvent.asset as { token_standard?: string } | undefined)
         ?.token_standard;
 
     const toName = escapeMarkdown(await username(to_address));
@@ -168,23 +172,26 @@ export const buildTransferEmbed = async (
 
 // ---- Event type classification helpers ----
 
-export const isOrderLikeType = (t: unknown, orderType?: string): boolean => {
+export const isOrderLikeType = (
+  t: unknown,
+  orderType?: OpenSeaOrderType | string
+): boolean => {
   const s = String(t);
   // Check order_type for "order" events
   if (s === "order" && orderType) {
     return (
-      orderType === "listing" ||
-      orderType === "item_offer" ||
-      orderType === "trait_offer" ||
-      orderType === "collection_offer"
+      orderType === ("listing" satisfies OpenSeaOrderType) ||
+      orderType === ("item_offer" satisfies OpenSeaOrderType) ||
+      orderType === ("trait_offer" satisfies OpenSeaOrderType) ||
+      orderType === ("collection_offer" satisfies OpenSeaOrderType)
     );
   }
   // Legacy event_type handling
   return (
     s === BotEvent.listing ||
     s === BotEvent.offer ||
-    s === "trait_offer" ||
-    s === "collection_offer" ||
+    s === ("trait_offer" satisfies OpenSeaEventType) ||
+    s === ("collection_offer" satisfies OpenSeaEventType) ||
     s === "listing"
   );
 };
@@ -269,11 +276,7 @@ export type EmbedResult = {
 export const buildEmbed = async (
   event: AggregatorEvent
 ): Promise<EmbedResult> => {
-  const { event_type, asset, order_type } = event as unknown as {
-    event_type?: EventType | string;
-    asset?: { opensea_url?: string; name?: string };
-    order_type?: string;
-  };
+  const { event_type, asset, order_type } = event;
 
   const nft = event.nft ?? asset;
   // Use effective event type to correctly identify burns, mints, etc.
@@ -287,7 +290,10 @@ export const buildEmbed = async (
 
   const built = new EmbedBuilder()
     .setColor(
-      colorFor(effectiveType, order_type ?? "") as unknown as ColorResolvable
+      colorFor(
+        effectiveType,
+        (order_type as OpenSeaOrderType | undefined) ?? undefined
+      ) as ColorResolvable
     )
     .setTitle(title)
     .setFields(

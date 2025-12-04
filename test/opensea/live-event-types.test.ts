@@ -22,19 +22,19 @@ import saleEvents from "../fixtures/bayc-live/sale-events.json";
 import traitOfferEvents from "../fixtures/bayc-live/trait_offer-events.json";
 import transferEvents from "../fixtures/bayc-live/transfer-events.json";
 
-// Type assertion helpers - using unknown cast for JSON fixture data
+// Type assertion helpers for JSON fixture data
 const getListingEvents = (): OpenSeaAssetEvent[] =>
-  listingEvents.asset_events as unknown as OpenSeaAssetEvent[];
+  listingEvents.asset_events as OpenSeaAssetEvent[];
 const getOfferEvents = (): OpenSeaAssetEvent[] =>
-  offerEvents.asset_events as unknown as OpenSeaAssetEvent[];
+  offerEvents.asset_events as OpenSeaAssetEvent[];
 const getTraitOfferEvents = (): OpenSeaAssetEvent[] =>
-  traitOfferEvents.asset_events as unknown as OpenSeaAssetEvent[];
+  traitOfferEvents.asset_events as OpenSeaAssetEvent[];
 const getCollectionOfferEvents = (): OpenSeaAssetEvent[] =>
-  collectionOfferEvents.asset_events as unknown as OpenSeaAssetEvent[];
+  collectionOfferEvents.asset_events as OpenSeaAssetEvent[];
 const getSaleEvents = (): OpenSeaAssetEvent[] =>
-  saleEvents.asset_events as unknown as OpenSeaAssetEvent[];
+  saleEvents.asset_events as OpenSeaAssetEvent[];
 const getTransferEvents = (): OpenSeaAssetEvent[] =>
-  transferEvents.asset_events as unknown as OpenSeaAssetEvent[];
+  transferEvents.asset_events as OpenSeaAssetEvent[];
 
 describe("Live Event Type Detection", () => {
   describe("API Response Format", () => {
@@ -228,7 +228,10 @@ describe("Live Event Type Detection", () => {
     test("returns correct color for listings", () => {
       const event = getListingEvents()[0];
       // colorForEvent uses order_type
-      const color = colorForEvent(event.event_type, event.order_type ?? "");
+      const color = colorForEvent(
+        event.event_type,
+        event.order_type ?? undefined
+      );
       expect(color).toBe("#66dcf0"); // listing color
     });
 
@@ -236,28 +239,31 @@ describe("Live Event Type Detection", () => {
       const itemOffer = getOfferEvents()[0];
       const color1 = colorForEvent(
         itemOffer.event_type,
-        itemOffer.order_type ?? ""
+        itemOffer.order_type ?? undefined
       );
       expect(color1).toBe("#d63864"); // offer color
 
       const traitOffer = getTraitOfferEvents()[0];
       const color2 = colorForEvent(
         traitOffer.event_type,
-        traitOffer.order_type ?? ""
+        traitOffer.order_type ?? undefined
       );
       expect(color2).toBe("#d63864"); // offer color
 
       const collectionOffer = getCollectionOfferEvents()[0];
       const color3 = colorForEvent(
         collectionOffer.event_type,
-        collectionOffer.order_type ?? ""
+        collectionOffer.order_type ?? undefined
       );
       expect(color3).toBe("#d63864"); // offer color
     });
 
     test("returns correct color for sales", () => {
       const event = getSaleEvents()[0];
-      const color = colorForEvent(event.event_type, event.order_type ?? "");
+      const color = colorForEvent(
+        event.event_type,
+        event.order_type ?? undefined
+      );
       expect(color).toBe("#62b778"); // sale color
     });
   });

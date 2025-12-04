@@ -40,8 +40,11 @@ export const channelsWithEvents = (): ChannelEvents => {
   for (const channel of DISCORD_EVENTS.split("&")) {
     const channelWithEvents = channel.split("=");
     const channelId = channelWithEvents[0];
-    const eventTypes = channelWithEvents[1].split(",");
-    list.push([channelId, eventTypes as unknown as (EventType | BotEvent)[]]);
+    const eventTypes = channelWithEvents[1].split(",") as (
+      | EventType
+      | BotEvent
+    )[];
+    list.push([channelId, eventTypes]);
   }
 
   return list;
@@ -176,9 +179,7 @@ const processIndividualMessages = async (
     );
   }
 
-  const messages = await messagesForEvents(
-    processableEvents as AggregatorEvent[]
-  );
+  const messages = await messagesForEvents(processableEvents);
 
   for (const [index, message] of messages.entries()) {
     const event = processableEvents[index];

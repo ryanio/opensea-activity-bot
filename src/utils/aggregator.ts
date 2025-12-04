@@ -21,7 +21,7 @@ export type AggregatorEvent = {
 export const txHashFor = (event: AggregatorEvent): string | undefined =>
   (typeof event?.transaction === "string" ? event.transaction : undefined) ||
   (typeof event?.transaction === "object"
-    ? (event.transaction?.hash as string | undefined)
+    ? event.transaction?.hash
     : undefined) ||
   event?.transaction_hash ||
   event?.tx_hash ||

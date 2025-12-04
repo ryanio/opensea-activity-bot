@@ -1,5 +1,10 @@
 import { username } from "../../opensea";
-import type { OpenSeaAssetEvent, OpenSeaPayment } from "../../types";
+import type {
+  OpenSeaAssetEvent,
+  OpenSeaEventType,
+  OpenSeaOrderType,
+  OpenSeaPayment,
+} from "../../types";
 import {
   classifyTransfer,
   formatAmount,
@@ -40,7 +45,7 @@ export const formatNftName = (
 export const formatOrderText = async (
   payment: OpenSeaPayment,
   maker: string,
-  order_type: string
+  order_type: OpenSeaOrderType | string
 ) => {
   const name = await username(maker);
   const price = formatAmount(
@@ -48,20 +53,20 @@ export const formatOrderText = async (
     payment.decimals,
     payment.symbol
   );
-  if (order_type === "listing") {
+  if (order_type === ("listing" satisfies OpenSeaOrderType)) {
     return `listed on sale for ${price} by ${name}`;
   }
   if (
-    order_type === "item_offer" ||
+    order_type === ("item_offer" satisfies OpenSeaOrderType) ||
     order_type === "offer" ||
     order_type === "criteria_offer"
   ) {
     return `has a new offer for ${price} by ${name}`;
   }
-  if (order_type === "collection_offer") {
+  if (order_type === ("collection_offer" satisfies OpenSeaOrderType)) {
     return `has a new collection offer for ${price} by ${name}`;
   }
-  if (order_type === "trait_offer") {
+  if (order_type === ("trait_offer" satisfies OpenSeaOrderType)) {
     return `has a new trait offer for ${price} by ${name}`;
   }
   return "";
@@ -101,7 +106,7 @@ export const textForOrder = async (params: {
   nft: { name?: string; identifier?: string | number } | undefined;
   payment: OpenSeaPayment;
   maker: string;
-  order_type: string;
+  order_type: OpenSeaOrderType | string;
 }): Promise<string> => {
   const { nft, payment, maker, order_type } = params;
   let text = "";
@@ -153,7 +158,7 @@ export const textForTransfer = async (
 };
 
 // Helper sets for event type classification
-const ORDER_EVENT_TYPES = new Set([
+const ORDER_EVENT_TYPES = new Set<OpenSeaEventType | "order">([
   "order",
   "listing",
   "offer",

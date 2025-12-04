@@ -1,4 +1,4 @@
-import type { OpenSeaAssetEvent } from "../types";
+import type { OpenSeaAssetEvent, OpenSeaEventType } from "../types";
 import { DEFAULT_SETTLE_MS, MIN_GROUP_SIZE } from "./constants";
 import { LRUCache } from "./lru-cache";
 import { classifyTransfer } from "./utils";
@@ -41,9 +41,17 @@ export type GroupedEvent = {
 
 export const isGroupedEvent = (
   event: OpenSeaAssetEvent | GroupedEvent
-): event is GroupedEvent =>
-  (event as { kind?: string }).kind === "group" &&
-  Array.isArray((event as { events?: unknown[] }).events);
+): event is GroupedEvent => {
+  if (typeof event !== "object" || event === null) {
+    return false;
+  }
+  return (
+    "kind" in event &&
+    event.kind === "group" &&
+    "events" in event &&
+    Array.isArray(event.events)
+  );
+};
 
 // Common event group aggregator management
 export class EventGroupManager {
@@ -120,8 +128,8 @@ export class EventGroupManager {
         now - agg.lastAddedMs >= this.settleMs
       ) {
         // Remove events that have already been processed via prior groups
-        const unprocessed = (agg.events as OpenSeaAssetEvent[]).filter(
-          (e) => !this.isProcessed(e)
+        const unprocessed = agg.events.filter(
+          (e) => !this.isProcessed(e as OpenSeaAssetEvent)
         );
         if (unprocessed.length >= this.minGroupSize) {
           const pseudoTx = `actor:${key}`;
@@ -134,18 +142,21 @@ export class EventGroupManager {
   }
 
   private actorKeyForEvent(event: OpenSeaAssetEvent): string | undefined {
-    if (event.event_type === "sale") {
+    if (event.event_type === ("sale" satisfies OpenSeaEventType)) {
       return this.actorKeyForSale(event);
     }
-    if (event.event_type === "transfer") {
+    if (event.event_type === ("transfer" satisfies OpenSeaEventType)) {
       return this.actorKeyForTransfer(event);
     }
-    if (event.event_type === "mint") {
+    if (event.event_type === ("mint" satisfies OpenSeaEventType)) {
       // Treat mint similarly to transfer-mint for actor grouping (group by recipient)
       const to = (event.to_address ?? "").toLowerCase();
       return to ? `mint:${to}` : undefined;
     }
-    if (event.event_type === "offer" || event.event_type === "listing") {
+    if (
+      event.event_type === ("offer" satisfies OpenSeaEventType) ||
+      event.event_type === ("listing" satisfies OpenSeaEventType)
+    ) {
       return this.actorKeyForOrder(event);
     }
     return;
@@ -275,28 +286,37 @@ export const groupKindForEvents = (events: OpenSeaAssetEvent[]): GroupKind => {
     // Empty groups shouldn't happen, but default to purchase
     return "purchase";
   }
-  const allSales = events.every((e) => e.event_type === "sale");
+  const allSales = events.every(
+    (e) => e.event_type === ("sale" satisfies OpenSeaEventType)
+  );
   if (allSales) {
     return "purchase";
   }
-  const allOffers = events.every((e) => e.event_type === "offer");
+  const allOffers = events.every(
+    (e) => e.event_type === ("offer" satisfies OpenSeaEventType)
+  );
   if (allOffers) {
     return "offer";
   }
-  const allListings = events.every((e) => e.event_type === "listing");
+  const allListings = events.every(
+    (e) => e.event_type === ("listing" satisfies OpenSeaEventType)
+  );
   if (allListings) {
     return "listing";
   }
   const allMintTransfers = events.every(
     (e) =>
-      e.event_type === "mint" ||
-      (e.event_type === "transfer" && classifyTransfer(e) === "mint")
+      e.event_type === ("mint" satisfies OpenSeaEventType) ||
+      (e.event_type === ("transfer" satisfies OpenSeaEventType) &&
+        classifyTransfer(e) === "mint")
   );
   if (allMintTransfers) {
     return "mint";
   }
   const allBurnTransfers = events.every(
-    (e) => e.event_type === "transfer" && classifyTransfer(e) === "burn"
+    (e) =>
+      e.event_type === ("transfer" satisfies OpenSeaEventType) &&
+      classifyTransfer(e) === "burn"
   );
   if (allBurnTransfers) {
     return "burn";
@@ -307,13 +327,13 @@ export const groupKindForEvents = (events: OpenSeaAssetEvent[]): GroupKind => {
   if (!firstEvent) {
     return "purchase";
   }
-  if (firstEvent.event_type === "sale") {
+  if (firstEvent.event_type === ("sale" satisfies OpenSeaEventType)) {
     return "purchase";
   }
-  if (firstEvent.event_type === "offer") {
+  if (firstEvent.event_type === ("offer" satisfies OpenSeaEventType)) {
     return "offer";
   }
-  if (firstEvent.event_type === "listing") {
+  if (firstEvent.event_type === ("listing" satisfies OpenSeaEventType)) {
     return "listing";
   }
   const transferKind = classifyTransfer(firstEvent);

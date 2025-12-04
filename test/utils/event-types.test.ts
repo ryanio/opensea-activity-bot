@@ -38,17 +38,11 @@ describe("effectiveEventTypeFor", () => {
 
 describe("colorForEvent", () => {
   test("returns expected colors", () => {
-    expect(colorForEvent("listing" as unknown as EventType, "")).toBe(
-      "#66dcf0"
-    );
-    expect(colorForEvent("offer" as unknown as EventType, "")).toBe("#d63864");
-    expect(colorForEvent(EventType.sale, "")).toBe("#62b778");
-    expect(colorForEvent(EventType.transfer, "")).toBe("#5296d5");
-    expect(colorForEvent(BotEvent.mint as unknown as EventType, "")).toBe(
-      "#2ecc71"
-    );
-    expect(colorForEvent(BotEvent.burn as unknown as EventType, "")).toBe(
-      "#e74c3c"
-    );
+    expect(colorForEvent(BotEvent.listing, undefined)).toBe("#66dcf0");
+    expect(colorForEvent(BotEvent.offer, undefined)).toBe("#d63864");
+    expect(colorForEvent(EventType.sale, undefined)).toBe("#62b778");
+    expect(colorForEvent(EventType.transfer, undefined)).toBe("#5296d5");
+    expect(colorForEvent(BotEvent.mint, undefined)).toBe("#2ecc71");
+    expect(colorForEvent(BotEvent.burn, undefined)).toBe("#e74c3c");
   });
 });

@@ -340,7 +340,7 @@ const ensureTwitterClient = () => {
       appSecret: String(process.env.TWITTER_CONSUMER_SECRET),
       accessToken: String(process.env.TWITTER_ACCESS_TOKEN),
       accessSecret: String(process.env.TWITTER_ACCESS_TOKEN_SECRET),
-    }).readWrite as unknown as MinimalTwitterClient;
+    }).readWrite as MinimalTwitterClient;
   }
 };
 

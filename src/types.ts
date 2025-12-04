@@ -75,24 +75,32 @@ export type OpenSeaNFT = {
 // OpenSea API event_type values
 // Note: The API returns "order" for listings and all offer types
 // The actual distinction is made via the order_type field
-export type OpenSeaEventType =
-  | "sale"
-  | "transfer"
-  | "mint"
-  | "order" // Used for listings and offers - check order_type for specifics
+export const OpenSeaEventType = {
+  sale: "sale",
+  transfer: "transfer",
+  mint: "mint",
+  order: "order", // Used for listings and offers - check order_type for specifics
   // Legacy values (for backwards compatibility with existing code/tests)
-  | "listing"
-  | "offer"
-  | "trait_offer"
-  | "collection_offer";
+  listing: "listing",
+  offer: "offer",
+  trait_offer: "trait_offer",
+  collection_offer: "collection_offer",
+} as const;
+
+export type OpenSeaEventType =
+  (typeof OpenSeaEventType)[keyof typeof OpenSeaEventType];
 
 // OpenSea API order_type values (when event_type is "order")
+export const OpenSeaOrderType = {
+  listing: "listing",
+  item_offer: "item_offer",
+  trait_offer: "trait_offer",
+  collection_offer: "collection_offer",
+  criteria_offer: "criteria_offer", // Legacy value
+} as const;
+
 export type OpenSeaOrderType =
-  | "listing"
-  | "item_offer"
-  | "trait_offer"
-  | "collection_offer"
-  | "criteria_offer"; // Legacy value
+  (typeof OpenSeaOrderType)[keyof typeof OpenSeaOrderType];
 
 export type OpenSeaAssetEvent = {
   event_type: OpenSeaEventType;

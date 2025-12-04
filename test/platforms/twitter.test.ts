@@ -1,96 +1,42 @@
 import fs from "node:fs";
 import path from "node:path";
 import { jest } from "@jest/globals";
+import type { OpenSeaAssetEvent } from "../../src/types";
+import {
+  createOpenSeaMock,
+  createTwitterMock,
+  createUtilsMock,
+  DEAD_ADDRESS,
+  getTweetCalls,
+  getTweetTexts,
+  NULL_ADDRESS,
+  quickBurnBatch,
+  setupTwitterEnv,
+  TEST_BURNER,
+} from "../fixtures";
 import { createMintBatch, TEST_MINTER_1 } from "../helpers";
 
 // Mock env
 process.env.TWITTER_EVENTS = "sale,listing,offer,transfer,burn";
 process.env.TOKEN_ADDRESS = "0xb6c2c2d2999c1b532e089a7ad4cb7f8c91cf5075";
-process.env.TWITTER_CONSUMER_KEY = "x";
-process.env.TWITTER_CONSUMER_SECRET = "y";
-process.env.TWITTER_ACCESS_TOKEN = "z";
-process.env.TWITTER_ACCESS_TOKEN_SECRET = "w";
+setupTwitterEnv();
 
 // Stub utils (must be defined before importing code that uses it)
-jest.mock("../../src/utils/utils", () => {
-  const actual = jest.requireActual(
-    "../../src/utils/utils"
-  ) as typeof import("../../src/utils/utils");
-  const BYTE_ONE = 1;
-  const BYTE_TWO = 2;
-  const BYTE_THREE = 3;
-  const TEST_IMAGE_BYTES: readonly number[] = [BYTE_ONE, BYTE_TWO, BYTE_THREE];
-  const fetchImageBuffer: typeof actual.fetchImageBuffer = jest.fn(
-    async () => ({
-      buffer: Buffer.from(TEST_IMAGE_BYTES),
-      mimeType: "image/png",
-    })
-  );
-  return {
-    ...actual,
-    fetchImageBuffer,
-    timeout: jest.fn(() => Promise.resolve()),
-  } satisfies typeof import("../../src/utils/utils");
-});
+jest.mock("../../src/utils/utils", () => createUtilsMock());
 
 // Stub opensea module to avoid cross-import init
-jest.mock("../../src/opensea", () => ({
-  opensea: {
-    api: "https://api.opensea.io/api/v2/",
-    collectionURL: () => "https://opensea.io/collection/glyphbots",
-    getEvents: () =>
-      "https://api.opensea.io/api/v2/events/collection/glyphbots",
-    getContract: () =>
-      "https://api.opensea.io/api/v2/chain/ethereum/contract/0x",
-    getAccount: (address: string) =>
-      `https://api.opensea.io/api/v2/accounts/${address}`,
-    getNFT: (tokenId: number) =>
-      `https://api.opensea.io/api/v2/nfts/${tokenId}`,
-    GET_OPTS: { method: "GET", headers: { Accept: "application/json" } },
-  },
-  EventType: {
-    listing: "listing",
-    offer: "offer",
-    trait_offer: "trait_offer",
-    collection_offer: "collection_offer",
-    mint: "mint",
-    sale: "sale",
-    transfer: "transfer",
-  },
-  username: jest.fn(async () => "user"),
-  getCollectionSlug: jest.fn(() => "glyphbots"),
-}));
+jest.mock("../../src/opensea", () => createOpenSeaMock(async () => "user"));
 
 // Manual stable mock for twitter-api-v2
-jest.mock("twitter-api-v2", () => {
-  const uploadMedia = jest.fn(async () => "media-id");
-  const tweet = jest.fn(async () => ({ data: { id: "1", text: "ok" } }));
-  const readWrite = { v1: { uploadMedia }, v2: { tweet } };
-  const TwitterApi = jest.fn().mockImplementation(() => ({ readWrite }));
-  return { TwitterApi, __mockReadWrite: readWrite };
-});
+jest.mock("twitter-api-v2", () => createTwitterMock());
+
+// Hoisted regex for performance
+const TEN_BURNED_REGEX = /\b10 burned\b/;
 
 const loadFixture = (name: string) => {
   const p = path.join(__dirname, "..", "fixtures", name);
   const raw = fs.readFileSync(p, "utf-8");
   return JSON.parse(raw);
-};
-
-const _waitFor = async (
-  predicate: () => boolean,
-  timeoutMs = 1500,
-  stepMs = 20
-) => {
-  const start = Date.now();
-  for (;;) {
-    if (predicate()) {
-      return;
-    }
-    if (Date.now() - start > timeoutMs) {
-      throw new Error("timeout");
-    }
-    await new Promise((r) => setTimeout(r, stepMs));
-  }
 };
 
 describe("twitter flows", () => {
@@ -111,60 +57,27 @@ describe("twitter flows", () => {
     const { asset_events } = loadFixture("opensea/events-sales-group.json");
     const { tweetEvents } = await import("../../src/platforms/twitter/twitter");
     tweetEvents(asset_events);
-    const m = require("twitter-api-v2") as {
-      __mockReadWrite: {
-        v1: { uploadMedia: jest.Mock };
-        v2: { tweet: jest.Mock };
-      };
-    };
     await jest.runAllTimersAsync();
-    expect(m.__mockReadWrite.v2.tweet).toHaveBeenCalled();
-    const calls = (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls;
+
+    const calls = getTweetCalls();
     expect(calls.length).toBeGreaterThan(0);
-    const first = calls[0][0] as { text: string };
-    expect(typeof first.text).toBe("string");
-    expect(first.text.toLowerCase()).toContain("purchased");
-    expect(first.text).toContain("opensea.io/");
+    expect(calls[0].text.toLowerCase()).toContain("purchased");
+    expect(calls[0].text).toContain("opensea.io/");
   });
 
   it("tweets a grouped burn with profile activity link", async () => {
-    const burnBatch = {
-      asset_events: [
-        {
-          event_type: "transfer",
-          event_timestamp: 1,
-          chain: "ethereum",
-          quantity: 1,
-          nft: { identifier: "1", opensea_url: "https://x" },
-          from_address: "0xbbbbbb0000000000000000000000000000000000",
-          to_address: "0x000000000000000000000000000000000000dead",
-          transaction: "0xabc",
-        },
-        {
-          event_type: "transfer",
-          event_timestamp: 2,
-          chain: "ethereum",
-          quantity: 1,
-          nft: { identifier: "2", opensea_url: "https://x" },
-          from_address: "0xbbbbbb0000000000000000000000000000000000",
-          to_address: "0x0000000000000000000000000000000000000000",
-          transaction: "0xabc",
-        },
-      ],
-    };
+    const burnBatch = quickBurnBatch(2, TEST_BURNER, "0xabc");
+    // Override to_address for second event to use NULL_ADDRESS (both are burn addresses)
+    burnBatch[1] = { ...burnBatch[1], to_address: NULL_ADDRESS };
+
     const { tweetEvents } = await import("../../src/platforms/twitter/twitter");
-    tweetEvents(
-      burnBatch.asset_events as unknown as import("../../src/types").OpenSeaAssetEvent[]
-    );
-    const m = require("twitter-api-v2") as {
-      __mockReadWrite: { v2: { tweet: jest.Mock } };
-    };
+    tweetEvents(burnBatch);
     await jest.runAllTimersAsync();
-    const calls = (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls;
+
+    const calls = getTweetCalls();
     expect(calls.length).toBeGreaterThan(0);
-    const first = (calls[0][0] as { text: string }).text;
-    expect(first.toLowerCase()).toContain("burned");
-    expect(first).toContain("activity?activityTypes=transfer");
+    expect(calls[0].text.toLowerCase()).toContain("burned");
+    expect(calls[0].text).toContain("activity?activityTypes=transfer");
   });
 
   it("only tweets one group per tx across repeated runs", async () => {
@@ -174,55 +87,37 @@ describe("twitter flows", () => {
     tweetEvents(asset_events);
     tweetEvents(asset_events);
     tweetEvents(asset_events);
-    const m = require("twitter-api-v2") as {
-      __mockReadWrite: {
-        v1: { uploadMedia: jest.Mock };
-        v2: { tweet: jest.Mock };
-      };
-    };
     await jest.runAllTimersAsync();
-    const calls = (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls;
+
+    const calls = getTweetCalls();
     expect(calls.length).toBeGreaterThan(0);
-    const first = calls[0][0] as { text: string };
-    expect(first.text.includes("purchased by user")).toBeTruthy();
+    expect(calls[0].text.includes("purchased by user")).toBeTruthy();
   });
 
   it("converts SVG to PNG when tweeting single image", async () => {
     const { asset_events } = loadFixture("svg-image.json");
     const { tweetEvents } = await import("../../src/platforms/twitter/twitter");
     tweetEvents(asset_events);
+    await jest.runAllTimersAsync();
+
     const m = require("twitter-api-v2") as {
       __mockReadWrite: {
         v1: { uploadMedia: jest.Mock };
         v2: { tweet: jest.Mock };
       };
     };
-    await jest.runAllTimersAsync();
     expect(m.__mockReadWrite.v1.uploadMedia).toHaveBeenCalled();
     expect(m.__mockReadWrite.v2.tweet).toHaveBeenCalled();
-    const callArg = (m.__mockReadWrite.v2.tweet as jest.Mock).mock
-      .calls[0][0] as { text: string };
-    expect(typeof callArg.text).toBe("string");
   });
 
   it("tweets a single sale event with correct text", async () => {
     const { asset_events } = loadFixture("opensea/events-sales.json");
     const { tweetEvents } = await import("../../src/platforms/twitter/twitter");
     tweetEvents(asset_events);
-    const m = require("twitter-api-v2") as {
-      __mockReadWrite: {
-        v1: { uploadMedia: jest.Mock };
-        v2: { tweet: jest.Mock };
-      };
-    };
     await jest.runAllTimersAsync();
-    expect(m.__mockReadWrite.v2.tweet).toHaveBeenCalled();
-    const text = (
-      (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls.at(-1)?.[0] as {
-        text: string;
-      }
-    ).text;
-    expect(text.includes("purchased for")).toBeTruthy();
+
+    const texts = getTweetTexts();
+    expect(texts.at(-1)?.includes("purchased for")).toBeTruthy();
   });
 
   it("tweets a listing event with correct text", async () => {
@@ -242,25 +137,18 @@ describe("twitter flows", () => {
     expect(events.length).toBeGreaterThan(0);
 
     // Verify events have different payment quantities (prices)
-    const prices = events.map((e) => Number(e.payment?.quantity || 0));
+    const prices = events.map((e: OpenSeaAssetEvent) =>
+      Number(e.payment?.quantity || 0)
+    );
     const uniquePrices = new Set(prices);
     expect(uniquePrices.size).toBeGreaterThan(1); // Should have different prices
 
     // Process the events (this will trigger group aggregation and sorting)
     tweetEvents(events);
-
-    // Get the mock after calling tweetEvents
-    const m = require("twitter-api-v2") as {
-      __mockReadWrite: {
-        v1: { uploadMedia: jest.Mock };
-        v2: { tweet: jest.Mock };
-      };
-    };
-
     await jest.runAllTimersAsync();
 
     // Verify the tweet was called (group should be detected)
-    expect(m.__mockReadWrite.v2.tweet).toHaveBeenCalled();
+    expect(getTweetCalls().length).toBeGreaterThan(0);
   });
 
   it("does not duplicate-tweet the same 5 burn events (tx vs actor overlap)", async () => {
@@ -268,32 +156,16 @@ describe("twitter flows", () => {
     process.env.TWITTER_EVENT_GROUP_SETTLE_MS = "0";
     process.env.TWITTER_EVENT_GROUP_MIN_GROUP_SIZE = "2";
 
-    const makeBurn = (tokenId: number) => ({
-      event_type: "transfer",
-      event_timestamp: tokenId,
-      chain: "ethereum",
-      quantity: 1,
-      nft: { identifier: String(tokenId), opensea_url: "https://x" },
-      from_address: "0xbbbbbb0000000000000000000000000000000000",
-      to_address: "0x000000000000000000000000000000000000dead",
-      transaction: "0xabc",
-    });
-    const batch = Array.from({ length: 5 }, (_, i) => makeBurn(i + 1));
+    const batch = quickBurnBatch(5, TEST_BURNER, "0xabc");
 
     const { tweetEvents } = await import("../../src/platforms/twitter/twitter");
-    tweetEvents(
-      batch as unknown as import("../../src/types").OpenSeaAssetEvent[]
-    );
-
-    const m = require("twitter-api-v2") as {
-      __mockReadWrite: { v2: { tweet: jest.Mock } };
-    };
+    tweetEvents(batch);
     await jest.runAllTimersAsync();
-    const calls = (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls;
+
+    const calls = getTweetCalls();
     // Should tweet exactly one group of 5 (actor group is suppressed for same-tx overlap)
     expect(calls.length).toBe(1);
-    const text = (calls[0][0] as { text: string }).text;
-    expect(text).toContain("5 burned");
+    expect(calls[0].text).toContain("5 burned");
   });
 
   it("tweets a 10-burn actor group eventually despite duplicate polling", async () => {
@@ -308,8 +180,8 @@ describe("twitter flows", () => {
       chain: "ethereum",
       quantity: 1,
       nft: { identifier: String(tokenId), opensea_url: "https://x" },
-      from_address: "0xbbbbbb0000000000000000000000000000000000",
-      to_address: "0x000000000000000000000000000000000000dead",
+      from_address: TEST_BURNER,
+      to_address: DEAD_ADDRESS,
       transaction: tx,
     });
     const firstFive = Array.from({ length: 5 }, (_, i) =>
@@ -321,31 +193,18 @@ describe("twitter flows", () => {
 
     const { tweetEvents } = await import("../../src/platforms/twitter/twitter");
     // Simulate repeated polling of the same first 5 (duplicates should not reset settle window)
-    tweetEvents(
-      firstFive as unknown as import("../../src/types").OpenSeaAssetEvent[]
-    );
-    tweetEvents(
-      firstFive as unknown as import("../../src/types").OpenSeaAssetEvent[]
-    );
+    tweetEvents(firstFive as OpenSeaAssetEvent[]);
+    tweetEvents(firstFive as OpenSeaAssetEvent[]);
     // Add the second set shortly after
     jest.advanceTimersByTime(10);
-    tweetEvents(
-      secondFive as unknown as import("../../src/types").OpenSeaAssetEvent[]
-    );
+    tweetEvents(secondFive as OpenSeaAssetEvent[]);
 
-    const m = require("twitter-api-v2") as {
-      __mockReadWrite: { v2: { tweet: jest.Mock } };
-    };
     // Allow settle window to elapse, then trigger a flush by invoking again with duplicates
     jest.advanceTimersByTime(60);
-    tweetEvents(
-      firstFive as unknown as import("../../src/types").OpenSeaAssetEvent[]
-    );
+    tweetEvents(firstFive as OpenSeaAssetEvent[]);
     await jest.runAllTimersAsync();
-    const calls = (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls as [
-      { text: string },
-    ][];
-    const texts = calls.map((c) => (c[0] as { text: string }).text);
+
+    const texts = getTweetTexts();
     // Ensure there is at least one burn tweet mentioning 10
     expect(
       texts.some(
@@ -391,9 +250,7 @@ describe("twitter flows", () => {
       const { tweetEvents } = await import(
         "../../src/platforms/twitter/twitter"
       );
-      tweetEvents([
-        mintEvent,
-      ] as unknown as import("../../src/types").OpenSeaAssetEvent[]);
+      tweetEvents([mintEvent]);
 
       await jest.runAllTimersAsync();
       expect(tweetMock).toHaveBeenCalledTimes(2);
@@ -431,9 +288,7 @@ describe("twitter flows", () => {
       const { tweetEvents } = await import(
         "../../src/platforms/twitter/twitter"
       );
-      tweetEvents([
-        mintEvent,
-      ] as unknown as import("../../src/types").OpenSeaAssetEvent[]);
+      tweetEvents([mintEvent]);
 
       await jest.runAllTimersAsync();
       expect(tweetMock).toHaveBeenCalledTimes(3);
@@ -466,9 +321,7 @@ describe("twitter flows", () => {
       const { tweetEvents } = await import(
         "../../src/platforms/twitter/twitter"
       );
-      tweetEvents([
-        mintEvent,
-      ] as unknown as import("../../src/types").OpenSeaAssetEvent[]);
+      tweetEvents([mintEvent]);
 
       await jest.runAllTimersAsync();
       expect(tweetMock).toHaveBeenCalledTimes(1);
@@ -493,12 +346,8 @@ describe("twitter flows", () => {
       );
       tweetEvents(mintEvents);
 
-      const m = require("twitter-api-v2") as {
-        __mockReadWrite: { v2: { tweet: jest.Mock } };
-      };
-
       await jest.runAllTimersAsync();
-      const calls = (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls;
+      const calls = getTweetCalls();
 
       // Below minGroupSize, mints should be tweeted individually
       expect(calls.length).toBe(2);
@@ -529,17 +378,14 @@ describe("twitter flows", () => {
 
       // First group for this minter
       tweetEvents(firstBatch);
-      const m = require("twitter-api-v2") as {
-        __mockReadWrite: { v2: { tweet: jest.Mock } };
-      };
       await jest.runAllTimersAsync();
-      let calls = (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls;
+      let calls = getTweetCalls();
       expect(calls.length).toBe(1);
 
       // Second independent group for the same minter should also tweet
       tweetEvents(secondBatch);
       await jest.runAllTimersAsync();
-      calls = (m.__mockReadWrite.v2.tweet as jest.Mock).mock.calls;
+      calls = getTweetCalls();
 
       // Previously this would stay at 1 due to actor-based queue key dedupe.
       // With the updated keying (including timestamp window), we expect 2.
@@ -555,10 +401,6 @@ import {
   matchesSelection,
   parseRequestedEvents,
 } from "../../src/platforms/twitter/twitter";
-import type { OpenSeaAssetEvent } from "../../src/types";
-
-// Hoisted for performance per linter guidance
-const TEN_BURNED_REGEX = /\b10 burned\b/;
 
 describe("twitter selection for mint/burn", () => {
   const base = {
@@ -566,44 +408,44 @@ describe("twitter selection for mint/burn", () => {
     event_timestamp: 1,
     chain: "ethereum",
     quantity: 1,
-  } as unknown as OpenSeaAssetEvent;
+  } as const;
 
   test("selects mint when requested", () => {
-    const ev: OpenSeaAssetEvent = {
+    const ev = {
       ...base,
-      from_address: "0x0000000000000000000000000000000000000000",
+      from_address: NULL_ADDRESS,
       to_address: "0x1234567890123456789012345678901234567890",
-    };
+    } as OpenSeaAssetEvent;
     const set = parseRequestedEvents("mint");
     expect(matchesSelection(ev, set)).toBe(true);
   });
 
   test("selects burn when requested", () => {
-    const ev: OpenSeaAssetEvent = {
+    const ev = {
       ...base,
       from_address: "0x1234567890123456789012345678901234567890",
-      to_address: "0x000000000000000000000000000000000000dead",
-    };
+      to_address: DEAD_ADDRESS,
+    } as OpenSeaAssetEvent;
     const set = parseRequestedEvents("burn");
     expect(matchesSelection(ev, set)).toBe(true);
   });
 
   test("mint not included when only transfer requested", () => {
-    const ev: OpenSeaAssetEvent = {
+    const ev = {
       ...base,
-      from_address: "0x0000000000000000000000000000000000000000",
+      from_address: NULL_ADDRESS,
       to_address: "0x1234567890123456789012345678901234567890",
-    };
+    } as OpenSeaAssetEvent;
     const set = parseRequestedEvents("transfer");
     expect(matchesSelection(ev, set)).toBe(false);
   });
 
   test("burn not included when only transfer requested", () => {
-    const ev: OpenSeaAssetEvent = {
+    const ev = {
       ...base,
       from_address: "0x1234567890123456789012345678901234567890",
       to_address: "0x0000000000000000000000000000000000000001",
-    };
+    } as OpenSeaAssetEvent;
     const set = parseRequestedEvents("transfer");
     expect(matchesSelection(ev, set)).toBe(false);
   });
