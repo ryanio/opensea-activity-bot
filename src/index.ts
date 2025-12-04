@@ -80,9 +80,7 @@ const logDiscordConfig = async () => {
 
   for (const [channelId, events] of channelEvents) {
     const channelName = channelNames.get(channelId);
-    const channelDisplay = channelName
-      ? `#${channelName} (${channelId})`
-      : channelId;
+    const channelDisplay = channelName ? `#${channelName}` : channelId;
     logger.info(`│     ├─ ${channelDisplay} = ${events.join(", ")}`);
   }
 
