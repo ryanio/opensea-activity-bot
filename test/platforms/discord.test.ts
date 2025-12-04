@@ -8,10 +8,11 @@ const channelsMap: Record<string, { send: jest.Mock; id: string }> = {};
 const setColorArgs: Record<string, string[]> = {};
 
 jest.mock("discord.js", () => {
+  const Events = { ClientReady: "clientReady" };
   const Client = jest.fn().mockImplementation(() => {
     return {
       on: (event: string, cb: () => void) => {
-        if (event === "ready") {
+        if (event === Events.ClientReady) {
           // Call immediately instead of using setImmediate for faster tests
           cb();
         }
@@ -42,7 +43,7 @@ jest.mock("discord.js", () => {
     };
     return obj;
   });
-  return { Client, EmbedBuilder };
+  return { Client, EmbedBuilder, Events };
 });
 
 // Mock opensea username

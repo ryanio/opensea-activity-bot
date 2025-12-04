@@ -2,6 +2,7 @@ import {
   Client,
   type ColorResolvable,
   EmbedBuilder,
+  Events,
   type MessageCreateOptions,
   type TextBasedChannel,
 } from "discord.js";
@@ -410,7 +411,7 @@ const messagesForEvents = async (
 
 const login = (client: Client): Promise<void> =>
   new Promise<void>((resolve) => {
-    client.on("ready", () => {
+    client.on(Events.ClientReady, () => {
       resolve();
     });
     client.login(process.env.DISCORD_TOKEN);

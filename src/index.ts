@@ -1,4 +1,4 @@
-import { Client, type TextBasedChannel } from "discord.js";
+import { Client, Events, type TextBasedChannel } from "discord.js";
 import {
   type EventTimestampSource,
   fetchCollectionSlug,
@@ -31,7 +31,7 @@ const fetchDiscordChannelNames = async (): Promise<Map<string, string>> => {
 
   try {
     await new Promise<void>((resolve) => {
-      client.on("ready", () => resolve());
+      client.on(Events.ClientReady, () => resolve());
       client.login(process.env.DISCORD_TOKEN);
     });
 
