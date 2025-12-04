@@ -16,7 +16,7 @@ import {
   groupKindForEvents,
   primaryActorAddressForGroup,
 } from "../../utils/event-grouping";
-import { colorForEvent } from "../../utils/event-types";
+import { colorForEvent, effectiveEventTypeFor } from "../../utils/event-types";
 import {
   openseaCollectionActivityUrl,
   openseaProfileActivityUrl,
@@ -276,6 +276,8 @@ export const buildEmbed = async (
   };
 
   const nft = event.nft ?? asset;
+  // Use effective event type to correctly identify burns, mints, etc.
+  const effectiveType = effectiveEventTypeFor(event as OpenSeaAssetEvent);
   const { title: baseTitle, fields } = await buildTitleAndFields(
     event,
     event_type,
@@ -285,10 +287,7 @@ export const buildEmbed = async (
 
   const built = new EmbedBuilder()
     .setColor(
-      colorFor(
-        event_type as EventType,
-        order_type ?? ""
-      ) as unknown as ColorResolvable
+      colorFor(effectiveType, order_type ?? "") as unknown as ColorResolvable
     )
     .setTitle(title)
     .setFields(

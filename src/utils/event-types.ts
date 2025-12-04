@@ -76,14 +76,14 @@ export const colorForEvent = (
   if (eventType === EventType.sale) {
     return "#62b778";
   }
-  if (eventType === EventType.transfer) {
-    return "#5296d5";
-  }
   if ((eventType as unknown as string) === BotEvent.mint) {
     return "#2ecc71";
   }
   if ((eventType as unknown as string) === BotEvent.burn) {
     return "#e74c3c";
+  }
+  if (eventType === EventType.transfer) {
+    return "#5296d5";
   }
   return "#9537b0";
 };
