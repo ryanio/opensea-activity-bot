@@ -96,9 +96,20 @@ Originally developed for [@dutchtide](https://twitter.com/dutchtide)'s [𝕄𝕚
 
 **Discord Setup:**
 1. [Create a Discord application](https://discord.com/developers/applications)
-2. Create a bot with permissions: `Send Messages` and `Embed Links`
-3. [Add bot to your server](https://discordjs.guide/preparations/adding-your-bot-to-servers.html#bot-invite-links)
+2. Go to the **Bot** tab and click "Add Bot"
+3. Under **Privileged Gateway Intents**, enable any intents you need (none required for this bot)
 4. Copy the bot token to `DISCORD_TOKEN`
+5. **Invite bot to your server:**
+   - Go to **OAuth2** → **URL Generator**
+   - Under **Scopes**, select `bot`
+   - Under **Bot Permissions**, select `Send Messages` and `Embed Links`
+   - Copy the generated URL and open it in your browser
+   - Select your server and authorize
+
+**Quick Invite URL** (replace `YOUR_CLIENT_ID` with your application's Client ID from the OAuth2 page):
+```
+https://discord.com/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=18432&scope=bot
+```
 
 **DISCORD_EVENTS Format:**
 - Single channel: `CHANNEL_ID=event1,event2`

@@ -12,5 +12,6 @@ export const NULL_ONE_ADDRESS = "0x0000000000000000000000000000000000000001";
 export const MIN_GROUP_SIZE = 2;
 export const DEFAULT_SETTLE_MS = 60_000;
 
-// Milliseconds per second (for utility conversions)
+// Time constants (for utility conversions)
 export const MS_PER_SECOND = 1000;
+export const SECONDS_PER_MINUTE = 60;

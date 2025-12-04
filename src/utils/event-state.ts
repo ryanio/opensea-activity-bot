@@ -1,9 +1,9 @@
 import { promises as fs } from "node:fs";
 import { dirname, join } from "node:path";
+import { SECONDS_PER_MINUTE } from "./constants";
 import { logger } from "./logger";
 
 const DEFAULT_DEDUPE_WINDOW_MINUTES = 60;
-const SECONDS_PER_MINUTE = 60;
 
 export type EventCursor = {
   source: string;

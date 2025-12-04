@@ -2,6 +2,7 @@ import { TwitterApi } from "twitter-api-v2";
 import { EventType, getCollectionSlug, opensea, username } from "../opensea";
 import type { BotEvent, OpenSeaAssetEvent, OpenSeaPayment } from "../types";
 import { txHashFor } from "../utils/aggregator";
+import { MS_PER_SECOND, SECONDS_PER_MINUTE } from "../utils/constants";
 import {
   calculateTotalSpent,
   EventGroupManager,
@@ -41,11 +42,9 @@ const tweetedEventsCache = new LRUCache<string, boolean>(
 // Queue + backoff config
 const DEFAULT_TWEET_DELAY_MS = 3000;
 const DEFAULT_BACKOFF_BASE_MS = 15_000;
-const MINUTES = 60;
-const SECONDS_PER_MINUTE = 60;
-const MS_PER_SECOND = 1000;
 const BACKOFF_MAX_MINUTES = 15;
-const DEFAULT_BACKOFF_MAX_MS = BACKOFF_MAX_MINUTES * MINUTES * MS_PER_SECOND;
+const DEFAULT_BACKOFF_MAX_MS =
+  BACKOFF_MAX_MINUTES * SECONDS_PER_MINUTE * MS_PER_SECOND;
 const DEFAULT_PROCESSING_TIMEOUT_MINUTES = 2;
 const DEFAULT_PROCESSING_TIMEOUT_MS =
   DEFAULT_PROCESSING_TIMEOUT_MINUTES * SECONDS_PER_MINUTE * MS_PER_SECOND;

@@ -7,11 +7,17 @@ import {
 import { messageEvents } from "./platforms/discord";
 import { tweetEvents } from "./platforms/twitter";
 import type { OpenSeaAssetEvent } from "./types";
+import { MS_PER_SECOND } from "./utils/constants";
 import { getDefaultEventGroupConfig } from "./utils/event-grouping";
 import { logger } from "./utils/logger";
-import { botInterval, chain, fullTokenAddr, minOfferETH } from "./utils/utils";
-
-const MILLISECONDS_PER_SECOND = 1000;
+import {
+  botInterval,
+  chain,
+  formatReadableDate,
+  formatTimeAgo,
+  fullTokenAddr,
+  minOfferETH,
+} from "./utils/utils";
 
 const logPlatformConfig = (
   twitterEnabled: boolean,
@@ -36,9 +42,7 @@ const logPlatformConfig = (
       process.env.TWITTER_PREPEND_TWEET || process.env.TWITTER_APPEND_TWEET;
     logger.info(`│     ${hasPrependOrAppend ? "├─" : "└─"} Grouping`);
     logger.info(`│        ├─ Min Group Size: ${config.minGroupSize} items`);
-    logger.info(
-      `│        └─ Settle Time: ${config.settleMs / MILLISECONDS_PER_SECOND}s`
-    );
+    logger.info(`│        └─ Settle Time: ${config.settleMs / MS_PER_SECOND}s`);
   }
   logger.info("│");
   logger.info(
@@ -50,9 +54,7 @@ const logPlatformConfig = (
     const config = getDefaultEventGroupConfig("DISCORD");
     logger.info("│     └─ Grouping");
     logger.info(`│        ├─ Min Group Size: ${config.minGroupSize} items`);
-    logger.info(
-      `│        └─ Settle Time: ${config.settleMs / MILLISECONDS_PER_SECOND}s`
-    );
+    logger.info(`│        └─ Settle Time: ${config.settleMs / MS_PER_SECOND}s`);
   }
   logger.info("│");
 };
@@ -117,7 +119,10 @@ const logStartupConfiguration = async () => {
   logger.info(`│  ⛓️   Chain: ${chain}`);
   logger.info(`│  ⏱️   Poll Interval: ${botInterval}s`);
   if (eventTimestampInfo) {
-    logger.info(`│  🕐  Event Timestamp: ${eventTimestampInfo.timestamp}`);
+    const ts = eventTimestampInfo.timestamp;
+    logger.info(
+      `│  🕐  Last Event: ${formatReadableDate(ts)} (${formatTimeAgo(ts)})`
+    );
     logger.info(
       `│      └─ Source: ${formatTimestampSource(eventTimestampInfo.source)}`
     );
@@ -152,7 +157,6 @@ async function main() {
   await logStartupConfiguration();
   run();
 
-  const MS_PER_SECOND = 1000;
   const interval = setInterval(run.bind(this), botInterval * MS_PER_SECOND);
 
   process.on("SIGINT", () => {

@@ -4,6 +4,7 @@ import type { NFTLike } from "./aggregator";
 import {
   DEAD_ADDRESS,
   GLYPHBOTS_CONTRACT_ADDRESS,
+  MS_PER_SECOND,
   NULL_ADDRESS,
   NULL_ONE_ADDRESS,
 } from "./constants";
@@ -13,9 +14,45 @@ export function timeout(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const SECONDS_PER_MS = 1000;
 export const unixTimestamp = (date: Date) =>
-  Math.floor(date.getTime() / SECONDS_PER_MS);
+  Math.floor(date.getTime() / MS_PER_SECOND);
+
+/**
+ * Formats a Unix timestamp as a relative time string (e.g., "2 hours ago")
+ */
+export const formatTimeAgo = (timestamp: number): string => {
+  const now = Date.now();
+  const diffMs = now - timestamp * MS_PER_SECOND;
+  const diffSeconds = Math.floor(diffMs / MS_PER_SECOND);
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  const diffHours = Math.floor(diffMinutes / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffDays > 0) {
+    return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
+  }
+  if (diffHours > 0) {
+    return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
+  }
+  if (diffMinutes > 0) {
+    return `${diffMinutes} minute${diffMinutes === 1 ? "" : "s"} ago`;
+  }
+  return "just now";
+};
+
+/**
+ * Formats a Unix timestamp as a human-readable date (e.g., "Dec 4, 2025, 10:30 AM")
+ */
+export const formatReadableDate = (timestamp: number): string => {
+  const date = new Date(timestamp * MS_PER_SECOND);
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
 
 /**
  * Returns a shortened version of a full ethereum address
