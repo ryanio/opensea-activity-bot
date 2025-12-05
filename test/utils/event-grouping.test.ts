@@ -397,17 +397,17 @@ describe("eventGrouping-utils", () => {
       groupManager.addEvents([mockEvent1, mockEvent2]);
 
       // Initially no ready groups
-      let readyGroups = groupManager.getReadyGroups();
-      expect(readyGroups).toHaveLength(0);
+      let result = groupManager.getReadyGroups();
+      expect(result.groups).toHaveLength(0);
 
       // Wait for settle time (config.settleMs is 1000, so wait 1100 to be safe)
       const SETTLE_BUFFER_MS = 1100;
       jest.advanceTimersByTime(SETTLE_BUFFER_MS);
 
-      readyGroups = groupManager.getReadyGroups();
-      expect(readyGroups).toHaveLength(1);
-      expect(readyGroups[0].tx).toBe("actor:purchase:0xbuyer1");
-      expect(readyGroups[0].events).toHaveLength(2);
+      result = groupManager.getReadyGroups();
+      expect(result.groups).toHaveLength(1);
+      expect(result.groups[0].tx).toBe("actor:purchase:0xbuyer1");
+      expect(result.groups[0].events).toHaveLength(2);
     });
 
     it("does not flush a group if duplicates reduce below min size", () => {
@@ -419,8 +419,10 @@ describe("eventGrouping-utils", () => {
 
       const SETTLE_BUFFER_MS = 1100;
       jest.advanceTimersByTime(SETTLE_BUFFER_MS);
-      const readyGroups = groupManager.getReadyGroups();
-      expect(readyGroups.length).toBe(0);
+      const result = groupManager.getReadyGroups();
+      // No groups returned (below minGroupSize), but the single event should be released
+      expect(result.groups.length).toBe(0);
+      expect(result.releasedIndividuals.length).toBe(1);
     });
   });
 

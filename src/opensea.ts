@@ -471,10 +471,17 @@ const processEventFilters = (
   for (const event of processed) {
     const key = canonicalEventKeyFor(event);
     if (eventStateStore.hasKey(key)) {
+      logger.debug(
+        `[Dedupe] Skipping already-seen event: ${event.event_type} token=${event.nft?.identifier ?? "?"} key=${key}`
+      );
       continue;
     }
     deduped.push(event);
     newKeys.push(key);
+  }
+
+  if (preDedup > 0 && deduped.length === 0) {
+    logger.debug(`[Dedupe] All ${preDedup} events were filtered as duplicates`);
   }
 
   eventStateStore.markProcessed(newKeys);

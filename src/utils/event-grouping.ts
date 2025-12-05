@@ -125,8 +125,11 @@ export class EventGroupManager {
     }
   }
 
-  // Get ready event groups
-  getReadyGroups(): Array<{ tx: string; events: OpenSeaAssetEvent[] }> {
+  // Get ready event groups and any individual events released from undersized groups
+  getReadyGroups(): {
+    groups: Array<{ tx: string; events: OpenSeaAssetEvent[] }>;
+    releasedIndividuals: OpenSeaAssetEvent[];
+  } {
     // Log pending groups state before checking
     if (this.actorAgg.size > 0) {
       const now = Date.now();
@@ -163,7 +166,8 @@ export class EventGroupManager {
   private processSettledGroup(
     key: string,
     agg: { events: OpenSeaAssetEvent[]; rawCount: number },
-    out: Array<{ tx: string; events: OpenSeaAssetEvent[] }>
+    out: Array<{ tx: string; events: OpenSeaAssetEvent[] }>,
+    releasedIndividuals: OpenSeaAssetEvent[]
   ): void {
     const unprocessed = this.filterUnprocessedEvents(agg.events, key);
 
@@ -182,11 +186,13 @@ export class EventGroupManager {
     }
 
     if (unprocessed.length > 0) {
-      // Events exist but below minGroupSize - keep for individual processing
-      logger.warn(
-        `[EventGroup] Group ${key} has ${unprocessed.length} unprocessed events ` +
-          `(below minGroupSize=${this.minGroupSize}), keeping for individual processing`
+      // Events exist but below minGroupSize - release for individual processing
+      logger.info(
+        `[EventGroup] 📤 Releasing ${unprocessed.length} event(s) from group ${key} for individual processing ` +
+          `(below minGroupSize=${this.minGroupSize})`
       );
+      releasedIndividuals.push(...unprocessed);
+      this.actorAgg.delete(key);
       return;
     }
 
@@ -197,11 +203,12 @@ export class EventGroupManager {
     this.actorAgg.delete(key);
   }
 
-  private collectReadyActorGroups(): Array<{
-    tx: string;
-    events: OpenSeaAssetEvent[];
-  }> {
-    const out: Array<{ tx: string; events: OpenSeaAssetEvent[] }> = [];
+  private collectReadyActorGroups(): {
+    groups: Array<{ tx: string; events: OpenSeaAssetEvent[] }>;
+    releasedIndividuals: OpenSeaAssetEvent[];
+  } {
+    const groups: Array<{ tx: string; events: OpenSeaAssetEvent[] }> = [];
+    const releasedIndividuals: OpenSeaAssetEvent[] = [];
     const now = Date.now();
     this.pruneStaleActorGroups(now);
 
@@ -211,10 +218,10 @@ export class EventGroupManager {
       const meetsMinSize = agg.rawCount >= this.minGroupSize;
 
       if (meetsMinSize && isSettled) {
-        this.processSettledGroup(key, agg, out);
+        this.processSettledGroup(key, agg, groups, releasedIndividuals);
       }
     }
-    return out;
+    return { groups, releasedIndividuals };
   }
 
   private actorKeyForEvent(event: OpenSeaAssetEvent): string | undefined {
@@ -684,7 +691,9 @@ export const processEventsWithAggregator = (
   }
 
   // Always flush ready groups (even if no new events)
-  const readyGroups = groupManager.getReadyGroups();
+  // Also get any individual events released from undersized groups
+  const { groups: readyGroups, releasedIndividuals } =
+    groupManager.getReadyGroups();
 
   // Filter processable events (only if we have new events)
   const { processableEvents, skippedDupes, skippedPending } =
@@ -692,9 +701,13 @@ export const processEventsWithAggregator = (
       ? groupManager.filterProcessableEvents(events)
       : { processableEvents: [], skippedDupes: 0, skippedPending: 0 };
 
+  // Add released individuals to processable events
+  // These are events from settled groups that didn't meet minGroupSize
+  const allProcessable = [...processableEvents, ...releasedIndividuals];
+
   return {
     readyGroups,
-    processableEvents,
+    processableEvents: allProcessable,
     skippedDupes,
     skippedPending,
   };
