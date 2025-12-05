@@ -1,5 +1,6 @@
 import type { OpenSeaAssetEvent, OpenSeaEventType } from "../types";
 import { DEFAULT_SETTLE_MS, MIN_GROUP_SIZE } from "./constants";
+import { logger } from "./logger";
 import { LRUCache } from "./lru-cache";
 import { classifyTransfer } from "./utils";
 
@@ -86,6 +87,7 @@ export class EventGroupManager {
         continue;
       }
       let agg = this.actorAgg.get(key);
+      const isNewGroup = !agg;
       if (!agg) {
         agg = {
           events: [],
@@ -102,17 +104,97 @@ export class EventGroupManager {
       if (agg.dedupeKeys.has(ekey)) {
         // Do not refresh lastAddedMs on duplicates; otherwise repeated polling
         // can starve the settle window and prevent group flush.
+        logger.debug(
+          `[EventGroup] Duplicate event skipped: ${ekey} for group ${key}`
+        );
         continue;
       }
       agg.events.push(ev);
       agg.dedupeKeys.add(ekey);
       agg.lastAddedMs = now;
+
+      if (isNewGroup) {
+        logger.debug(
+          `[EventGroup] New group created: ${key} with event ${ekey}`
+        );
+      } else {
+        logger.debug(
+          `[EventGroup] Event added to group ${key}: ${ekey} (now ${agg.events.length} events, rawCount=${agg.rawCount})`
+        );
+      }
     }
   }
 
   // Get ready event groups
   getReadyGroups(): Array<{ tx: string; events: OpenSeaAssetEvent[] }> {
+    // Log pending groups state before checking
+    if (this.actorAgg.size > 0) {
+      const now = Date.now();
+      for (const [key, agg] of this.actorAgg.entries()) {
+        const elapsed = now - agg.lastAddedMs;
+        const remaining = Math.max(0, this.settleMs - elapsed);
+        logger.debug(
+          `[EventGroup] Pending group ${key}: events=${agg.events.length} rawCount=${agg.rawCount} ` +
+            `elapsed=${elapsed}ms settleMs=${this.settleMs}ms remaining=${remaining}ms`
+        );
+      }
+    }
     return this.collectReadyActorGroups();
+  }
+
+  private filterUnprocessedEvents(
+    events: OpenSeaAssetEvent[],
+    groupKey: string
+  ): OpenSeaAssetEvent[] {
+    const unprocessed: OpenSeaAssetEvent[] = [];
+    for (const e of events) {
+      if (this.isProcessed(e)) {
+        const ekey = eventKeyFor(e);
+        logger.warn(
+          `[EventGroup] Event ${ekey} in group ${groupKey} was already processed - skipping`
+        );
+      } else {
+        unprocessed.push(e);
+      }
+    }
+    return unprocessed;
+  }
+
+  private processSettledGroup(
+    key: string,
+    agg: { events: OpenSeaAssetEvent[]; rawCount: number },
+    out: Array<{ tx: string; events: OpenSeaAssetEvent[] }>
+  ): void {
+    const unprocessed = this.filterUnprocessedEvents(agg.events, key);
+
+    logger.debug(
+      `[EventGroup] Group ${key} ready: total=${agg.events.length} unprocessed=${unprocessed.length} minGroupSize=${this.minGroupSize}`
+    );
+
+    if (unprocessed.length >= this.minGroupSize) {
+      const pseudoTx = `actor:${key}`;
+      out.push({ tx: pseudoTx, events: unprocessed });
+      logger.info(
+        `[EventGroup] ✅ Flushing group ${key} with ${unprocessed.length} events`
+      );
+      this.actorAgg.delete(key);
+      return;
+    }
+
+    if (unprocessed.length > 0) {
+      // Events exist but below minGroupSize - keep for individual processing
+      logger.warn(
+        `[EventGroup] Group ${key} has ${unprocessed.length} unprocessed events ` +
+          `(below minGroupSize=${this.minGroupSize}), keeping for individual processing`
+      );
+      return;
+    }
+
+    // All events were processed elsewhere - safe to delete
+    logger.debug(
+      `[EventGroup] Group ${key} fully processed, removing empty group`
+    );
+    this.actorAgg.delete(key);
   }
 
   private collectReadyActorGroups(): Array<{
@@ -122,20 +204,14 @@ export class EventGroupManager {
     const out: Array<{ tx: string; events: OpenSeaAssetEvent[] }> = [];
     const now = Date.now();
     this.pruneStaleActorGroups(now);
+
     for (const [key, agg] of this.actorAgg.entries()) {
-      if (
-        agg.rawCount >= this.minGroupSize &&
-        now - agg.lastAddedMs >= this.settleMs
-      ) {
-        // Remove events that have already been processed via prior groups
-        const unprocessed = agg.events.filter(
-          (e) => !this.isProcessed(e as OpenSeaAssetEvent)
-        );
-        if (unprocessed.length >= this.minGroupSize) {
-          const pseudoTx = `actor:${key}`;
-          out.push({ tx: pseudoTx, events: unprocessed });
-        }
-        this.actorAgg.delete(key);
+      const elapsed = now - agg.lastAddedMs;
+      const isSettled = elapsed >= this.settleMs;
+      const meetsMinSize = agg.rawCount >= this.minGroupSize;
+
+      if (meetsMinSize && isSettled) {
+        this.processSettledGroup(key, agg, out);
       }
     }
     return out;
