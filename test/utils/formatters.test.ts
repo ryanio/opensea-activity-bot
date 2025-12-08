@@ -21,6 +21,11 @@ describe("formatAmount", () => {
     expect(formatAmount("300000000000000", 18, "ETH")).toBe("0.0003 ETH");
     expect(formatAmount("200000000000000", 18, "ETH")).toBe("0.0002 ETH");
   });
+  test("converts WETH to ETH for display", () => {
+    expect(formatAmount("1000000000000000000", 18, "WETH")).toBe("1 ETH");
+    expect(formatAmount("500000000000000000", 18, "WETH")).toBe("0.5 ETH");
+    expect(formatAmount("1234567890000000000", 18, "WETH")).toBe("1.2346 ETH");
+  });
 });
 
 describe("imageForNFT", () => {

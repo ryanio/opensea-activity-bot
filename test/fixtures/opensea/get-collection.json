@@ -2,8 +2,8 @@
   "collection": "glyphbots",
   "name": "GlyphBots",
   "description": "deep in the blockchain's murky shadows, where forbidden glyphs surf among sketchy code, glyphbots are shaking off their digital snooze",
-  "image_url": "https://i2.seadn.io/collection/glyphbots/image_type_logo/eb2761fda8e04533a74e6477a35ab0/20eb2761fda8e04533a74e6477a35ab0.png",
-  "banner_image_url": "https://i2.seadn.io/collection/glyphbots/image_type_hero_desktop/fda1f7461bb693ff0286d23f6f64e5/adfda1f7461bb693ff0286d23f6f64e5.png?fit=inside",
+  "image_url": "https://i2c.seadn.io/collection/glyphbots/image_type_logo/eb2761fda8e04533a74e6477a35ab0/20eb2761fda8e04533a74e6477a35ab0.png",
+  "banner_image_url": "https://i2c.seadn.io/collection/glyphbots/image_type_hero_desktop/8827cc22c7859c153993d8c8f6eef4/d18827cc22c7859c153993d8c8f6eef4.png?fit=inside",
   "owner": "0x00a839de7922491683f547a67795204763ff8237",
   "safelist_status": "approved",
   "category": "pfps",
@@ -14,7 +14,7 @@
   "opensea_url": "https://opensea.io/collection/glyphbots",
   "project_url": "https://glyphbots.com",
   "wiki_url": "",
-  "discord_url": "",
+  "discord_url": "https://discord.gg/Dr3RBst4Fu",
   "telegram_url": "",
   "twitter_username": "glyphbots",
   "instagram_username": "",
@@ -27,19 +27,20 @@
   "editors": ["0x00a839de7922491683f547a67795204763ff8237"],
   "fees": [
     {
-      "fee": 0.5,
+      "fee": 1.0,
       "recipient": "0x0000a26b00c1f0df003000390027140000faa719",
       "required": true
     }
   ],
   "rarity": {
-    "calculated_at": "2025-08-30T06:24:37.545539",
-    "max_rank": 11111,
-    "total_supply": 11111,
+    "calculated_at": "2025-12-08T05:45:03.544610",
+    "max_rank": 10734,
+    "total_supply": 10734,
     "strategy_id": "openrarity",
     "strategy_version": "1.0"
   },
-  "total_supply": 11111,
+  "total_supply": 10734,
+  "unique_item_count": 10734,
   "created_date": "2025-08-23",
   "payment_tokens": []
 }

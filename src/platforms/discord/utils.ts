@@ -4,7 +4,13 @@ import {
   EmbedBuilder,
 } from "discord.js";
 import { format } from "timeago.js";
-import { EventType, getCollectionSlug, opensea, username } from "../../opensea";
+import {
+  EventType,
+  fetchCollection,
+  getCollectionSlug,
+  opensea,
+  username,
+} from "../../opensea";
 import {
   BotEvent,
   type OpenSeaAssetEvent,
@@ -150,6 +156,13 @@ export const buildTransferEmbed = async (
     const toName = escapeMarkdown(await username(to_address));
     const toValue = formatEditionsText(toName, tokenStandard, quantity);
     fields.push({ name: "To", value: toValue });
+
+    // Add Editions field: "1/1" for singles or "×{quantity}" for multiples
+    const totalEditions = quantity ?? 1;
+    const editionsDisplay = totalEditions === 1 ? "1/1" : `×${totalEditions}`;
+    fields.push({ name: "Editions", value: editionsDisplay, inline: true });
+    log.debug(`Editions: ${editionsDisplay}`);
+
     return { title: "Minted:", fields };
   }
   if (kind === "burn") {
@@ -268,6 +281,64 @@ export const setEmbedImage = async (
   return attachment;
 };
 
+// Helper to set collection logo for collection/trait offers
+const setCollectionLogo = async (
+  embedBuilder: EmbedBuilder
+): Promise<AttachmentBuilder | null> => {
+  const collectionSlug = getCollectionSlug();
+  if (!collectionSlug) {
+    return null;
+  }
+
+  const collection = await fetchCollection(collectionSlug);
+  if (!collection?.image_url) {
+    return null;
+  }
+
+  const filename = `collection-logo-${collectionSlug}`;
+  const attachment = await fetchDiscordAttachment(
+    collection.image_url,
+    filename
+  );
+  if (attachment) {
+    embedBuilder.setImage(`attachment://${attachment.name}`);
+  } else {
+    embedBuilder.setImage(collection.image_url);
+  }
+
+  return attachment;
+};
+
+// Helper to set embed image/attachment based on event type
+const setEmbedImageForEvent = async (
+  embedBuilder: EmbedBuilder,
+  event: AggregatorEvent,
+  nft:
+    | { image_url?: string; identifier?: string | number; opensea_url?: string }
+    | null
+    | undefined
+): Promise<AttachmentBuilder | null> => {
+  const order_type = (event as { order_type?: OpenSeaOrderType | string })
+    .order_type;
+  const isCollectionOffer =
+    order_type === ("collection_offer" satisfies OpenSeaOrderType);
+  const isTraitOffer =
+    order_type === ("trait_offer" satisfies OpenSeaOrderType);
+
+  if (isCollectionOffer || isTraitOffer) {
+    embedBuilder.setURL(opensea.collectionURL());
+    return await setCollectionLogo(embedBuilder);
+  }
+
+  if (nft && Object.keys(nft).length > 0) {
+    embedBuilder.setURL(nft.opensea_url ?? null);
+    return await setEmbedImage(embedBuilder, nft);
+  }
+
+  embedBuilder.setURL(opensea.collectionURL());
+  return null;
+};
+
 export type EmbedResult = {
   embed: EmbedBuilder;
   attachment: AttachmentBuilder | null;
@@ -303,14 +374,7 @@ export const buildEmbed = async (
       })
     );
 
-  let attachment: AttachmentBuilder | null = null;
-
-  if (nft && Object.keys(nft).length > 0) {
-    built.setURL(nft.opensea_url ?? null);
-    attachment = await setEmbedImage(built, nft);
-  } else {
-    built.setURL(opensea.collectionURL());
-  }
+  const attachment = await setEmbedImageForEvent(built, event, nft);
 
   return { embed: built, attachment };
 };

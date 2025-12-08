@@ -4,6 +4,7 @@ import { channelsWithEvents } from "./platforms/discord/discord";
 import type {
   OpenSeaAccount,
   OpenSeaAssetEvent,
+  OpenSeaCollection,
   OpenSeaContractResponse,
   OpenSeaEventsResponse,
   OpenSeaNFT,
@@ -134,6 +135,7 @@ export const opensea = {
   getAccount: (address: string) => `${opensea.api}accounts/${address}`,
   getNFT: (tokenId: number) =>
     `${opensea.api}chain/${chain}/contract/${TOKEN_ADDRESS}/nfts/${tokenId}`,
+  getCollection: (slug: string) => `${opensea.api}collections/${slug}`,
   GET_OPTS: {
     method: "GET",
     headers: {
@@ -267,6 +269,31 @@ export const fetchCollectionSlug = async (address: string): Promise<string> => {
 
 export const getCollectionSlug = (): string | undefined =>
   collectionStore.getSlug();
+
+/**
+ * Fetches collection data from OpenSea API by slug.
+ * Uses LRU cache to avoid repeated API calls.
+ */
+const COLLECTION_CACHE_CAPACITY = 1;
+const collectionCache = new LRUCache<string, OpenSeaCollection>(
+  COLLECTION_CACHE_CAPACITY
+);
+
+export const fetchCollection = async (
+  slug: string
+): Promise<OpenSeaCollection | undefined> => {
+  const cached = collectionCache.get(slug);
+  if (cached) {
+    return cached;
+  }
+
+  const url = opensea.getCollection(slug);
+  const result = await openseaGet<OpenSeaCollection>(url);
+  if (result) {
+    collectionCache.put(slug, result);
+  }
+  return result;
+};
 
 const filterPrivateListings = (
   events: OpenSeaAssetEvent[]

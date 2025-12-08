@@ -106,6 +106,7 @@ export const classifyTransfer = (event: {
 /**
  * Formats amount, decimals, and symbols to final string output.
  * Rounds to MAX_DECIMALS places (instead of truncating).
+ * Converts WETH to ETH for display.
  */
 export const formatAmount = (
   amount: BigNumberish,
@@ -128,7 +129,10 @@ export const formatAmount = (
     .replace(TRAILING_ZEROS_REGEX, "$1")
     .replace(TRAILING_DOT_REGEX, "");
 
-  return `${value} ${symbol}`;
+  // Convert WETH to ETH for display
+  const displaySymbol = symbol === "WETH" ? "ETH" : symbol;
+
+  return `${value} ${displaySymbol}`;
 };
 
 const WIDTH_QUERY_PARAM = /w=(\d)*/;

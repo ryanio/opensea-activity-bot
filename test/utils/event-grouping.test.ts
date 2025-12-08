@@ -22,7 +22,9 @@ import {
 // Mock the utils module
 function mockFormatAmount(quantity: string, decimals: number, symbol: string) {
   const value = Number(quantity) / 10 ** decimals;
-  return `${value} ${symbol}`;
+  // Convert WETH to ETH for display
+  const displaySymbol = symbol === "WETH" ? "ETH" : symbol;
+  return `${value} ${displaySymbol}`;
 }
 
 function mockClassifyTransfer(
@@ -295,7 +297,7 @@ describe("eventGrouping-utils", () => {
       expect(total).toBe("1.5 ETH");
     });
 
-    it("should handle WETH payments", () => {
+    it("should handle WETH payments and convert to ETH for display", () => {
       const payment = mockEvent1.payment;
       if (!payment) {
         throw new Error("Payment is required for test");
@@ -307,7 +309,7 @@ describe("eventGrouping-utils", () => {
       };
       const total = calculateTotalSpent([wethEvent]);
 
-      expect(total).toBe("1 WETH");
+      expect(total).toBe("1 ETH");
     });
 
     it("should ignore non-ETH/WETH payments", () => {
