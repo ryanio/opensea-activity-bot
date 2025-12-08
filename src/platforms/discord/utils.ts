@@ -507,15 +507,17 @@ export const buildGroupEmbed = async (
     inline: true,
   });
 
-  const TOP_ITEMS_COUNT = 4;
-  const topExpensiveItems = getTopExpensiveEvents(
-    group.events,
-    TOP_ITEMS_COUNT
-  );
+  const isTopItems = kind === "purchase" || kind === "offer";
+  const itemsCount = 4;
+  const topExpensiveItems = getTopExpensiveEvents(group.events, itemsCount);
 
   if (topExpensiveItems.length > 0) {
-    const itemsList = topExpensiveItems.map(formatTopItem).join("\n");
-    fields.push({ name: "Top Items", value: itemsList });
+    let itemsList = topExpensiveItems.map(formatTopItem).join("\n");
+    if (count > itemsCount) {
+      itemsList += "\n...";
+    }
+    const itemsLabel = isTopItems ? "Top Items" : "Items";
+    fields.push({ name: itemsLabel, value: itemsList });
   }
 
   const groupEmbed = new EmbedBuilder()
