@@ -39,7 +39,13 @@ export const formatNftName = (
     return suffix ? `${suffix} #${idStr} ` : `#${idStr} `;
   }
   // For regular NFTs, return the name if available, otherwise the identifier
-  return nft.name ? `${nft.name} ` : `#${String(nft.identifier)} `;
+  if (nft.name) {
+    return `${nft.name} `;
+  }
+  if (nft.identifier !== undefined) {
+    return `#${String(nft.identifier)} `;
+  }
+  return "";
 };
 
 export const formatOrderText = async (

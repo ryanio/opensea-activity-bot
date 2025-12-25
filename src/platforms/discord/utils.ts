@@ -357,7 +357,9 @@ export const buildEmbed = async (
     event_type,
     order_type
   );
-  const title = nft?.name ? `${baseTitle} ${nft.name}` : baseTitle;
+  const nftName =
+    nft?.name || (nft?.identifier !== undefined ? `#${nft.identifier}` : "");
+  const title = nftName ? `${baseTitle} ${nftName}` : baseTitle;
 
   const built = new EmbedBuilder()
     .setColor(
