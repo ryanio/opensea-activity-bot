@@ -51,7 +51,9 @@ describe("Unicode SVG Character Encoding", () => {
     expect(result.mimeType).toBe("image/png");
     expect(result.buffer).toBeInstanceOf(Buffer);
     expect(result.buffer.length).toBeGreaterThan(0);
-    expect(fetch).toHaveBeenCalledWith(svgUrl);
+    expect(fetch).toHaveBeenCalledWith(svgUrl, {
+      headers: { Accept: "image/jpeg" },
+    });
   });
 
   it("should use browser-realistic monospace font stack for better unicode support", async () => {

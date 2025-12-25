@@ -22,7 +22,6 @@ test/
 │   └── twitter.test.ts
 ├── utils/              # Utility function tests
 │   ├── aggregator.test.ts
-│   ├── avif-conversion.test.ts
 │   ├── cache-separation.test.ts
 │   ├── classify-transfer.test.ts
 │   ├── event-grouping.test.ts
@@ -230,7 +229,6 @@ Tests for utility functions:
 - **classify-transfer.test.ts** - Mint/burn/transfer classification
 - **formatters.test.ts** - Amount and text formatting
 - **logger.test.ts** - Logging utilities
-- **avif-conversion.test.ts** - AVIF to PNG conversion
 - **unicode-svg.test.ts** - Unicode SVG rendering
 
 ## Usage Example

@@ -193,50 +193,6 @@ export const formatNftPrefix = (
 };
 
 /**
- * Detects if a buffer contains AVIF format by checking for ISOBMFF structure.
- * AVIF files contain "ftyp" box followed by "avif" brand identifier.
- */
-const isAvifBuffer = (buffer: Buffer): boolean => {
-  if (buffer.length < 12) {
-    return false;
-  }
-  // Check for ISOBMFF "ftyp" box at offset 4
-  const ftyp = buffer.toString("ascii", 4, 8);
-  if (ftyp !== "ftyp") {
-    return false;
-  }
-  // Check for "avif" brand (can appear at offset 8 or later in compatible_brands)
-  // Look in the first 32 bytes for "avif" string
-  const header = buffer.toString("ascii", 0, Math.min(32, buffer.length));
-  return header.includes("avif");
-};
-
-/**
- * Converts AVIF buffer to PNG format for Twitter API compatibility.
- */
-const convertAvifToPng = async (
-  buffer: Buffer,
-  imageURL: string,
-  mimeType: string
-): Promise<{ buffer: Buffer; mimeType: string }> => {
-  try {
-    if (mimeType !== "image/avif") {
-      logger.debug(
-        `utils: Detected AVIF format from buffer content (content-type was ${mimeType}), converting to PNG for URL: ${imageURL}`
-      );
-    } else {
-      logger.debug(`utils: Converting AVIF to PNG for URL: ${imageURL}`);
-    }
-    const pngBuffer = (await sharp(buffer).png().toBuffer()) as Buffer;
-    return { buffer: pngBuffer, mimeType: "image/png" };
-  } catch (e) {
-    logger.debug("utils: AVIF to PNG conversion failed:", e);
-    // Keep original AVIF buffer and mime type on failure
-    return { buffer, mimeType };
-  }
-};
-
-/**
  * Converts SVG buffer to PNG format.
  */
 const convertSvgToPng = async (
@@ -266,12 +222,18 @@ const convertSvgToPng = async (
 
 /**
  * Fetch an image and return a buffer and mimeType.
- * Converts SVGs and AVIFs to PNG for compatibility with Twitter API.
+ * Converts SVGs to PNG for compatibility with Twitter API.
+ * Requests JPEG format via Accept header to ensure compatible format.
  */
 export const fetchImageBuffer = async (
   imageURL: string
 ): Promise<{ buffer: Buffer; mimeType: string }> => {
-  const response = await fetch(imageURL);
+  // Request JPEG format to ensure Twitter API compatibility
+  const response = await fetch(imageURL, {
+    headers: {
+      Accept: "image/jpeg",
+    },
+  });
 
   // Check if response is successful
   if (!response.ok) {
@@ -300,17 +262,6 @@ export const fetchImageBuffer = async (
   // Convert SVG to PNG
   if (mimeType === "image/svg+xml" || imageURL.toLowerCase().endsWith(".svg")) {
     const result = await convertSvgToPng(buffer);
-    buffer = result.buffer;
-    mimeType = result.mimeType;
-  }
-
-  // Convert AVIF to PNG (Twitter doesn't support AVIF)
-  // Check both content-type header and buffer content for AVIF detection
-  // Some servers return AVIF with JPEG/PNG content-type headers
-  const isAvifByContentType = mimeType === "image/avif";
-  const isAvifByBuffer = isAvifBuffer(buffer);
-  if (isAvifByContentType || isAvifByBuffer) {
-    const result = await convertAvifToPng(buffer, imageURL, mimeType);
     buffer = result.buffer;
     mimeType = result.mimeType;
   }
