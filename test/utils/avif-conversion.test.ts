@@ -147,4 +147,33 @@ describe("AVIF to PNG Conversion", () => {
     expect(result.mimeType).toBe("image/jpeg");
     expect(result.buffer).toBeInstanceOf(Buffer);
   });
+
+  it("should detect and convert AVIF even when content-type is image/jpeg", async () => {
+    // This simulates the real-world issue where seadn.io returns AVIF
+    // with JPEG content-type headers
+    const mockAvifBuffer = createMockAvifBuffer();
+
+    (fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(mockAvifBuffer.buffer),
+      headers: {
+        get: (header: string) => {
+          if (header === "content-type") {
+            // Server incorrectly returns JPEG content-type for AVIF data
+            return "image/jpeg";
+          }
+          return null;
+        },
+      },
+    });
+
+    const result = await fetchImageBuffer(
+      "https://i2c.seadn.io/ethereum/0x7136496abfbab3d17c34a3cfc4cfbc68bfbccbcc/4ebb7de9d2e2d3dcdf40ab96742c80/694ebb7de9d2e2d3dcdf40ab96742c80.jpeg?w=10000"
+    );
+
+    // Should detect AVIF from buffer and convert to PNG
+    expect(result.mimeType).toBe("image/png");
+    expect(result.buffer).toBeInstanceOf(Buffer);
+    expect(result.buffer.length).toBeGreaterThan(0);
+  });
 });
