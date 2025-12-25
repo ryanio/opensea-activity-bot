@@ -370,13 +370,13 @@ describe("Live Twitter Text Output", () => {
   test("generates text for trait offer events", async () => {
     const event = getTraitOfferEvents()[0];
     const text = await textForTweet(event);
-    expect(text).toContain("New trait offer.");
+    expect(text).toContain("New trait offer for");
   });
 
   test("generates text for collection offer events", async () => {
     const event = getCollectionOfferEvents()[0];
     const text = await textForTweet(event);
-    expect(text).toContain("New collection offer.");
+    expect(text).toContain("New collection offer for");
   });
 
   test("generates text for sale events", async () => {
