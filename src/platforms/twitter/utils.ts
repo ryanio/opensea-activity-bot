@@ -70,10 +70,10 @@ export const formatOrderText = async (
     return `has a new offer for ${price} by ${name}`;
   }
   if (order_type === ("collection_offer" satisfies OpenSeaOrderType)) {
-    return `New collection offer. ${price} by ${name}`;
+    return `New collection offer for ${price} by ${name}`;
   }
   if (order_type === ("trait_offer" satisfies OpenSeaOrderType)) {
-    return `New trait offer. ${price} by ${name}`;
+    return `New trait offer for ${price} by ${name}`;
   }
   return "";
 };
