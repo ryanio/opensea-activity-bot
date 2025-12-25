@@ -117,7 +117,17 @@ export class AsyncQueue<T> {
     }
     this.isProcessing = true;
     try {
-      await this.processQueueItems();
+      // Keep processing until queue is truly empty
+      // This handles the race condition where items are enqueued after
+      // the queue becomes empty but before isProcessing is set to false
+      while (this.list.length > 0) {
+        await this.processQueueItems();
+        if (this.options.debug && this.list.length > 0) {
+          logger.debug(
+            `[Queue] New items detected after processing, continuing (${this.list.length} items)`
+          );
+        }
+      }
       if (this.options.debug) {
         logger.debug("[Queue] Finished processing all items");
       }

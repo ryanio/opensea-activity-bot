@@ -394,6 +394,44 @@ describe("twitter flows", () => {
       process.env.TWITTER_EVENTS = originalEventsEnv;
     }
   });
+
+  it("processes new mint events after previous ones successfully post (race condition fix)", async () => {
+    const originalEventsEnv = process.env.TWITTER_EVENTS;
+    try {
+      process.env.TWITTER_EVENTS = "mint";
+      process.env.TWITTER_EVENT_GROUP_SETTLE_MS = "0";
+      process.env.TWITTER_EVENT_GROUP_MIN_GROUP_SIZE = "1";
+      process.env.TWITTER_QUEUE_DELAY_MS = "10";
+
+      const baseTimestamp = 3_000_000_000;
+      const firstMint = createMintBatch(1, TEST_MINTER_1, baseTimestamp);
+      const secondMint = createMintBatch(1, TEST_MINTER_1, baseTimestamp + 200);
+
+      const { tweetEvents } = await import(
+        "../../src/platforms/twitter/twitter"
+      );
+
+      // First mint event - should be processed
+      tweetEvents(firstMint);
+      // Wait for first event to complete processing
+      await jest.advanceTimersByTimeAsync(50);
+      let calls = getTweetCalls();
+      expect(calls.length).toBe(1);
+
+      // Simulate new mint events coming in after previous ones are posted
+      // This tests the race condition where queue finishes processing but
+      // new items are added before isProcessing is reset
+      tweetEvents(secondMint);
+      // Advance timers to allow queue to process new items
+      await jest.advanceTimersByTimeAsync(50);
+
+      calls = getTweetCalls();
+      // Both events should be processed, including the new one
+      expect(calls.length).toBe(2);
+    } finally {
+      process.env.TWITTER_EVENTS = originalEventsEnv;
+    }
+  });
 });
 
 // Add basic tests for matchesSelection mint/burn classification

@@ -334,4 +334,81 @@ describe("AsyncQueue", () => {
       expect(onProcessedCalls).not.toContain(2);
     });
   });
+
+  describe("Race Conditions", () => {
+    it("processes new items added after initial batch completes", async () => {
+      const processed: number[] = [];
+
+      const q = new AsyncQueue<number>({
+        perItemDelayMs: 10,
+        backoffBaseMs: 1,
+        backoffMaxMs: 10,
+        debug: false,
+        process: (n) => {
+          processed.push(n);
+          return Promise.resolve();
+        },
+        keyFor: (n) => String(n),
+        classifyError: () => ({ type: "fatal" }),
+      });
+
+      // Enqueue first batch
+      q.enqueue(1);
+      q.enqueue(2);
+
+      // Wait for first batch to complete
+      await sleep(50);
+      expect(processed).toEqual([1, 2]);
+
+      // Enqueue new items after processing completes
+      // This simulates the bug where new mint events come in after
+      // previous events are successfully posted
+      q.enqueue(3);
+      q.enqueue(4);
+
+      // Wait for new items to be processed
+      await sleep(50);
+
+      // All items should be processed, including the new ones
+      expect(processed).toEqual([1, 2, 3, 4]);
+    });
+
+    it("handles items added during processing completion", async () => {
+      const processed: number[] = [];
+
+      const q = new AsyncQueue<number>({
+        perItemDelayMs: 5,
+        backoffBaseMs: 1,
+        backoffMaxMs: 10,
+        debug: false,
+        process: (n) => {
+          processed.push(n);
+          // Add new items while processing (simulating race condition)
+          if (n === 1) {
+            // Use setTimeout to add items after current processing completes
+            setTimeout(() => {
+              q.enqueue(3);
+              q.enqueue(4);
+            }, 20);
+          }
+          return Promise.resolve();
+        },
+        keyFor: (n) => String(n),
+        classifyError: () => ({ type: "fatal" }),
+      });
+
+      q.enqueue(1);
+      q.enqueue(2);
+
+      // Wait long enough for all items including those added during processing
+      await sleep(100);
+
+      // All items should be processed
+      expect(processed).toContain(1);
+      expect(processed).toContain(2);
+      expect(processed).toContain(3);
+      expect(processed).toContain(4);
+      expect(processed.length).toBe(4);
+    });
+  });
 });
