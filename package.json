@@ -1,7 +1,7 @@
 {
   "name": "opensea-activity-bot",
   "version": "3.6.5",
-  "description": "A bot that shares new OpenSea events for a collection to Discord and Twitter.",
+  "description": "DEPRECATED: retired 2026-07-26, Discord sales only superseded by ryanio/glyphbots-discord-bot (worker/); Twitter posting was not ported and exists only here. A bot that shares new OpenSea events for a collection to Discord and Twitter.",
   "author": "Ryan Ghods <ryan@ryanio.com>",
   "license": "MIT",
   "engines": {

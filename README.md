@@ -1,3 +1,19 @@
+> ## Retired, but read the note about Twitter
+>
+> This repo is no longer maintained and is no longer deployed anywhere. It was retired on 2026-07-26, when the DigitalOcean droplet that ran it was cancelled.
+>
+> Part of it moved to the Cloudflare Worker in [ryanio/glyphbots-discord-bot](https://github.com/ryanio/glyphbots-discord-bot), under the `worker/` directory, live at `https://glyphbots-worker.ryan-2e8.workers.dev`. Only part.
+>
+> What carried over: the Discord sales feed. That is it.
+>
+> What did not:
+>
+> - The whole Twitter posting path, roughly 980 lines across `src/platforms/twitter/` and the posting queue in `src/utils/queue.ts`, was never ported. There is no Twitter posting in the Worker. If you want that functionality, it exists only in this repo, and only here.
+> - Listings, dropped on purpose. Measured traffic ran around 176 listings a day from a single relister, which would have meant a Discord post every eight minutes.
+> - Offers, transfers, mints and burns were not ported either.
+>
+> The source below is kept as a record, and this is the only copy of the Twitter code. The documentation that follows describes how the bot worked when it was running, not how anything is deployed today.
+
 # opensea-activity-bot
 
 ![Example Discord messages](./example-discord.png)
